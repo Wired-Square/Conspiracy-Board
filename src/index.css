@@ -1,0 +1,2532 @@
+:root {
+  --bg: #1a140e;
+  --board: #241a10;
+  --panel: #2e2316;
+  --panel-border: #4a3a22;
+  --ink: #ece3d4;
+  --ink-dim: #a8987c;
+  --string: #c8402f;
+  --card-paper: #f4ecd8;
+  --card-ink: #221a10;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+}
+
+/* ---- Layout ---- */
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.app__canvas {
+  position: relative;
+  /* min-height: 0 lets this shrink for the timeline drawer; a fixed height
+     here would push the drawer off the bottom of the viewport. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Corkboard backdrop for the flow surface. */
+.react-flow {
+  background:
+    radial-gradient(circle at 30% 20%, #2c2114, #1a140e 70%);
+}
+
+/* ---- Toolbar ---- */
+/* A column so the save-error strip sits *below* the controls; as a row it was a
+   third flex item and landed beside them, its margin-top doing nothing. */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.toolbar__title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.toolbar__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* The Objects view's file count, standing where "+ Add" is on the other views. A
+   paper tag — the files are the paper — sized to the buttons beside it so the row
+   stays even. One fixed colour: a count, not an alarm. */
+.objects-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 7px;
+  background: var(--card-paper);
+  color: var(--card-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Grows to fill the middle of the row, pushing the actions to the right without
+   the actions rule having to know it's there. */
+.toolbar__search {
+  flex: 1 1 12rem;
+  min-width: 6rem;
+  max-width: 22rem;
+  background: #2a2015;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 0.35rem 0.6rem;
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.toolbar__search::placeholder {
+  color: var(--ink-dim);
+}
+
+/* Same shape as the import modal's tabs — the app's one tab idiom. */
+button {
+  background: #3a2c19;
+  color: var(--ink);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover {
+  background: #4a3a22;
+  border-color: #6b542f;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  padding: 0.2rem 0.3rem;
+  text-decoration: underline;
+}
+
+.link-button:hover {
+  background: none;
+  color: var(--ink);
+}
+
+/* ---- Cluster panel ---- */
+.cluster-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  min-width: 220px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Collapses the panel to just this header pill; the chevron mirrors the timeline. */
+.cluster-panel__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.cluster-panel__toggle:hover {
+  background: none;
+  color: var(--ink);
+}
+
+.panel-heading {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+.cluster-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.cluster-color {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+
+.cluster-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.cluster-delete {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.45rem;
+  line-height: 1;
+  font-size: 1rem;
+  color: var(--ink-dim);
+}
+
+.cluster-delete:hover {
+  color: var(--string);
+  border-color: var(--string);
+}
+
+.cluster-add {
+  margin-top: 0.7rem;
+  width: 100%;
+}
+
+/* ---- Evidence card node ---- */
+.evidence-card {
+  --accent: #888;
+  position: relative;
+  width: 210px;
+  background: var(--card-paper);
+  color: var(--card-ink);
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+  font-family: 'Inter', system-ui, sans-serif;
+  transform: rotate(-0.6deg);
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.evidence-card:hover {
+  transform: rotate(0deg) scale(1.01);
+}
+
+.evidence-card.is-selected {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 10px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* The pin. */
+.evidence-card::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--accent) 60%, #000 140%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.evidence-card__accent {
+  height: 6px;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+}
+
+/* A wrapper, not the <img>, so a cropped picture can position an absolute image
+   inside a clip box (see cardImageStyle). Uncropped it just hugs the image as
+   before; cropped it takes the card's 4:3 shape and the image fills it. */
+.evidence-card__image {
+  display: block;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.evidence-card__image img {
+  display: block;
+  width: 100%;
+  max-height: 130px;
+  object-fit: cover;
+}
+.evidence-card__image.is-cropped {
+  aspect-ratio: 4 / 3;
+}
+.evidence-card__image.is-cropped img {
+  max-height: none;
+}
+
+.evidence-card__body {
+  padding: 0.6rem 0.7rem 0.75rem;
+}
+
+.evidence-card__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+/* The record — email and document — had faces here: cooler paper, an airmail
+   edge, a sender line. They are gone with the cards: the record is not drawn on
+   the board any more, it is a row in the Record view (see lib/kinds).
+
+   Evidence and event keep the default paper deliberately — they are the
+   argument, which is what a board is mostly made of, and tinting the common
+   case would leave nothing for the tint to mean. */
+/* ---- The actors: a polaroid ---- */
+/* A person and an organisation are the only cards that are *somebody* rather
+   than something said about them, and on a corkboard that has always been a
+   photograph. Film white, not the cream of the paper around it, and a wide
+   frame at the foot to write the name on. */
+.evidence-card--polaroid {
+  background: #f7f5f0;
+  padding: 11px 11px 0;
+  border-radius: 2px;
+}
+
+.polaroid__photo {
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* The clip box for a cropped image's absolute <img> (see cardImageStyle). */
+  position: relative;
+  /* Dark, so a photo that doesn't fill it reads as the film and not a gap. */
+  background: #2b2620;
+  /* The cluster, carried where the accent bar would have been on paper. */
+  border-bottom: 3px solid var(--accent);
+}
+
+.polaroid__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.polaroid__blank {
+  font-size: 1.8rem;
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.polaroid__caption {
+  padding: 0.5rem 0.15rem 0.65rem;
+}
+
+.polaroid__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--card-ink);
+}
+
+.polaroid__detail {
+  font-size: 0.66rem;
+  color: #6f6252;
+  margin-top: 0.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Written under the name, and kept to two lines: it is a note on a photograph,
+   not the photograph. */
+.polaroid__note {
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: #574c3d;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.evidence-card__date {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7b6b52;
+  margin-bottom: 0.3rem;
+}
+
+.evidence-card__notes {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #4a4034;
+}
+
+/* Source = a "hot corner" nub at the card's top-right; drag from here to link.
+   Selectors are .react-flow__handle.<class> to outrank React Flow's positioning. */
+.react-flow__handle.card-source {
+  width: 14px;
+  height: 14px;
+  top: -7px;
+  right: -7px;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  border-radius: 50%;
+  background: var(--string);
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.evidence-card:hover .card-source,
+.evidence-card.is-selected .card-source {
+  opacity: 1;
+}
+
+/* Target = the whole card. Inert until a connection is being dragged, so it
+   doesn't swallow clicks or card-drag the rest of the time. */
+.react-flow__handle.card-target {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.react-flow__handle.card-target.connecting {
+  pointer-events: all;
+}
+
+.react-flow__handle.card-target.connecting:hover {
+  background: rgba(200, 64, 47, 0.12);
+  box-shadow: inset 0 0 0 2px var(--string);
+}
+
+/* ---- Red string (yarn) edges ---- */
+.red-string__shadow,
+.red-string__strand,
+.red-string__sheen {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.red-string__shadow {
+  stroke: rgba(0, 0, 0, 0.4);
+  stroke-width: 6;
+  transform: translate(1.5px, 3px);
+}
+
+.red-string__strand {
+  /* Dyed by its grade when it has one; plain string when nobody has said. */
+  stroke: var(--grade, var(--string));
+  stroke-width: 3.5;
+  transition: stroke-width 0.15s ease, filter 0.15s ease;
+}
+
+.red-string__sheen {
+  stroke: #f2876f;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.red-string__knot {
+  fill: #7a1f17;
+  stroke: var(--string);
+  stroke-width: 1.5;
+}
+
+.red-string__tag {
+  position: absolute;
+  background: var(--card-paper);
+  color: var(--card-ink);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 9px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45);
+  pointer-events: all;
+}
+
+/* little pin holding the tag */
+.red-string__tag::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--string) 65%, #000 150%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Derived participant links (see hooks/useParticipantEdges). Thin, faint and
+   unpinned — the eye should read it as a suggestion, and never mistake it for
+   the red string, which is only ever there because someone tied it. The colour
+   is the Inference grade's, handed down as --grade by the edge itself.
+
+   Solid, not dotted: a round-capped dash (`1 7`) is dozens of shaped caps per
+   strand for WebKit to rasterise, and repainting all of them every frame was the
+   bulk of drag lag (measured). A faint solid thread reads the same "suggestion"
+   at a fraction of the paint — the lightness now comes from width and opacity,
+   which cost nothing, rather than from the gaps between dots. */
+.derived-string__strand {
+  fill: none;
+  stroke: var(--grade);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+
+/* Highlight / dim driven by useHighlightConnections. */
+.react-flow__node.dim {
+  opacity: 0.3;
+}
+
+.react-flow__node.hl {
+  opacity: 1;
+}
+
+.react-flow__edge.dim {
+  opacity: 0.12;
+}
+
+.react-flow__edge.hl .red-string__strand {
+  stroke-width: 5;
+  filter: drop-shadow(0 0 4px rgba(200, 64, 47, 0.85));
+}
+
+/* ---- Card editor ----
+   The editor is a centred Modal now (see CardEditor / ui/Modal); its layout,
+   padding and scrolling come from .modal / .modal__body. Only the picture preview
+   and delete-confirm rules below remain card-editor-specific. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field > span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+/* A checkbox row: the box beside its label, rather than the input-under-heading
+   column .field lays out by default. */
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field--check input {
+  flex: none;
+}
+
+/* The label sits inline with the box, not as a stacked field heading. */
+.field--check > span {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* A note under a control, in sentence case — `.field > span` above shouts, which
+   is right for a label and wrong for a sentence. Specificity has to beat it. */
+.field > .field__hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.field > .field__hint code {
+  font-size: 0.95em;
+}
+
+.field--grow {
+  flex: 1 1 auto;
+}
+
+.field__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---- Per-kind fields ---- */
+/* The editor's per-kind sub-sections: an email's headers, an entity's
+   addresses. Same box, different contents, so they share the rules rather than
+   one of them borrowing the other's name. */
+.email-fields,
+.entity-fields {
+  padding: 0.6rem;
+  border: 1px dashed var(--panel-border);
+  border-radius: 6px;
+}
+
+/* Nested labels are secondary to the section heading above them. */
+.email-fields__row > span,
+.entity-fields__row > span {
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.email-fields__id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Only shown for cards dragged out of Mail, where the message is known to be
+   sitting in the user's mailbox. */
+.email-fields__mail-link {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  color: var(--string);
+  text-decoration: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+}
+
+.email-fields__mail-link:hover {
+  border-color: var(--string);
+}
+
+/* Read-only address lines on an imported email. Each From/To/Cc address on its
+   own line: the address as it arrived (always shown — reading the record means
+   seeing it), the person or organisation it resolves to as a chip beside it, and
+   a Link… where no one claims it yet. */
+.email-addr__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.email-addr {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.email-addr__text {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.email-addr__empty {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+
+/* The card the address resolves to — click to open it. Tinted from --grade only
+   when the match is a domain inference (set inline via gradeTint). */
+.email-addr__entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--grade, var(--panel-border));
+  border-radius: 999px;
+  color: var(--grade, inherit);
+}
+
+.email-addr__icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+/* The entity badge and its unlink ✕, kept together on one line. The ✕ is a sibling
+   of the badge button, not nested — a button cannot contain a button. */
+.email-addr__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  max-width: 100%;
+}
+
+/* Remove the link a badge stands for — muted until hovered, so it never competes
+   with the badge it sits beside. */
+.email-addr__unlink {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.email-addr__unlink:hover {
+  opacity: 1;
+  color: var(--string);
+}
+
+.email-addr__link {
+  flex: 0 0 auto;
+  max-width: 45%;
+  font-size: 0.7rem;
+}
+
+.email-fields__actions {
+  flex-wrap: wrap;
+}
+
+/* Attachments as a list — each a real file that opens in the OS app. A name with
+   no file (an older import) is dimmed rather than a dead link. */
+.attach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.attach-list__item {
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.attach-list__item--dead {
+  color: var(--ink-dim);
+}
+
+/* Kind is fixed once a card is an actor or an import — shown, not chosen. */
+.kind-locked {
+  font-size: 0.82rem;
+  padding: 0.2rem 0;
+}
+
+input,
+select,
+textarea {
+  background: #1f1810;
+  color: var(--ink);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--string);
+}
+
+.field__url {
+  margin-top: 0.4rem;
+}
+
+/* A wrapper, so the preview can show the real crop (its 4:3 frame) rather than the
+   whole image. Uncropped it shows the picture full, as before. */
+.card-editor__preview {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+}
+.card-editor__preview img {
+  display: block;
+  width: 100%;
+}
+.card-editor__preview.is-cropped {
+  aspect-ratio: 4 / 3;
+}
+
+/* Read-only metadata pulled from an imported file — a document's properties, a
+   photo's EXIF. A two-column key/value grid; each row is a `display: contents`
+   wrapper so its dt/dd land in the shared columns. */
+.media-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.5rem 0 0;
+}
+
+/* The details dialog stacks an identity MetaList, the owning-card line, then a
+   "File properties" MetaList — small gaps keep the three groups distinct. */
+.media-details__owner {
+  margin: 0.7rem 0 0;
+}
+.media-details__heading {
+  display: block;
+  margin: 0.9rem 0 0;
+}
+.media-meta > div {
+  display: contents;
+}
+.media-meta dt {
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.68rem;
+  align-self: baseline;
+}
+.media-meta dd {
+  margin: 0;
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+/* ---- Record view ---- */
+/* Covers the canvas rather than replacing it, so React Flow stays mounted and
+   measured (see App). Opaque, or the board would read through the list. */
+.record {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: var(--board);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Clear of the floating toolbar and cluster panel, which sit over both views. */
+.record__bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  margin: 3.6rem 1rem 0 1rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.record__count {
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+
+.record__filter {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.record__empty {
+  padding: 1.4rem 2rem;
+  max-width: 34rem;
+}
+
+.record__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 1rem 1rem;
+  overflow-y: auto;
+}
+
+/* Both the record and the Objects view fill this list, and either can run to hundreds of
+   thumbnailed rows. Let the browser skip layout and paint for the rows scrolled out of
+   view, so filtering (or clearing) the search never repaints the whole list at once and
+   the cost stays flat as the library grows. contain-intrinsic-size reserves each row's
+   ~50px (34px thumb + padding) to hold the scrollbar steady; `auto` then remembers each
+   row's real height once it has been rendered. */
+.record__list > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 50px;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 5px 5px 0;
+  background: none;
+}
+
+.record-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.record-row.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Fixed square whether it holds a picture or a glyph, so the list never jumps
+   as it scrolls past a message that happened to carry one. */
+.record-row__thumb {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  /* Sizes a MediaIcon (drawn in em) when the row has no picture. */
+  font-size: 20px;
+  color: var(--ink);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  /* The clip box for a cropped thumbnail's absolute <img> (see cardImageStyle). */
+  position: relative;
+}
+
+.record-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A file's type icon (see ui/MediaIcon), sized in em off the box that holds it —
+   the 34px thumb here, or the timeline glyph's line height. */
+.media-icon {
+  position: relative;
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+
+.media-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* The envelope reads better a touch larger than the file glyphs. */
+.media-icon--email svg {
+  transform: scale(1.12);
+}
+
+/* Provenance clip for a file that came in on an email: a small paperclip in the
+   corner on its own disc, so it separates from the base icon under it. */
+.media-icon__clip {
+  position: absolute;
+  right: -0.22em;
+  bottom: -0.22em;
+  width: 0.68em;
+  height: 0.68em;
+  padding: 0.09em;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-dim);
+}
+
+.record-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.record-row__title,
+.record-row__who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-row__title {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.record-row__who {
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+}
+
+.record-row__when {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Amber, not red: a record nobody has linked up yet is unfinished work, not a
+   fault. Asserted is the grade for "said, not yet settled", and this is the
+   same idea about a piece of paper. */
+.record-row.is-loose {
+  background: rgba(217, 154, 43, 0.07);
+}
+
+.record-row__loose {
+  flex: 0 0 auto;
+  font-size: 0.64rem;
+  letter-spacing: 0.02em;
+  color: #d99a2b;
+  border: 1px solid rgba(217, 154, 43, 0.45);
+  border-radius: 3px;
+  padding: 1px 6px 2px;
+  white-space: nowrap;
+}
+
+/* ---- Maintenance view ---- */
+/* Reuses the record view's shell and row parts (.record, .record__bar/list,
+   .record-row__thumb/__main/__title/__who); only the toolbar, the non-button row,
+   and the integrity badges are its own. */
+.maintenance__error,
+.maintenance__note {
+  margin: 0.6rem 1rem 0;
+}
+
+.maintenance-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 5px 5px 0;
+}
+
+.maintenance-row.is-missing {
+  background: rgba(200, 64, 47, 0.08);
+  border-left-color: var(--string);
+}
+
+.maintenance-row.is-orphan {
+  background: rgba(217, 154, 43, 0.07);
+  border-left-color: rgba(217, 154, 43, 0.6);
+}
+
+.maintenance-row.is-unknown {
+  border-left-color: rgba(217, 154, 43, 0.4);
+}
+
+.maintenance-row__status {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 1px 6px 2px;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.maintenance-row__status.is-missing {
+  color: var(--string);
+  border-color: rgba(200, 64, 47, 0.5);
+}
+
+.maintenance-row__status.is-orphan,
+.maintenance-row__status.is-unknown {
+  color: #d99a2b;
+  border-color: rgba(217, 154, 43, 0.45);
+}
+
+.maintenance-row__status.is-ok {
+  color: #6fae6f;
+  border-color: rgba(111, 174, 111, 0.4);
+}
+
+.maintenance-row__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.15rem;
+}
+
+/* ---- Delete card ---- */
+/* Last in the panel and set apart by a rule: the only irreversible thing here,
+   and it should take a deliberate scroll to reach rather than sit under the
+   thumb next to Close. */
+.card-editor__danger {
+  margin-top: 0.6rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--panel-border);
+}
+
+.card-delete {
+  width: 100%;
+  color: var(--ink-dim);
+}
+
+.card-delete:hover {
+  color: var(--ink);
+  border-color: var(--string);
+}
+
+/* The same red as board deletion confirms in — one app, one colour for "this
+   does not come back". */
+.card-delete--confirm {
+  border-color: var(--string);
+  color: var(--ink);
+  background: rgba(200, 64, 47, 0.16);
+}
+
+/* ---- Grades ---- */
+/* The tint is the grade's own colour, handed down as --grade so the strand, the
+   chip and the select all say it the same way. */
+.grade-select {
+  border-left: 4px solid var(--grade, var(--panel-border));
+}
+
+.grade-legend {
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+
+.grade-legend summary {
+  cursor: pointer;
+  padding: 0.3rem 0;
+}
+
+.grade-legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0.2rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.grade-legend li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+/* Ink is whichever of the two reads on this grade — worked out in lib/grades,
+   so a colour can be tuned without anyone remembering to re-check the text. */
+.grade-chip {
+  align-self: flex-start;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px 2px;
+  border-radius: 3px;
+  color: var(--grade-ink);
+  background: var(--grade);
+}
+
+/* A path is long and nobody types one: wrap it rather than truncate, so the
+   whole thing can be read and copied. Monospace because it is a filename. */
+.board-file {
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+/* The full ladder, in board properties: swatch, name, definition. A grid so the
+   names line up and the eye can run down the colours as a scale. */
+.grade-key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.grade-key li {
+  display: grid;
+  grid-template-columns: 0.75rem 6.5rem 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+}
+
+.grade-key__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  background: var(--grade);
+  /* Grey and the deepest green both sit close to the panel; a hairline keeps
+     every swatch a shape rather than a smudge. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.grade-key__label {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--grade);
+}
+
+.grade-key__definition {
+  color: var(--ink-dim);
+}
+
+/* ---- Connections section (card editor) ---- */
+.connection {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(74, 58, 34, 0.4);
+}
+
+.connection-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+}
+
+.connection-arrow {
+  color: var(--string);
+  font-weight: 700;
+}
+
+/* The linked card as a chip (the .email-addr__entity pill) — icon then title, click to
+   open it; only its sizing in the row is bespoke, so it matches a resolved address. */
+.connection-target {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+}
+
+.connection-target:hover {
+  border-color: var(--string);
+}
+
+/* The string's own tag, edited in place — its board tag reads from this. Bare until
+   focused, so a labelled string reads as text and a blank one as a quiet invitation. */
+.connection-label {
+  flex: 1 1 40px;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  border-radius: 0;
+  padding: 0.1rem 0.2rem;
+}
+
+.connection-label:hover {
+  border-bottom-color: var(--panel-border);
+}
+
+.connection-label:focus {
+  outline: none;
+  font-style: normal;
+  color: var(--ink);
+  border-bottom-color: var(--string);
+}
+
+.connection-add {
+  margin-top: 0.5rem;
+}
+
+.connection-add__button {
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+
+/* ---- Entity picker dialog (shared by connections and the from/to linker) ---- */
+.entity-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.entity-picker__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.entity-picker__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  background: var(--board);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+}
+
+.entity-picker__tab:hover {
+  color: var(--ink);
+}
+
+.entity-picker__tab.is-active {
+  color: var(--card-ink);
+  background: var(--card-paper);
+  border-color: var(--card-paper);
+}
+
+.entity-picker__tab-count {
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+
+.entity-picker__filter {
+  width: 100%;
+}
+
+/* On top of .email-addr__list: tighter rows and a bounded scroll for a long library. */
+.entity-picker__list {
+  gap: 0.1rem;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.entity-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.entity-picker__row:hover {
+  background: var(--board);
+}
+
+.entity-picker__row--create {
+  color: var(--string);
+  font-weight: 600;
+}
+
+.entity-picker__row-icon {
+  flex: 0 0 auto;
+  width: 1.2em;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.entity-picker__row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-picker__empty {
+  padding: 0.6rem 0.5rem;
+}
+
+/* The resolved from/to parties, indented a touch under their field. */
+.email-fields__linked {
+  margin: 0.15rem 0 0.1rem;
+  padding-left: 0.3rem;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Markdown ---- */
+.markdown {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background: #1f1810;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 0.6rem 0.7rem;
+}
+
+.markdown :first-child {
+  margin-top: 0;
+}
+
+.markdown :last-child {
+  margin-bottom: 0;
+}
+
+.markdown a {
+  color: var(--string);
+}
+
+/* ---- React Flow controls / minimap theming ---- */
+.react-flow__controls button {
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  fill: var(--ink);
+  color: var(--ink);
+}
+
+.react-flow__controls button:hover {
+  background: #4a3a22;
+}
+
+.react-flow__minimap {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+/* A failed autosave is otherwise invisible until the user reloads and finds
+   their work gone, so it gets a loud strip rather than a console message. */
+.toolbar__error {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--string);
+  border-radius: 6px;
+  background: rgba(200, 64, 47, 0.16);
+  color: var(--ink);
+  font-size: 0.74rem;
+  max-width: 22rem;
+}
+
+/* ---- Menu ---- */
+/* The list positions against .menu, which is safe: the toolbar's <Panel> is a
+   sibling of <ReactFlow>, not a child, so the pane never sees these events and
+   there is no overflow to escape. */
+.menu {
+  position: relative;
+}
+
+.menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.menu__caret {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+.menu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu__item:hover:not(:disabled),
+.menu__item:focus-visible {
+  background: var(--panel-border);
+  outline: none;
+}
+
+/* A chooser item that is the current pick (see Menu selectedLabel) — a tick to
+   its right, so the open menu says which surface you're on. */
+.menu__item.is-selected::after {
+  content: '✓';
+  margin-left: auto;
+  opacity: 0.8;
+}
+
+/* ---- Busy overlay ---- */
+/* The scrim itself is shared with .modal__backdrop (below); this only lifts it
+   above the modals (z 20), since it can cover the first-run or import dialogs. */
+.busy-overlay {
+  z-index: 30;
+}
+
+.busy-overlay__box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.4rem 1.8rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.busy-overlay__text {
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+/* Border-spinner: the animation runs on the compositor, so it keeps turning even
+   while the main thread is blocked base64-ing a large bundle. */
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--panel-border);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A small, non-blocking status pill for background work (search indexing), distinct
+   from the full-screen .busy-overlay the user must wait on. Top-centre so it reads as
+   a transient status and doesn't fight the corner panels; pointer-events off so it
+   never blocks what's beneath it. */
+.task-indicator {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.spinner--small {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* ---- Modal ---- */
+/* The full-screen scrim, shared by the modal backdrop and the busy overlay; each
+   sets its own stacking (the overlay sits above the modals). */
+.modal__backdrop,
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 8, 5, 0.72);
+}
+
+.modal__backdrop {
+  z-index: 20;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 92vw);
+  max-height: 86vh;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal__header,
+.modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.modal__header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.modal__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--panel-border);
+}
+
+.modal__status {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+
+.modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  overflow-y: auto;
+}
+
+/* The first-run choice: a narrower dialog than the default, two big options. */
+.first-run {
+  width: min(460px, 92vw);
+}
+
+/* Logo sits with the title, not pushed to the far end by the header's default
+   space-between. */
+.first-run__header {
+  justify-content: flex-start;
+  gap: 0.6rem;
+}
+
+.first-run__logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  flex: 0 0 auto;
+}
+
+.first-run__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+}
+
+.first-run__choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+}
+
+.first-run__choice-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.first-run__choice-note {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+
+/* Manage dialog: the board's name, then its actions in a row. */
+.manage__name {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.manage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.modal__tabs {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.modal__tabs button {
+  background: none;
+  border: 1px solid var(--panel-border);
+}
+
+.modal__tabs button.is-active {
+  background: var(--panel-border);
+  color: var(--ink);
+}
+
+/* Pushed away from the tabs: it's an escape hatch, not a third tab. */
+.modal__tabs-aside {
+  margin-left: auto;
+}
+
+/* "Details" toggle sits at the far left of the dialog footer, away from the
+   action buttons on the right. */
+.modal__details-toggle {
+  margin-right: auto;
+}
+
+/* The revealed detail block: quiet, monospace, and scrollable so a long dump
+   never grows the dialog past the screen. */
+.modal__details {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  max-height: 9rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  background: var(--panel-border);
+  border-radius: 6px;
+}
+
+/* Destructive confirm button (e.g. Delete in the prompt dialog). */
+.modal__footer button.is-danger {
+  border-color: var(--string);
+  color: var(--ink);
+  background: rgba(200, 64, 47, 0.16);
+}
+
+.modal__errors {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+
+.modal__warn {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--string);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--ink);
+  background: rgba(200, 64, 47, 0.12);
+}
+
+/* Thumbnail grid of pictures already on the board — the object picker's grid (see
+   ObjectPickerDialog), pick one to reuse it. Scrolls within the dialog so a library
+   of hundreds stays bounded and the preview below keeps its room. */
+.image-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.5rem;
+  padding: 0.1rem;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.image-picker__item {
+  position: relative;
+  padding: 0;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  /* A recessed well so the whole picture can sit inside letterboxed (below) — most
+     board images are logos or documents, which a cover-crop would slice to an
+     unrecognisable band. */
+  background: var(--bg);
+}
+
+.image-picker__item:hover {
+  border-color: var(--accent, var(--string));
+}
+
+/* The highlighted tile whose picture the preview is showing. */
+.image-picker__item.is-active {
+  border-color: var(--string);
+  outline: 2px solid var(--string);
+  outline-offset: -1px;
+}
+
+.image-picker__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Badge on a tile whose picture more than one object shares (a group photo). */
+.image-picker__count {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 999px;
+}
+
+/* ---- Object picker (reuse a picture already on the board) ---- */
+.object-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* A recessed well showing the highlighted picture whole (contain), so what you pick
+   is what you get before committing it to the crop frame. */
+.object-picker__preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.object-picker__preview img {
+  max-width: 100%;
+  max-height: 30vh;
+  object-fit: contain;
+}
+
+.object-picker__caption {
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+/* "+N others share this image" — dimmer than the representative's name. */
+.object-picker__more {
+  color: var(--ink-dim);
+}
+
+.object-picker__date {
+  opacity: 0.75;
+}
+
+.object-picker__empty {
+  padding: 1rem 0;
+  text-align: center;
+}
+
+/* ---- Image cropper (the card-image dialog) ---- */
+.image-cropper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* The frame is the card's 4:3 shape: what you see here is what the card shows. */
+.image-cropper__frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  /* Dark, so an image mid-drag reads against film, not a gap. */
+  background: #2b2620;
+  cursor: grab;
+  /* Own the drag: no page scroll or image drag stealing the gesture. */
+  touch-action: none;
+  user-select: none;
+}
+.image-cropper__frame:active {
+  cursor: grabbing;
+}
+.image-cropper__frame img {
+  /* Sizing and offset come inline from the pan/zoom state. */
+  pointer-events: none;
+}
+
+.image-cropper__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+}
+
+/* ---- Participants (derived, read-only) ---- */
+/* Dotted in the Inference violet, like the strands on the canvas: the same
+   claim, said in a list. The colour comes down as --grade from the component. */
+.participants__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border-left: 2px dotted var(--grade);
+}
+
+/* These are real links — the record's own, immutable, but you click one to open
+   the card. So they read as links: brighter than the surrounding note, and the
+   string colour on hover, rather than muted body text. */
+.participants__row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  color: var(--ink);
+}
+
+.participants__row:hover {
+  color: var(--string);
+}
+
+/* "→ Sent (3)". The arrow carries the fact; the count says how much of it. */
+.participants__direction {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--grade);
+}
+
+.participants__when {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 0.4rem;
+  font-size: 0.62rem;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.participants__icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+/* Bounded, so a long subject line cannot widen the sidebar. */
+.participants__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Import offer ---- */
+/* The only rows in this modal that decide anything — the preview below merely
+   describes. Each row is a control, so it reads across where a preview line
+   reads down. */
+.import-offer {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.import-offer li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.import-offer li:last-child {
+  border-bottom: none;
+}
+
+/* The tick and its label are one target: the row is a yes/no before it is
+   anything else. */
+.import-offer__main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.import-offer__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.import-offer__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-offer__meta {
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+}
+
+/* The rename field on an import row: fills the row beside its tick, and may shrink
+   so a long name can't push the checkbox off. */
+.import-offer__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+}
+
+/* Where the row goes. Bounded, so a long card title can't push the tick off. */
+.import-offer select {
+  flex: 0 0 auto;
+  max-width: 45%;
+}
+
+.import-offer__more {
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+}
+
+/* ---- Import preview ---- */
+.import-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.import-preview li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.import-preview li:last-child {
+  border-bottom: none;
+}
+
+.import-preview li.is-dupe {
+  opacity: 0.5;
+}
+
+.import-preview__title {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.import-preview__meta {
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+}
+
+.import-preview__badge {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
+/* Not a skip — this one is about to gain a body it never had. */
+.import-preview__badge.is-completes {
+  border-color: #3bd17a;
+  color: #3bd17a;
+}
+
+/* ---- Timeline drawer ---- */
+.timeline {
+  flex: 0 0 auto;
+  height: 34px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+  transition: height 0.18s ease;
+  overflow: hidden;
+}
+
+.timeline.is-open {
+  height: 220px;
+}
+
+.timeline__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.timeline__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 0.75rem;
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+/* Header-bar control groups beside the Timeline heading/count: the kind filter,
+   milestone navigation, and the measure toggle. */
+.timeline__events,
+.timeline__tools,
+.timeline__filter {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+}
+
+.timeline__events {
+  gap: 0.25rem; /* between the Start/Prev/Next/End buttons */
+}
+
+/* The kind filter is a single trigger with a dropdown, so it anchors its popover. */
+.timeline__filter {
+  position: relative;
+}
+
+.timeline__events button,
+.timeline__filter > button,
+.timeline__measure-toggle {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  background: none;
+}
+
+/* Lighter than the measure toggle's --string fill: this is a persistent view
+   filter, lit only while a kind is hidden, not a modal tool you're inside. */
+.timeline__filter > button.is-active {
+  background: var(--panel-border);
+  color: var(--ink);
+}
+
+/* The dropdown checklist. Mirrors .menu__list, but capped and scrollable: the
+   drawer is a short bottom bar with overflow:hidden, so a full list would clip —
+   the cap keeps the box inside the drawer and scrolls the rest. */
+.timeline__filter-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0.75rem;
+  z-index: 1;
+  min-width: 11rem;
+  max-height: 168px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.timeline__filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.timeline__filter-option:hover,
+.timeline__filter-option:focus-visible {
+  background: var(--panel-border);
+  outline: none;
+}
+
+.timeline__filter-check {
+  width: 1rem;
+}
+
+.timeline__filter-count {
+  margin-left: auto;
+  padding-left: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.timeline__filter-reset {
+  margin-top: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--panel-border);
+  border-radius: 0;
+  text-align: left;
+}
+
+.timeline__filter-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.timeline__events button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.timeline__events button:disabled:hover {
+  background: none;
+  border-color: var(--panel-border);
+}
+
+.timeline__toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* The timeline's own full-text search box, in the header bar. */
+.timeline__search {
+  flex: 0 0 auto;
+  width: 12rem;
+  max-width: 30vw;
+  height: 22px;
+  margin: 0 0.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* Collapsed: the kind filter, milestone nav and measure tool have nothing to act on
+   while the strip is hidden, so they dim and stop responding until you expand. The
+   toggle and the search stay live — searching opens the drawer to its results. */
+.timeline:not(.is-open) .timeline__filter,
+.timeline:not(.is-open) .timeline__events,
+.timeline:not(.is-open) .timeline__tools {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.timeline__chevron {
+  color: var(--ink-dim);
+  font-size: 0.7rem;
+  width: 0.8rem;
+}
+
+.timeline__count {
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.timeline__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--panel-border);
+}
+
+/* The undated column and the strip, side by side; the measure bar (when shown)
+   stacks above them inside .timeline__body. */
+.timeline__body-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+/* The measure tool's readout, spanning the drawer above the strip. */
+.timeline__measure {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.78rem;
+}
+
+.timeline__measure-result strong {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.timeline__measure-range {
+  margin-left: 0.5rem;
+  color: var(--ink-dim);
+}
+
+.timeline__measure-hint {
+  color: var(--ink-dim);
+}
+
+.timeline__measure-toggle.is-active {
+  background: var(--string);
+  border-color: var(--string);
+  color: var(--bg);
+}
+
+/* Undated cards get their own column: they have no place in an ordering, but
+   they still need to be reachable. */
+.timeline__undated {
+  flex: 0 0 auto;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem;
+  border-right: 1px dashed var(--panel-border);
+  overflow-y: auto;
+}
+
+.timeline__undated-toggle {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.5rem;
+  background: none;
+  border: 1px dashed var(--panel-border);
+  border-radius: 6px;
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timeline__undated-toggle:hover {
+  color: var(--ink);
+}
+
+.timeline__undated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.timeline__strip {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timeline__empty {
+  align-self: center;
+  margin: 0;
+}
+
+.timeline__group {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.timeline__day {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.25rem;
+  white-space: nowrap;
+}
+
+.timeline__chips {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+/* Elapsed-time cue between day groups — the one thing a uniform strip loses.
+   Sits on the chip row, not the middle of the drawer, so it reads as belonging
+   to the gap between the two groups it separates. */
+.timeline__gap {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 1.9rem;
+  font-size: 0.65rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.timeline-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--card-paper);
+  color: var(--card-ink);
+  border: 1px solid transparent;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.timeline-item:hover {
+  border-color: var(--accent);
+}
+
+/* The selected chip, and the measure tool's two endpoints, wear the same outline. */
+.timeline-item.is-selected,
+.timeline-item.is-measured {
+  outline: 2px solid var(--string);
+  outline-offset: 1px;
+}
+
+.timeline-item__when {
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7b6b52;
+}
+
+.timeline-item__title {
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.timeline-item__glyph {
+  margin-right: 0.25rem;
+  opacity: 0.7;
+}
+
+/* A dated event is a milestone, not a document about one: a full accent outline
+   with a thick left bar (the "moment" marker) makes it stand out among the paper
+   chips, whatever its cluster colour. Stretches to its day group's height so it
+   reads as a bar rather than a chip. */
+.timeline-item--event {
+  align-self: stretch;
+  border-color: var(--accent);
+  border-left-width: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-item--event .timeline-item__title {
+  font-weight: 800;
+}
+
+.timeline-item--event .timeline-item__glyph {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Days since the previous event — a milestone-to-milestone reading, so it wears
+   the event accent and sits above the date. */
+.timeline-item__since {
+  align-self: flex-start;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+  opacity: 0.9;
+}
+
+/* The measure tool's endpoint badge, A (earlier) or B (later), in the top-right. */
+.timeline-item__measure-mark {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--bg);
+  background: var(--string);
+  border-radius: 50%;
+}

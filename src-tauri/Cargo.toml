@@ -1,0 +1,73 @@
+[package]
+name = "conspiracy"
+version = "0.1.0"
+description = "Conspiracy board"
+authors = ["Alex"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "conspiracy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+# raw_value lets the board reassembler pass each stored card/connection/cluster
+# fragment through verbatim (validated as JSON, never interpreted) when rebuilding a
+# board's envelope from its SQLite rows — the shell still never parses a card.
+serde_json = { version = "1.0", features = ["raw_value"] }
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = ["protocol-asset"] }
+tauri-plugin-log = "2"
+# The native save panel for exporting a bundle, so the user chooses where the .zip
+# goes. The one Tauri plugin we take: unlike the file picker and the download (which
+# the webview does itself), a save *location* is something a webview cannot ask for.
+tauri-plugin-dialog = "2"
+# Media is content-addressed: its filename is the sha-256 of its bytes. base64
+# carries those bytes across the webview↔shell boundary (a Tauri command is
+# JSON), and also decodes the Apple Mail drop. Both are used off macOS too, so
+# they live here rather than in the macOS-only block.
+base64 = "0.22"
+sha2 = "0.10"
+# Downloads a pasted image URL so it becomes a local file like any other media.
+# The webview cannot: its CSP forbids fetching arbitrary hosts, and a cross-origin
+# image drawn to a canvas for cropping would taint it — so the fetch lives here.
+ureq = "2"
+# Reading metadata out of an imported file, in the shell rather than the webview:
+# the same reasons as the download above (strict CSP, files are the shell's), and
+# these are file-format parsers with no place in a UI bundle. lopdf for a PDF's
+# Info dictionary and page count; zip + quick-xml for Office (a .docx/.xlsx/.pptx
+# is a zip of XML — docProps/core.xml and app.xml); kamadak-exif + imagesize for a
+# photo's dimensions and EXIF (date taken, camera, GPS).
+lopdf = "0.34"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.37"
+kamadak-exif = "0.5"
+imagesize = "0.13"
+# Per-board storage: one SQLite database per board (boards/<id>.sqlite), WAL mode, so a
+# save writes only the rows that changed rather than rewriting the whole board, and a
+# crash can't tear the file. "bundled" compiles SQLite from the amalgamation — no system
+# dependency, and it enables FTS5 for the library-wide search index (library.sqlite). The
+# schema stays TypeScript's: Rust reads and writes id/json rows and never parses a card.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Pinned to exactly what tauri/wry already resolve to. A different minor here
+# would give us a second, incompatible set of the same Objective-C types, and
+# the WKWebView handle we get from Tauri would not unify with them.
+objc2 = "0.6.4"
+objc2-app-kit = "0.3.2"
+objc2-foundation = { version = "0.3.2", features = ["NSData", "NSArray", "NSDictionary", "NSString", "NSError"] }
+# Vision reads text out of an imported image (a text-message screenshot, chiefly),
+# on-device and offline, so a card can carry the conversation as searchable text.
+# Same objc2 0.6 generation as the crates above, so the Objective-C types unify.
+objc2-vision = { version = "0.3.2", features = [
+  "VNRequest",
+  "VNRequestHandler",
+  "VNRecognizeTextRequest",
+  "VNObservation",
+  "VNTypes",
+] }

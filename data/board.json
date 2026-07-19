@@ -1,0 +1,261 @@
+{
+  "version": 3,
+  "meta": {
+    "title": "The Nightingale File",
+    "updatedAt": "2026-07-20T00:00:00.000Z"
+  },
+  "clusters": [
+    { "id": "cl_players", "label": "The players", "color": "#3b7de2", "visible": true },
+    { "id": "cl_money", "label": "Dirty money", "color": "#3ba55c", "visible": true },
+    { "id": "cl_lastnight", "label": "The last set", "color": "#e2a13b", "visible": true },
+    { "id": "cl_frame", "label": "The frame-up", "color": "#e23b3b", "visible": true }
+  ],
+  "cards": [
+    {
+      "id": "card_vivian",
+      "title": "Vivian Vane",
+      "notes": "The Blue Canary's headline act — the **Nightingale**. Walked off after her last set on 3 October and never walked back on. Left a half-finished drink and a note nobody can read.",
+      "clusterId": "cl_players",
+      "position": { "x": 120, "y": 220 },
+      "kind": "person",
+      "person": {
+        "addresses": ["vivian@bluecanary.example"],
+        "numbers": ["+1 212 555 0155"]
+      }
+    },
+    {
+      "id": "card_marlowe",
+      "title": "Nick Marlowe",
+      "notes": "Private licence #4417. Hired by the club's bandleader to find Vivian — **quietly**, and before the papers do. Narrates this whole sorry business in the past tense.",
+      "clusterId": "cl_players",
+      "position": { "x": 120, "y": 640 },
+      "kind": "person",
+      "person": {
+        "addresses": ["nick@marloweinvestigations.example"],
+        "numbers": ["+1 212 555 0101"]
+      }
+    },
+    {
+      "id": "card_sable",
+      "title": "Dominic \"Dutch\" Sable",
+      "notes": "Owns the Canary on paper and the room in practice. Charming until the house lights come up. Keeps a detective on the force and an accountant nobody has met.",
+      "clusterId": "cl_players",
+      "position": { "x": 600, "y": 120 },
+      "kind": "person",
+      "person": {
+        "addresses": ["dutch@bluecanary.example"],
+        "numbers": ["+1 212 555 0170"]
+      }
+    },
+    {
+      "id": "card_calloway",
+      "title": "Det. Roy Calloway",
+      "notes": "Homicide, 12th Precinct. First to the scene, first to call it a runaway. **Took a call from Sable at 11:58 the night she vanished** — then told everyone he was home asleep.",
+      "clusterId": "cl_players",
+      "position": { "x": 840, "y": 1000 },
+      "kind": "person",
+      "person": {
+        "addresses": ["r.calloway@precinct12.example"],
+        "numbers": ["+1 212 555 0133"]
+      }
+    },
+    {
+      "id": "card_bluecanary",
+      "title": "The Blue Canary Club",
+      "notes": "Basement jazz joint on Vermouth Street. Cash in, cash out, and a back office that does more business than the bar.",
+      "clusterId": "cl_players",
+      "position": { "x": 380, "y": 440 },
+      "kind": "organisation",
+      "organisation": {
+        "addresses": ["info@bluecanary.example"],
+        "domains": ["bluecanary.example"],
+        "numbers": ["+1 212 555 0150"]
+      }
+    },
+    {
+      "id": "card_meridian",
+      "title": "Meridian Holdings",
+      "notes": "A holding company with nothing to hold — a mail drop, a bank account, and a **ledger**. Every dollar the Canary can't explain runs through here first.",
+      "clusterId": "cl_money",
+      "position": { "x": 1080, "y": 140 },
+      "kind": "organisation",
+      "organisation": {
+        "addresses": ["accounts@meridian-holdings.example"],
+        "domains": ["meridian-holdings.example"]
+      }
+    },
+    {
+      "id": "card_ledger",
+      "title": "The Meridian ledger",
+      "notes": "Eighty-eight pages of Meridian's \"general ledger\". The last real entry is dated the night before Vivian's set. **She'd been reading it.**",
+      "clusterId": "cl_money",
+      "position": { "x": 1120, "y": 420 },
+      "kind": "document",
+      "occurredAt": "1947-09-30T00:00:00.000Z",
+      "occurredAtPrecision": "day",
+      "document": {
+        "name": "meridian_ledger_1947.pdf",
+        "mime": "application/pdf",
+        "title": "Meridian Holdings — General Ledger",
+        "author": "H. Grausam",
+        "created": "1947-09-30T00:00:00.000Z",
+        "pages": 88,
+        "words": 12043
+      }
+    },
+    {
+      "id": "card_ledgerstop",
+      "title": "Grausam closes the books",
+      "notes": "The books stop cold on 30 September — no closing balance, no signature, just a page torn at the corner.",
+      "clusterId": "cl_money",
+      "position": { "x": 1360, "y": 460 },
+      "kind": "event",
+      "occurredAt": "1947-09-30T00:00:00.000Z",
+      "occurredAtPrecision": "day",
+      "grade": "confirmed",
+      "event": { "sourceCardId": "card_ledger" }
+    },
+    {
+      "id": "card_laundering",
+      "title": "The Canary washes Meridian's cash",
+      "notes": "No club sells that many watered highballs. The takings and the ledger only balance if the difference is **somebody else's money going clean**.",
+      "clusterId": "cl_money",
+      "position": { "x": 800, "y": 340 },
+      "kind": "evidence",
+      "grade": "inference"
+    },
+    {
+      "id": "card_lastset",
+      "title": "Vivian's final set",
+      "notes": "Half past eleven, 3 October. She sang *Nightingale* twice and left the stage between numbers. The club's own log has the times — **it happened, whatever it meant.**",
+      "clusterId": "cl_lastnight",
+      "position": { "x": 620, "y": 600 },
+      "kind": "event",
+      "occurredAt": "1947-10-03T03:30:00.000Z",
+      "occurredAtPrecision": "minute",
+      "grade": "confirmed"
+    },
+    {
+      "id": "card_text",
+      "title": "\"Look in Meridian's books\"",
+      "notes": "The last anyone heard from her — a text to Marlowe, timestamped 11:45, fifteen minutes before Sable rang the precinct.",
+      "clusterId": "cl_lastnight",
+      "position": { "x": 360, "y": 820 },
+      "kind": "message",
+      "occurredAt": "1947-10-03T03:45:00.000Z",
+      "occurredAtPrecision": "minute",
+      "message": {
+        "from": { "name": "Vivian Vane", "address": "+1 212 555 0155" },
+        "to": [{ "name": "Nick Marlowe", "address": "+1 212 555 0101" }],
+        "body": "If I don't ring by midnight, the answer's in Meridian's books. — V"
+      }
+    },
+    {
+      "id": "card_vanish",
+      "title": "Vivian vanishes",
+      "notes": "By last call she was gone. Coat still on the hook, cab never called. Three staff put it inside the same half hour — **corroborated**, and impossible to un-know.",
+      "clusterId": "cl_lastnight",
+      "position": { "x": 860, "y": 800 },
+      "kind": "event",
+      "occurredAt": "1947-10-03T05:00:00.000Z",
+      "occurredAtPrecision": "minute",
+      "grade": "corroborated"
+    },
+    {
+      "id": "card_where",
+      "title": "Where is Vivian?",
+      "notes": "Runaway, hostage, or worse. The record doesn't settle it and neither does Marlowe. **Unresolved** — the honest grade for the thing at the centre of the board.",
+      "clusterId": "cl_lastnight",
+      "position": { "x": 1120, "y": 720 },
+      "kind": "evidence",
+      "grade": "unresolved"
+    },
+    {
+      "id": "card_threat",
+      "title": "You'll sing your last at the Canary",
+      "notes": "Sent to Vivian two nights before and cc'd — carelessly — to Meridian's accounts. Reads like a warning dressed as a love letter.",
+      "clusterId": "cl_frame",
+      "position": { "x": 600, "y": 340 },
+      "kind": "email",
+      "occurredAt": "1947-10-01T18:00:00.000Z",
+      "occurredAtPrecision": "minute",
+      "email": {
+        "from": { "name": "Dutch Sable", "address": "dutch@bluecanary.example" },
+        "to": [{ "name": "Vivian Vane", "address": "vivian@bluecanary.example" }],
+        "cc": [{ "name": "Meridian Accounts", "address": "accounts@meridian-holdings.example" }],
+        "messageId": "<threat-19471001@bluecanary.example>",
+        "attachments": [{ "name": "final_notice.pdf", "mime": "application/pdf" }]
+      }
+    },
+    {
+      "id": "card_call",
+      "title": "Sable → Calloway, 11:58pm",
+      "notes": "Four minutes, precinct switchboard log. Placed from the club office phone to Calloway's desk **while Sable swears he was home in bed.**",
+      "clusterId": "cl_frame",
+      "position": { "x": 1100, "y": 1000 },
+      "kind": "call",
+      "occurredAt": "1947-10-03T03:58:00.000Z",
+      "occurredAtPrecision": "minute",
+      "call": {
+        "from": { "name": "Dutch Sable", "address": "+1 212 555 0170" },
+        "to": [{ "name": "Roy Calloway", "address": "+1 212 555 0133" }],
+        "durationSecs": 240
+      }
+    },
+    {
+      "id": "card_alibi",
+      "title": "Sable's alibi: \"home all night\"",
+      "notes": "A signed statement, vouched for by Calloway. The switchboard log puts a four-minute call from the club office in the middle of it. **Refuted** — the record contradicts it outright.",
+      "clusterId": "cl_frame",
+      "position": { "x": 1340, "y": 940 },
+      "kind": "evidence",
+      "grade": "refuted"
+    },
+    {
+      "id": "card_payoff",
+      "title": "Calloway is on Sable's payroll",
+      "notes": "Sworn to by the bandleader, unproven. A cop who calls it a runaway before the coat's off the hook is either lazy or paid. **Asserted** — not yet decided.",
+      "clusterId": "cl_frame",
+      "position": { "x": 600, "y": 980 },
+      "kind": "evidence",
+      "grade": "asserted"
+    },
+    {
+      "id": "card_priors",
+      "title": "Sable's 1938 racketeering conviction",
+      "notes": "Nine years back a jury already found Sable ran a protection racket out of a supper club. **Adjudicated** — decided in open court, on the record.",
+      "clusterId": "cl_frame",
+      "position": { "x": 120, "y": 940 },
+      "kind": "event",
+      "occurredAt": "1938-06-14T00:00:00.000Z",
+      "occurredAtPrecision": "day",
+      "grade": "adjudicated"
+    },
+    {
+      "id": "card_admission",
+      "title": "Sable conceded the club paid \"protection\"",
+      "notes": "In the 1938 consent decree Sable conceded the club made \"security payments\" — his own words, in writing. **Admitted** — established by the party himself.",
+      "clusterId": "cl_frame",
+      "position": { "x": 360, "y": 1120 },
+      "kind": "evidence",
+      "grade": "admitted"
+    }
+  ],
+  "connections": [
+    { "id": "edge_hired", "source": "card_marlowe", "target": "card_vivian", "label": "hired to find", "kind": "plain" },
+    { "id": "edge_owns", "source": "card_sable", "target": "card_bluecanary", "label": "owns", "kind": "red-string", "grade": "confirmed" },
+    { "id": "edge_washes", "source": "card_bluecanary", "target": "card_meridian", "label": "washes cash through", "kind": "red-string", "grade": "inference" },
+    { "id": "edge_pays", "source": "card_sable", "target": "card_calloway", "label": "pays off", "kind": "red-string", "grade": "asserted" },
+    { "id": "edge_reading", "source": "card_vivian", "target": "card_ledger", "label": "was reading", "kind": "red-string", "grade": "corroborated" },
+    { "id": "edge_then", "source": "card_lastset", "target": "card_vanish", "label": "then", "kind": "plain" },
+    { "id": "edge_open", "source": "card_vanish", "target": "card_where", "label": "leaves open", "kind": "plain" },
+    { "id": "edge_breaks", "source": "card_call", "target": "card_alibi", "label": "contradicts", "kind": "red-string", "grade": "confirmed" },
+    { "id": "edge_warns", "source": "card_threat", "target": "card_vivian", "label": "warns", "kind": "red-string", "grade": "asserted" },
+    { "id": "edge_vouches", "source": "card_calloway", "target": "card_alibi", "label": "vouches for", "kind": "red-string", "grade": "unresolved" },
+    { "id": "edge_convicted", "source": "card_priors", "target": "card_sable", "label": "convicted", "kind": "red-string", "grade": "adjudicated" },
+    { "id": "edge_conceded", "source": "card_admission", "target": "card_sable", "label": "conceded by", "kind": "plain", "grade": "admitted" },
+    { "id": "edge_runs", "source": "card_laundering", "target": "card_meridian", "label": "runs through", "kind": "red-string", "grade": "inference" },
+    { "id": "edge_buys", "source": "card_payoff", "target": "card_calloway", "label": "buys", "kind": "red-string", "grade": "asserted" }
+  ],
+  "viewport": { "x": 40, "y": 40, "zoom": 0.6 }
+}
