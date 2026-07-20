@@ -4,9 +4,6 @@ mod library_index;
 mod menu;
 
 #[cfg(target_os = "macos")]
-mod mail_drag;
-
-#[cfg(target_os = "macos")]
 mod ocr;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -79,19 +76,10 @@ pub fn run() {
         Err(e) => return Err(e.into()),
       }
 
-      // Watch the Inbox drop-folder, the way a whole Mail thread comes in: dragged
-      // to Finder it becomes one .eml per message, which this hands to the importer.
+      // Watch the Inbox drop-folder — the one automatic way in. Mail dragged to
+      // Finder becomes one .eml per message, which this hands to the importer;
+      // images and documents dropped there import the same way.
       board_store::start_inbox_watcher(app.handle().clone());
-
-      // Lets a message dragged from Apple Mail bring its body with it.
-      #[cfg(target_os = "macos")]
-      {
-        let window = app.get_webview_window("main").expect("main window exists");
-        let handle = app.handle().clone();
-        window.with_webview(move |webview| unsafe {
-          mail_drag::install(handle, webview.inner());
-        })?;
-      }
 
       Ok(())
     })

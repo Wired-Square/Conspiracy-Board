@@ -18,9 +18,10 @@ import { FirstRunModal } from './components/panels/FirstRunModal';
 import { ManageModal } from './components/panels/ManageModal';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { BackgroundTaskIndicator } from './components/ui/BackgroundTaskIndicator';
+import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
-import { useMailDrops } from './platform/mailDrops';
 import { useInbox } from './platform/inbox';
+import { useUndoShortcut } from './hooks/useUndoShortcut';
 import { useBoardMenu } from './platform/boardMenu';
 import { useImportProgress } from './platform/importProgress';
 import { usePropertiesStore } from './store/propertiesStore';
@@ -53,12 +54,11 @@ export default function App() {
     void init().then(() => setReady(true));
   }, [init]);
 
-  // Messages the desktop shell fetches out of Mail. Mounted above the canvas so
-  // one arriving late still lands if the board is switched mid-fetch.
-  useMailDrops();
-  // Email files the shell sweeps out of the Inbox drop-folder — how a whole
-  // conversation comes in (see src/platform/inbox.ts).
+  // Files the shell sweeps out of the Inbox drop-folder — the one automatic way
+  // in for email, images and documents (see src/platform/inbox.ts).
   useInbox();
+  // Cmd+Z restores the last delete, board-wide.
+  useUndoShortcut();
   // The native File menu (src-tauri/src/menu.rs) drives board management.
   useBoardMenu();
   // Refines the import busy-overlay text as the shell stores a bundle's media.
@@ -134,6 +134,7 @@ export default function App() {
         {manageOpen && <ManageModal />}
         <ImportOverlay />
         <BackgroundTaskIndicator />
+        <UndoToast />
         <PromptHost />
       </ReactFlowProvider>
     </div>

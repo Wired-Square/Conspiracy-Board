@@ -46,7 +46,11 @@ function PolaroidFace({ card }: { card: Card }) {
     <>
       <div className="polaroid__photo">
         {image ? (
-          <img src={image} alt="" draggable={false} style={cardImageStyle(card)} />
+          // Not loading="lazy": WKWebView's lazy-load intersection is unreliable
+          // inside React Flow's transformed pane — images deferred and often never
+          // loaded. onlyRenderVisibleElements already keeps off-screen cards
+          // imageless, so eager here costs nothing.
+          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
         ) : (
           // Empty film, not a hole: a polaroid nobody has found a photograph
           // for yet still reads as one waiting.
@@ -82,7 +86,8 @@ function PaperFace({ card }: { card: Card }) {
       <div className="evidence-card__accent" />
       {image && (
         <div className={`evidence-card__image${card.imageCrop ? ' is-cropped' : ''}`}>
-          <img src={image} alt="" draggable={false} style={cardImageStyle(card)} />
+          {/* Eager, like the polaroid above — see the note there. */}
+          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
         </div>
       )}
       <div className="evidence-card__body">
@@ -128,6 +133,15 @@ function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
       style={{ ['--accent' as string]: accent }}
     >
       {actor ? <PolaroidFace card={card} /> : <PaperFace card={card} />}
+      {/* The primary wears the accent; membership of any further clusters shows
+          as a dot per colour, so multi-membership is visible at a glance. */}
+      {data.extraClusterColors.length > 0 && (
+        <span className="evidence-card__cluster-dots" aria-hidden>
+          {data.extraClusterColors.map((c, i) => (
+            <span key={i} style={{ background: c }} />
+          ))}
+        </span>
+      )}
       {/* Start a link from the hot corner; drop it anywhere on a card. */}
       <Handle type="target" position={Position.Left} className={`card-target${connecting ? ' connecting' : ''}`} />
       <Handle type="source" position={Position.Right} className="card-source" />

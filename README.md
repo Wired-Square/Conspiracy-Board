@@ -42,17 +42,22 @@ is the way to run it.
 ## What's on a board
 
 - **Cards** — the only entity. A card has a title, markdown notes, an optional
-  picture, an optional cluster, a position, an optional date, and a *kind*.
+  picture, its clusters (none to many), a position, an optional date, and a *kind*.
 - **Kinds** — six of them, in three registers. A kind only ever *adds* to an
   ordinary card, so whatever it is it keeps its position, cluster and
   connections for free. See [Kinds](#kinds).
 - **Clusters** — a tag plus a colour plus a visibility toggle. Not a spatial
   group, and **not what a card is** — that is its kind. A cluster is which
   *strand* of the investigation a card belongs to: "The 2024 tender",
-  "Witnesses". A card references at most one. Hiding a cluster hides its cards
-  wherever they are — the board, the record, the timeline. The cluster list, top-
-  right, collapses to its header — on the Objects view that corner holds the
-  Maintenance menu instead.
+  "Witnesses" — and a card can belong to several. Its memberships are ordered:
+  the first is the **primary**, which colours the card everywhere it is drawn;
+  the rest show as small dots on the card face. Both are set in the card
+  editor's checkbox list, where **Make primary** promotes any other membership.
+  A card hides only when *every* cluster it belongs to is hidden — one strand
+  going dark doesn't take down a card another visible strand still claims —
+  and that reading holds wherever the card shows: the board, the record, the
+  timeline. The cluster list, top-right, collapses to its header — on the
+  Objects view that corner holds the Maintenance menu instead.
 - **Connections** — red string between two cards, optionally labelled and graded.
 - **Boards** — you can keep several, managed from the native **File** menu
   (`File ▸ Open Board` lists them). Whenever the library is empty — a first run, or
@@ -77,9 +82,11 @@ uniform strip would otherwise lose it: a marker between day groups, and on each
 event the days since the one before it. **Measure**, in the header, makes the strip
 a ruler — pick two dated cards and it reads back the days between them. **Its own
 search box** narrows the strip by full text — the words inside a card's files
-included — and scrolls to the first match, opening the drawer to show it; collapsing
-the drawer dims the header's controls, since there is nothing to act on with the
-strip hidden. See [The record](#the-record).
+included — and scrolls to the first match, opening the drawer to show it. Clearing
+that search, or changing the kind filter, **keeps your place**: the chip nearest
+the centre stays centred rather than the strip snapping back to the start.
+Collapsing the drawer dims the header's controls, since there is nothing to act on
+with the strip hidden. See [The record](#the-record).
 
 **Two searches, each scoped to what it is good at.** The box beside the view chooser
 is a fast, in-memory **entity** search: it finds people and organisations by name,
@@ -113,12 +120,17 @@ what the board draws; the record has no positions to tidy, so it shows only ther
 
 A card is deleted from the bottom of its editor, and it takes its string with it
 — the confirm says how much, because that is the one thing about a card you
-cannot see from the dialog. There is no undo.
+cannot see from the dialog. One level of undo stands behind it: deleting a card
+or a cluster offers **Undo** in a pill for a few seconds, and **⌘Z** works until
+the next delete or a board switch — the restore brings back exactly what left,
+string and memberships included.
 
-There is no Save button. Every edit autosaves 500ms later. If a save ever fails —
-a full disk, or a data directory it can't write — a red strip appears under the
-toolbar. That strip is the only honest save signal, which is why a Save button
-would have been theatre.
+There is no Save button. Every edit autosaves 500ms later, saves are serialised
+so two can never interleave, and a pan or zoom persists the camera *without*
+restamping the board's recency — merely looking around never reorders the
+library. If a save ever fails — a full disk, or a data directory it can't write
+— a red strip appears under the toolbar. That strip is the only honest save
+signal, which is why a Save button would have been theatre.
 
 ## Kinds
 
@@ -238,8 +250,8 @@ Emails belong to people by address and to organisations by mail domain; a text
 message and a phone call belong to people by number the same way, since an actor now
 holds phone numbers alongside addresses. **None of it is stored**: `src/lib/roster.ts`
 builds the whole graph in one pass at render, from the addresses and numbers on the
-cards. The identity is the join, exactly as `Message-ID` joins a dragged Mail message
-to the card waiting for it. A communication belongs to a person *and* an organisation
+cards. The identity is the join, exactly as `Message-ID` joins an imported message
+to a card already carrying it. A communication belongs to a person *and* an organisation
 at once, so this is a graph rather than a tree — there is no `parentId` and there must
 not be one. A message is matched exactly like a mail: the roster files all three
 through one projection of *from*/*to* (`communicationParties`) and one participant
@@ -328,7 +340,7 @@ src/
   data/                 schema (zod), mappers, the board index, the seed board
   store/boardStore.ts   canonical state + the derived view + autosave
   storage/              the IO seam; boards as files, via the shell
-  platform/             the shell seam; mailDrops takes Mail's file promise
+  platform/             the shell seam; inbox.ts hands watched-folder files to the importer
   lib/kinds.ts          what each kind is, and where it lives — start here too
   lib/roster.ts         who is in what — communications ↔ people ↔ organisations
   lib/grades.ts         the eight, their colours, and the ink that reads on them
@@ -340,8 +352,8 @@ src/
   hooks/                derived reads over the store
 ```
 
-`src-tauri/` is the desktop shell: `mail_drag.rs` is the interesting part; `board_store.rs`
-keeps the per-board SQLite, and `extract.rs`/`library_index.rs` are the search index.
+`src-tauri/` is the desktop shell: `board_store.rs` keeps the per-board SQLite and
+watches the Inbox folder, and `extract.rs`/`library_index.rs` are the search index.
 
 ## Storage
 
@@ -497,19 +509,17 @@ over the shell's read-only `list_media`/`verify_media`.
 
 ## Email
 
-Five ways in, none of which touch the network:
+Four ways in, none of which touch the network:
 
 | Path | Gets you |
 |---|---|
-| `.eml` / `.mbox` files (picker or drag onto the board) | everything |
+| `.eml` / `.mbox` files via the picker (`+ Add ▸ Email`) | everything |
 | Paste a raw message (Gmail: ⋮ → Show original) | everything |
 | `+ Add ▸ Email` → *Or add a blank email card* | an empty card to type into |
-| Drag **one** message out of **Apple Mail** | everything — see below |
 | Drop email files in the **Inbox folder** (File ▸ Show Inbox Folder) | everything — a whole thread at once |
 
 However it arrives, a message lands in [the record](#the-record), not on the
-board — including one dropped from Mail onto the canvas, which takes you there
-rather than appearing to swallow it.
+board.
 
 Parsing is `postal-mime`, dynamically imported so it stays out of the main
 bundle. It handles the things that actually break naive parsers: folded headers,
@@ -560,56 +570,23 @@ would still be re-serialised on every edit. The picture and attachment bytes no 
 pay that toll now that they are files, not base64 in the JSON, so the old 256KB image
 cap is gone.
 
-### Dragging from Apple Mail
+### Mail comes in through the Inbox folder
 
-Drag a message onto the board and you get the message — body, sender, date — and
-the app takes you to [the record](#the-record), where it landed. It takes two
-halves to manage that, because the drop and the body arrive by different routes
-and at different times.
+Dragging onto the app window is gone — the window is not a drop target, and the
+native Apple Mail drag machinery (a `performDragOperation:` swizzle taking
+Mail's file promise) went with it. Everything it did, the
+[Inbox folder](#the-inbox-folder) does better: drag a message *or a whole
+conversation* from Mail to that folder in Finder, and Finder writes one `.eml`
+per message — including the thread case the webview drop could never be handed.
 
-macOS gives the *webview* **only the subject and a `message:` URL**: no file, no
-readable promise. That much is not workable around, so the drop makes the card
-out of what it has — subject as the title, Message-ID stored, and an **Open in
-Mail** link that reopens the real message. The link is derived from the
-Message-ID rather than stored (Mail encodes only the angle brackets, so the URL
-is a pure function of it).
-
-The body comes the other way. Mail also puts a *file promise* for the whole
-`.eml` on the dragging pasteboard, which the webview never sees but the shell
-can take: `src-tauri/src/mail_drag.rs` accepts it and hands the bytes to
-`src/platform/mailDrops.ts`, which parses them and calls the same `addCards` as
-every other import. So the card the drop just made is **completed in place** a
-moment later — body, sender, date — keeping its position, cluster and
-connections.
-
-One message at a time, though. Dragging a multi-selection or a collapsed
-conversation hands the page only plain text, and its file promise is a flavour
-(`com.apple.pasteboard.promised-file-url`, with no content type) that neither the
-deprecated call nor `NSFilePromiseReceiver` will read — Mail simply doesn't offer
-a whole thread the way it offers one message. So a thread comes in through the
-[Inbox folder](#the-inbox-folder) instead, where Finder has already done the part
-the webview can't. A drop the page can't place says so in a dialog that points
-there.
-
-Nothing is special-cased for any of this. The `.eml`'s Message-ID is the one the
-card read off the `message:` URL, and that identity is the whole joint. It is the
-same completion an `.eml` import has always done: cards record where they came
-from (`EmailMeta.source`) rather than this being inferred from which fields are
-empty, since a real message with no From and no Date would otherwise be mistaken
-for a card still waiting and be silently overwritten.
-
-Two things about that worth knowing before touching it:
-
-- **`NSFilePromiseReceiver` cannot read Mail's promise.** Mail offers the legacy
-  flavour, for which the modern receiver falls back to the drag session — but it
-  delivers asynchronously, by which time the session is gone. It fails with "The
-  operation was cancelled" and Mail is never asked. The deprecated
-  `namesOfPromisedFilesDroppedAtDestination:`, called synchronously inside
-  `performDragOperation:`, is the only thing that works. If macOS ever drops it,
-  a Mail drop degrades to the card without its body, which is still worth having.
-- **Delivery is asynchronous**, so the card cannot be built from the promise —
-  it's built by the HTML5 drop, where the user dropped it, and completed later.
-  That ordering is why position, cluster and connections survive.
+One trace of the old path remains, for boards written while it existed: a card
+with `email.source: 'mail-drag'` holds a Message-ID but no stored `.eml` — its
+body lives in Mail. Such a card still shows its **Open in Mail** link (derived
+from the Message-ID, see `mailUrlFor`), and importing the matching `.eml` still
+**completes it in place**, keeping its position, clusters and connections. Cards
+record where they came from (`EmailMeta.source`) rather than this being inferred
+from which fields are empty, since a real message with no From and no Date would
+otherwise be mistaken for a card still waiting and be silently overwritten.
 
 Untrusted email bodies end up in `notes`, which is why `MarkdownView` leaves
 react-markdown's HTML escaping and URL sanitising alone. Don't add `rehype-raw`.
@@ -617,25 +594,23 @@ react-markdown's HTML escaping and URL sanitising alone. Don't add `rehype-raw`.
 ### The Inbox folder
 
 The library's `Inbox/` is a watched drop-folder — **File ▸ Show Inbox
-Folder** opens it. It began as how a whole thread comes in — drag a Mail
-conversation to it in Finder and Finder writes one `.eml` per message (fulfilling
-the promise the webview drop can't) — and now takes anything a board drop does: an
-emailed thread the webview can't be handed, or a screenshot dropped in from Finder,
-comes in the same way.
+Folder** opens it — and the one automatic way in. Drag a Mail conversation to it
+in Finder and Finder writes one `.eml` per message; a screenshot or a PDF
+dropped there imports the same way.
 
 The shell (`start_inbox_watcher`, `board_store.rs`) sweeps the folder every 1.5s,
 takes each file once its size settles so a half-written one is never read, and
-moves taken files into `Inbox/.imported` so nothing imports twice. Each set is then
-routed exactly as a board drop routes it (`src/platform/inbox.ts`): email opens the
-same import preview — a folder batch preselected into a **new cluster**, since a
-thread arrives together, which the preview lets you change — while images and
-documents import straight to cards. A stray note left in the folder is ignored
-rather than mis-imported.
+moves taken files into `Inbox/.imported` so nothing imports twice. Each batch is
+then routed by `src/platform/inbox.ts`: email opens the import preview — a
+folder batch preselected into a **new cluster**, since a thread arrives
+together, which the preview lets you change — while images and documents import
+straight to cards. A stray note left in the folder is ignored rather than
+mis-imported.
 
 ## Images and OCR
 
-An image becomes an **evidence** card that *is* the picture — dragged onto the
-board, picked from `+ Add ▸ Image`, or [dropped in the Inbox](#the-inbox-folder).
+An image becomes an **evidence** card that *is* the picture — picked from
+`+ Add ▸ Image`, or [dropped in the Inbox](#the-inbox-folder).
 PDFs and Office files become document cards the same way, through the one path
 (`addImportedMedia` → `buildMediaDraft`). The bytes are stored in `media/` by
 content hash like any other file ([Storage](#storage)), the card holds the
@@ -682,8 +657,6 @@ it finds that image by any of them and shows how many share it.
 `src-tauri/` is the shell the UI runs inside. It is deliberately thin — it holds
 what a webview cannot do for itself, and nothing else:
 
-- **`mail_drag.rs`** takes the file promise off an Apple Mail drag, the only route
-  to a message body (see [above](#dragging-from-apple-mail)).
 - **`board_store.rs`** reads and writes the boards and their media, because a
   webview has nowhere durable to put them (see [Storage](#storage)). It also
   watches the [Inbox folder](#the-inbox-folder) (`start_inbox_watcher`) and hands
@@ -696,7 +669,11 @@ what a webview cannot do for itself, and nothing else:
   reveals itself, no round-trip.
 
 Everything reaching them goes through `src/platform/` and `src/storage/`. Nothing
-else in `src/` knows the shell is there.
+else in `src/` knows the shell is there. The two sides' payload types are mirrored
+by hand, so every value-returning command's answer is parsed against a zod schema
+on receipt (`src/storage/ipc.ts`, shapes composed from `src/data/schema.ts`'s own)
+— a field renamed on either side fails loudly at the boundary instead of
+somewhere far away at runtime.
 
 ### The icon
 
@@ -766,18 +743,20 @@ both were broken by hand while the palette was being chosen.
 
 ## Known limits
 
-- **No undo.** Deleting a board or a card asks twice; nothing else does, and
-  nothing comes back.
+- **Undo is one level deep, and only for deletes.** A deleted card or cluster
+  can be taken back — the pill, or ⌘Z — until the next delete or a board
+  switch. Deleting a *board* still cannot, and no other edit keeps history.
 - **Importing a bundle reads it whole into memory.** Export streams straight to disk,
   but import carries the `.zip` across the IPC boundary as one base64 string (there is
   a 2 GiB cap); a colossal library would be memory-heavy to bring in. See
   [Storage](#storage) for the bundle itself, which has no such ceiling on the way out.
-- **Board schema is `version: 3`.** A v1 or v2 board upgrades on load, one-way —
+- **Board schema is `version: 4`.** An older board upgrades on load, one-way —
   export a backup before running a new build against an old board. The upgrade
-  itself costs nothing (every field added since v1 is defaulted, and `kind`
-  defaults to what every older card already was); the bump earns its keep in the
-  other direction, where an older build refuses a v3 board outright rather than
-  loading it with every person and organisation flattened to evidence.
+  itself costs nothing (every field added since v1 is defaulted, and the one
+  shape change — a card's single `clusterId` becoming the ordered `clusterIds`
+  — widens on the way in); the bump earns its keep in the other direction,
+  where an older build refuses a v4 board outright rather than silently
+  unfiling every card from every cluster.
 - **The search index reads a PDF's text layer, not its pixels.** A born-digital PDF
   or Office file is extracted in full; a *scanned* PDF — pages that are images with no
   text layer — yields nothing to the index, since only imported images are OCR'd. And
@@ -810,13 +789,7 @@ both were broken by hand while the palette was being chosen.
   by hand number in the tens), so it gets typeahead when it actually bites.
 - `react-router-dom` is a dependency and is imported nowhere. There are no
   routes; the timeline is a drawer, not a page.
-- Dropping a link, or a web image dragged from a browser tab (a URL, not a file),
-  does nothing but say so — an image *file* imports fine. Cards from URLs would be
-  a reasonable thing to add.
-- **Dragging several messages out of Mail at once imports the first one.** The
-  drag carries every message; the drop has only ever made one card from it, and
-  only one body is fetched to match. Nothing is silently half-imported — the rest
-  are simply not picked up.
-- The Mail drop rests on `namesOfPromisedFilesDroppedAtDestination:`, **deprecated
-  since 10.13** and the only call Mail answers. If a macOS release removes it,
-  Mail drops quietly go back to being cards without their bodies.
+- **Dragging anything onto the app window does nothing.** The window is not a
+  drop target — the [Inbox folder](#the-inbox-folder) is the drop target, and
+  the `+ Add` pickers cover the manual case. (The old in-window drop, and the
+  deprecated Mail file-promise call it rested on, are gone.)

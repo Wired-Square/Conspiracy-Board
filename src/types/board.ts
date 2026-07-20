@@ -267,7 +267,13 @@ export interface Card {
    * a file, so it is absent from `cardMediaEntries`.
    */
   imageMeta: ImageMeta | null;
-  clusterId: string | null;
+  /**
+   * The clusters this card belongs to, in order: the first is the *primary*,
+   * which drives the accent colour everywhere and Tidy's gravity; the rest show
+   * as dots on the card face. Empty means no cluster. Replaced the single
+   * `clusterId` in v4 — the schema widens the legacy scalar on the way in.
+   */
+  clusterIds: string[];
   position: Vec2;
   kind: CardKind;
   /**
@@ -329,7 +335,7 @@ export interface Viewport {
 }
 
 export interface Board {
-  version: 3;
+  version: 4;
   /** `countryCode` is the local calling code (e.g. `+61`) a leading national `0`
    *  folds to when normalising phone numbers; absent means the default (Australia). */
   meta: { title: string; updatedAt: string; countryCode?: string };

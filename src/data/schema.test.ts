@@ -20,9 +20,23 @@ const v1Board = {
   ],
 };
 
-describe('v1 → v3 migration', () => {
+describe('v1 → v4 migration', () => {
   it('restamps the version', () => {
-    expect(parseBoard(v1Board).version).toBe(3);
+    expect(parseBoard(v1Board).version).toBe(4);
+  });
+
+  it('widens the legacy clusterId into a one-element clusterIds', () => {
+    const card = parseBoard(v1Board).cards[0];
+    expect(card.clusterIds).toEqual(['cl_1']);
+    expect('clusterId' in card).toBe(false);
+  });
+
+  it('widens a null clusterId to no memberships', () => {
+    const board = parseBoard({
+      ...v1Board,
+      cards: [{ ...v1Board.cards[0], clusterId: null }],
+    });
+    expect(board.cards[0].clusterIds).toEqual([]);
   });
 
   it('fills the new card fields with defaults, leaving old cards undated', () => {
@@ -196,13 +210,38 @@ describe('v3 boards', () => {
   });
 });
 
+describe('v4 boards', () => {
+  it('round-trips ordered multi-cluster membership', () => {
+    const board = parseBoard({
+      ...v1Board,
+      version: 4,
+      clusters: [
+        ...v1Board.clusters,
+        { id: 'cl_2', label: 'Money', color: '#3b7de2', visible: true },
+      ],
+      cards: [{ ...v1Board.cards[0], clusterId: undefined, clusterIds: ['cl_2', 'cl_1'] }],
+    });
+    expect(board.cards[0].clusterIds).toEqual(['cl_2', 'cl_1']);
+    expect(board.version).toBe(4);
+  });
+
+  it('lets clusterIds win when a card carries both shapes', () => {
+    const board = parseBoard({
+      ...v1Board,
+      version: 4,
+      cards: [{ ...v1Board.cards[0], clusterId: 'cl_1', clusterIds: [] }],
+    });
+    expect(board.cards[0].clusterIds).toEqual([]);
+  });
+});
+
 describe('rejection', () => {
   it('rejects a malformed board', () => {
     expect(safeParseBoard({ version: 2, meta: {}, cards: [] })).toBeNull();
   });
 
   it('rejects an unknown version', () => {
-    expect(safeParseBoard({ ...v1Board, version: 4 })).toBeNull();
+    expect(safeParseBoard({ ...v1Board, version: 5 })).toBeNull();
   });
 
   it('rejects an unknown kind, which is what makes the v3 bump worth it', () => {

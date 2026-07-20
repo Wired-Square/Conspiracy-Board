@@ -285,6 +285,31 @@ button:hover {
   border-radius: 4px 4px 0 0;
 }
 
+/* Membership beyond the primary: one dot per further cluster, top-right, so a
+   card in several strands says so at a glance without fighting the accent. */
+.evidence-card__cluster-dots {
+  position: absolute;
+  top: 10px;
+  right: 7px;
+  display: flex;
+  gap: 3px;
+  z-index: 2;
+}
+
+.evidence-card__cluster-dots > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* The polaroid has no accent bar; sit the dots inside its film frame. */
+.evidence-card--polaroid .evidence-card__cluster-dots {
+  top: 13px;
+  right: 13px;
+}
+
 /* A wrapper, not the <img>, so a cropped picture can position an absolute image
    inside a clip box (see cardImageStyle). Uncropped it just hugs the image as
    before; cropped it takes the card's 4:3 shape and the image fills it. */
@@ -604,6 +629,48 @@ button:hover {
 
 .field--grow {
   flex: 1 1 auto;
+}
+
+/* ---- The editor's cluster picker ---- */
+/* A checkbox list, not a select: membership is many-of, and the row has to hold
+   the swatch, the primary tag and the "Make primary" affordance beside it. */
+.cluster-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cluster-picker__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cluster-picker__row label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.cluster-picker__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.cluster-picker__primary {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+  padding: 0.2rem 0.3rem;
 }
 
 .field__row {
@@ -1592,6 +1659,26 @@ button:disabled {
   border-width: 2px;
 }
 
+/* The undo pill: the task indicator's shape, parked bottom-centre so it reads
+   as a transient offer rather than a status — and clickable, unlike it. */
+.undo-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
 /* ---- Modal ---- */
 /* The full-screen scrim, shared by the modal backdrop and the busy overlay; each
    sets its own stacking (the overlay sits above the modals). */
@@ -1726,28 +1813,6 @@ button:disabled {
 /* Pushed away from the tabs: it's an escape hatch, not a third tab. */
 .modal__tabs-aside {
   margin-left: auto;
-}
-
-/* "Details" toggle sits at the far left of the dialog footer, away from the
-   action buttons on the right. */
-.modal__details-toggle {
-  margin-right: auto;
-}
-
-/* The revealed detail block: quiet, monospace, and scrollable so a long dump
-   never grows the dialog past the screen. */
-.modal__details {
-  margin: 0;
-  padding: 0.6rem 0.7rem;
-  max-height: 9rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--ink-dim);
-  background: var(--panel-border);
-  border-radius: 6px;
 }
 
 /* Destructive confirm button (e.g. Delete in the prompt dialog). */

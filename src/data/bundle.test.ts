@@ -9,7 +9,7 @@ import type { Board } from '../types/board';
 
 function board(title: string): Board {
   return {
-    version: 3,
+    version: 4,
     meta: { title, updatedAt: '2026-07-19T00:00:00.000Z' },
     clusters: [],
     cards: [],

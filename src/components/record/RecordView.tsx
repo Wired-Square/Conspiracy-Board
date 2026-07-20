@@ -3,7 +3,7 @@ import type { Card, Connection } from '../../types/board';
 import { useBoardStore } from '../../store/boardStore';
 import { useRoster } from '../../hooks/useRoster';
 import { useVisibleCards } from '../../hooks/useVisibleCards';
-import { clusterColor, NO_CLUSTER_ACCENT } from '../../lib/clusters';
+import { clusterColor, NO_CLUSTER_ACCENT, primaryClusterId } from '../../lib/clusters';
 import { isRecordKind } from '../../lib/kinds';
 import { communicationParties } from '../../lib/comms';
 import { mediaIconForKind } from '../../lib/mediaIcon';
@@ -120,7 +120,8 @@ export function RecordView() {
       {rows.length === 0 ? (
         <p className="hint record__empty">
           The mail and documents a board argues from live here. Import an mbox with{' '}
-          <strong>+ Add › Email</strong>, or drag a message straight onto the board.
+          <strong>+ Add › Email</strong>, or drop messages into the Inbox folder
+          (File ▸ Show Inbox Folder) and they import on their own.
         </p>
       ) : (
         <ul className="record__list">
@@ -129,7 +130,7 @@ export function RecordView() {
               key={card.id}
               card={card}
               loose={loose}
-              clusterColor={clusterColor(card.clusterId, clusters)}
+              clusterColor={clusterColor(primaryClusterId(card.clusterIds), clusters)}
               selected={card.id === selectedCardId}
               onPick={selectCard}
             />
@@ -161,10 +162,12 @@ function RecordRowImpl({ card, loose, clusterColor, selected, onPick }: RowProps
         title={card.title}
       >
         {/* The picture if the message carried one, else the kind's own glyph —
-            a row is a fixed height either way, so the list does not jump. */}
+            a row is a fixed height either way, so the list does not jump. Not
+            loading="lazy": the rows already defer via content-visibility, and
+            WKWebView's lazy-load proved unreliable on the board faces. */}
         <span className="record-row__thumb">
           {image ? (
-            <img src={image} alt="" draggable={false} style={cardImageStyle(card)} />
+            <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
           ) : (
             <MediaIcon type={mediaIconForKind(card.kind) ?? 'document'} />
           )}

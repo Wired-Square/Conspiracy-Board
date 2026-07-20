@@ -40,6 +40,12 @@ export type LayoutNode = {
   position: Vec2;
   width: number;
   height: number;
+  /**
+   * The cluster whose centroid pulls this card — the card's *primary*. A card in
+   * several clusters is pulled by its primary only: a mean of centroids would
+   * drag it into the empty space between its groups and couple each cluster's
+   * centre to every shared card, so Tidy would never settle cleanly.
+   */
   clusterId: string | null;
 };
 

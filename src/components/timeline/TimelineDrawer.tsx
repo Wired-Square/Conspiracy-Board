@@ -5,7 +5,7 @@ import { useTimelineCards } from '../../hooks/useTimelineCards';
 import { useDocHits } from '../../hooks/useDocHits';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { dayKey, daysBetween, daysBetweenCards, formatDayKey, formatOccurredAt } from '../../lib/dates';
-import { clusterColor } from '../../lib/clusters';
+import { clusterColor, primaryClusterId } from '../../lib/clusters';
 import { CARD_KINDS } from '../../lib/kinds';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
@@ -39,20 +39,52 @@ export function TimelineDrawer() {
   const { setCenter, getNode, getZoom } = useReactFlow();
   const stripRef = useRef<HTMLDivElement>(null);
 
+  // Keeping your place: changing a filter used to snap the strip back to the
+  // start — the filtered strip is short, so the old scroll offset lands near
+  // zero when the full strip returns. So every filter-changing event first
+  // notes which chips sit nearest the strip's centre (inside an event handler
+  // the DOM still shows the pre-change strip), and once the new strip has
+  // rendered, the nearest surviving chip is put back at the centre (see the
+  // restore effect below). Candidates rather than one id, so narrowing by kind
+  // anchors on the closest chip that survives; an empty strip keeps the
+  // previous anchor, so even a fruitless search returns you to where you were.
+  const anchorRef = useRef<string[]>([]);
+  const captureAnchor = useCallback(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const centre = strip.getBoundingClientRect().left + strip.clientWidth / 2;
+    const chips = [...strip.querySelectorAll<HTMLElement>('[data-card-id]')];
+    if (!chips.length) return;
+    anchorRef.current = chips
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { id: el.dataset.cardId!, d: Math.abs((r.left + r.right) / 2 - centre) };
+      })
+      .sort((a, b) => a.d - b.d)
+      .map((c) => c.id);
+  }, []);
+
   // Which kinds the strip hides. The search (through useTimelineCards) has already
   // narrowed the raw sets to matches — this filters those by kind on top, so a chip
   // shows only if it matches AND its kind isn't hidden. Empty by default (show all);
   // a fresh Set per toggle so the memos below rerun. Local, like every other timeline
   // control: nothing else reads it.
   const [hidden, setHidden] = useState<Set<CardKind>>(() => new Set());
-  const toggleKind = useCallback((k: CardKind) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(k)) next.add(k);
-      return next;
-    });
-  }, []);
-  const resetKinds = useCallback(() => setHidden(new Set()), []);
+  const toggleKind = useCallback(
+    (k: CardKind) => {
+      captureAnchor();
+      setHidden((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(k)) next.add(k);
+        return next;
+      });
+    },
+    [captureAnchor],
+  );
+  const resetKinds = useCallback(() => {
+    captureAnchor();
+    setHidden(new Set());
+  }, [captureAnchor]);
   const dated = useMemo(() => rawDated.filter((c) => !hidden.has(c.kind)), [rawDated, hidden]);
   const undated = useMemo(() => rawUndated.filter((c) => !hidden.has(c.kind)), [rawUndated, hidden]);
 
@@ -92,6 +124,26 @@ export function TimelineDrawer() {
     const first = dated[0];
     if (first) requestAnimationFrame(() => requestAnimationFrame(() => scrollChipIntoView(first.id)));
   }, [tlQuery, dated, scrollChipIntoView]);
+
+  // The anchor's other half: after a filter change re-renders the strip, put
+  // the nearest surviving anchored chip back at the centre. Only with no
+  // search active — while searching, the effect above owns the scroll (jump to
+  // first match). Instant, not smooth: the point is that the chip under the
+  // eye stays put rather than travels. Keyed on the filters, not on `dated`,
+  // so a set change from ordinary editing can never fire a stale anchor.
+  useEffect(() => {
+    if (tlQuery || !anchorRef.current.length) return;
+    const strip = stripRef.current;
+    const candidates = anchorRef.current;
+    anchorRef.current = [];
+    for (const id of candidates) {
+      const chip = strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
+      if (chip) {
+        chip.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
+        return;
+      }
+    }
+  }, [tlQuery, hidden]);
 
   // The measure tool: pick two dated chips and read the days between them. Kept
   // local — it never selects a card or moves the board, so it needs no store state.
@@ -230,7 +282,12 @@ export function TimelineDrawer() {
           className="timeline__search"
           type="search"
           value={tlText}
-          onChange={(e) => setTlText(e.target.value)}
+          onChange={(e) => {
+            // Before the text lands: the strip still shows the previous result,
+            // which is exactly the view worth anchoring (see captureAnchor).
+            captureAnchor();
+            setTlText(e.target.value);
+          }}
           placeholder="Search timeline…"
           aria-label="Search the timeline (full text, including file contents)"
         />
@@ -316,7 +373,7 @@ export function TimelineDrawer() {
                       <TimelineItem
                         key={card.id}
                         card={card}
-                        clusterColor={colorFor(card.clusterId)}
+                        clusterColor={colorFor(primaryClusterId(card.clusterIds))}
                         selected={card.id === selectedCardId}
                         onPick={onPick}
                       />
@@ -346,7 +403,7 @@ export function TimelineDrawer() {
                         <TimelineItem
                           key={card.id}
                           card={card}
-                          clusterColor={colorFor(card.clusterId)}
+                          clusterColor={colorFor(primaryClusterId(card.clusterIds))}
                           selected={card.id === selectedCardId}
                           onPick={onPick}
                           sincePrevEvent={eventGap.get(card.id)}

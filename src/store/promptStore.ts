@@ -12,9 +12,6 @@ type Common = {
   cancelLabel?: string;
   /** Style the confirm button as destructive (Delete). */
   danger?: boolean;
-  /** Extra context behind a "Details" toggle — kept out of the way until asked
-   *  for, so the message stays short but the specifics are one click away. */
-  details?: string;
 };
 
 export type TextRequest = Common & {
@@ -30,15 +27,7 @@ export type ConfirmRequest = Common & {
   resolve: (ok: boolean) => void;
 };
 
-// One button, no choice to make — telling the user something and waiting for the
-// nod. Used where a transient banner is too easy to miss and the drop it explains
-// is worth a sentence of context.
-export type AlertRequest = Common & {
-  kind: 'alert';
-  resolve: () => void;
-};
-
-export type PromptRequest = TextRequest | ConfirmRequest | AlertRequest;
+export type PromptRequest = TextRequest | ConfirmRequest;
 
 // token bumps per request so <PromptHost> remounts the dialog even on a direct
 // request→request swap, giving it fresh input state and re-running its focus.
@@ -52,8 +41,7 @@ function show(request: PromptRequest) {
   const prev = usePromptStore.getState().request;
   if (prev) {
     if (prev.kind === 'text') prev.resolve(null);
-    else if (prev.kind === 'confirm') prev.resolve(false);
-    else prev.resolve();
+    else prev.resolve(false);
   }
   usePromptStore.setState((s) => ({ request, token: s.token + 1 }));
 }
@@ -66,9 +54,4 @@ export function prompt(opts: Omit<TextRequest, 'kind' | 'resolve'>): Promise<str
 /** Ask a yes/no. Resolves true only if confirmed. */
 export function confirm(opts: Omit<ConfirmRequest, 'kind' | 'resolve'>): Promise<boolean> {
   return new Promise((resolve) => show({ ...opts, kind: 'confirm', resolve }));
-}
-
-/** Tell the user something and wait for the acknowledgement. */
-export function alert(opts: Omit<AlertRequest, 'kind' | 'resolve'>): Promise<void> {
-  return new Promise((resolve) => show({ ...opts, kind: 'alert', resolve }));
 }

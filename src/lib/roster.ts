@@ -172,7 +172,7 @@ export function buildRoster(cards: Card[]): Roster {
 
   // Texts and calls, matched to actors by number the way email is by address — the
   // one projection (communicationParties) and the one tail (linkParticipants) mean
-  // participantsOf, suggestedLinks and relationsOf treat a message exactly like a mail.
+  // participantsOf, allSuggestedLinks and relationsOf treat a message exactly like a mail.
   for (const card of cards) {
     const parties = communicationParties(card);
     if (!parties || parties.matchBy !== 'number') continue;
@@ -344,8 +344,10 @@ export function relationsOf(
 }
 
 /**
- * Who the focused card should be strung to on the canvas — its participants,
- * less the ones nobody can see and the ones already joined by hand.
+ * Every pair of visible cards the canvas should string together as a
+ * suggestion: participants of each other, both visible, and not already joined
+ * by hand. Pairs come back unordered (lower id first) and deduped, exactly as
+ * the canvas draws them, from one pass over the links.
  *
  * `links` is structural rather than Connection[], so a stored connection and a
  * rendered edge both satisfy it.
@@ -353,22 +355,36 @@ export function relationsOf(
  * A pair already strung gets no suggestion. It has been taken — and since the
  * yarn path is worked out from the two cards' positions, a second strand would
  * land on the very same curve as the string already there, which reads as a
- * rendering fault rather than as a second claim.
+ * rendering fault rather than as a second claim. And a hidden cluster hides
+ * its cards, so a link into one would tie to nothing.
  */
-export function suggestedLinks(
+export function allSuggestedLinks(
   roster: Roster,
-  focusId: string,
   visibleIds: ReadonlySet<string>,
   links: readonly { source: string; target: string }[],
-): string[] {
-  if (!visibleIds.has(focusId)) return [];
+): { source: string; target: string }[] {
+  // Who is already strung to whom, both ways — the same multimap idiom as the
+  // roster's own adjacency maps.
+  const strung = new Map<string, string[]>();
+  for (const l of links) {
+    pushUnique(strung, l.source, l.target);
+    pushUnique(strung, l.target, l.source);
+  }
 
-  const strung = new Set(links.flatMap((l) => otherEnd(l, focusId) ?? []));
-
-  // A hidden cluster hides its cards, so a link into one would tie to nothing.
-  return participantsOf(roster, focusId).filter(
-    (id) => visibleIds.has(id) && !strung.has(id),
-  );
+  const seen = new Set<string>();
+  const pairs: { source: string; target: string }[] = [];
+  for (const id of visibleIds) {
+    const tied = strung.get(id);
+    for (const other of participantsOf(roster, id)) {
+      if (!visibleIds.has(other) || tied?.includes(other)) continue;
+      const [a, b] = id < other ? [id, other] : [other, id];
+      const key = `${a}:${b}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ source: a, target: b });
+    }
+  }
+  return pairs;
 }
 
 // The import offer, below. `drafts` is structural rather than EmailDraft[], so

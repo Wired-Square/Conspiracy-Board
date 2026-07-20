@@ -9,6 +9,7 @@ import { EMAIL_FILE_ACCEPT } from '../../lib/email/files';
 import { emailCardsByMessageId, emptyEmailMeta, matchDraft } from '../../lib/email/meta';
 import { shortAddress } from '../../lib/email/addresses';
 import { unseenDomains, unseenParticipants } from '../../lib/roster';
+import { withMembership } from '../../lib/clusters';
 import { entitiesOfKind, isBoardKind } from '../../lib/kinds';
 import { NEW_CARD, choiceFor, planOffer, type Choice } from '../../lib/importOffer';
 import { formatOccurredAt } from '../../lib/dates';
@@ -217,15 +218,18 @@ export function EmailImportModal() {
     );
 
     // A message already on the board is part of this thread too. With a cluster
-    // chosen, move it in rather than leaving it outside the group the rest joined;
-    // a duplicate carries no card on its match, so it is found the same way the
-    // preview matched it — by Message-ID.
+    // chosen, add it in rather than leaving it outside the group the rest joined
+    // — appended, not moved: the user placed that card's primary, and this batch
+    // is an additional strand. A duplicate carries no card on its match, so it
+    // is found the same way the preview matched it — by Message-ID.
     if (cid) {
       matches.forEach((m, i) => {
         if (m.kind !== 'duplicate') return;
         const mid = drafts[i].email.messageId;
         const existing = mid ? byMessageId.get(mid) : undefined;
-        if (existing) updateCard(existing.id, { clusterId: cid });
+        if (existing && !existing.clusterIds.includes(cid)) {
+          updateCard(existing.id, { clusterIds: withMembership(existing.clusterIds, cid) });
+        }
       });
     }
 
@@ -337,7 +341,10 @@ export function EmailImportModal() {
               Choose files…
             </button>
           </div>
-          <p className="hint">You can also drag email files straight onto the board.</p>
+          <p className="hint">
+            You can also drop email files into the Inbox folder (File ▸ Show Inbox Folder) —
+            they import on their own.
+          </p>
         </div>
       ) : (
         <div className="field">

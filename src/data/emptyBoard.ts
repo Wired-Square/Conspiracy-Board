@@ -12,7 +12,7 @@ export const DEFAULT_BOARD_TITLE = 'Untitled board';
  */
 export function emptyBoard(): Board {
   return {
-    version: 3,
+    version: 4,
     meta: { title: DEFAULT_BOARD_TITLE, updatedAt: new Date().toISOString() },
     clusters: [],
     cards: [],

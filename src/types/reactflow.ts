@@ -6,17 +6,19 @@ import type { Card, ConnectionKind, Grade } from './board';
 // constrained, so a nested interface like Card is fine.
 
 /**
- * The card itself, plus the one thing that is actually derived for the view.
+ * The card itself, plus the only things actually derived for the view.
  *
  * It carries `card` rather than a copy of its fields: a flattened copy has to be
  * widened here *and* in cardToNode for every field the model gains, which is
  * three files to change to show one thing — and a field nobody reads yet still
  * has to be listed twice. The board stays canonical (README rule 1); this is a
- * view of it, and `clusterColor` is the only part of it that is a derivation.
+ * view of it, and the resolved cluster colours — the primary's accent and the
+ * dots for the rest — are the only parts that are derivations.
  */
 export type CardNodeData = {
   card: Card;
   clusterColor: string | null;
+  extraClusterColors: string[];
 };
 
 /**

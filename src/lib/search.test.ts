@@ -10,7 +10,7 @@ const base = (kind: Card['kind'], extra: Partial<Card> = {}): Card => ({
   imageFile: null,
   imageCrop: null,
   imageMeta: null,
-  clusterId: null,
+  clusterIds: [],
   position: { x: 0, y: 0 },
   kind,
   occurredAt: null,

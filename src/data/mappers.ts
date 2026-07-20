@@ -1,14 +1,18 @@
 import type { Board, Card, Cluster, Connection } from '../types/board';
 import type { CardNode, StringEdge } from '../types/reactflow';
-import { clusterColor } from '../lib/clusters';
+import { clusterColor, extraClusterColors, primaryClusterId } from '../lib/clusters';
 
-/** Build a derived React Flow node for a card, resolving its cluster colour. */
+/** Build a derived React Flow node for a card, resolving its cluster colours. */
 export function cardToNode(card: Card, clusters: Cluster[]): CardNode {
   return {
     id: card.id,
     type: 'evidenceCard',
     position: card.position,
-    data: { card, clusterColor: clusterColor(card.clusterId, clusters) },
+    data: {
+      card,
+      clusterColor: clusterColor(primaryClusterId(card.clusterIds), clusters),
+      extraClusterColors: extraClusterColors(card.clusterIds, clusters),
+    },
   };
 }
 

@@ -10,7 +10,7 @@ const card = (over: Partial<Card> = {}): Card => ({
   imageFile: null,
   imageCrop: null,
   imageMeta: null,
-  clusterId: null,
+  clusterIds: [],
   position: { x: 0, y: 0 },
   kind: 'evidence',
   occurredAt: null,

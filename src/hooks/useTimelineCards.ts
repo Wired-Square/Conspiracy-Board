@@ -27,7 +27,7 @@ export function useTimelineCards(query: string, docHits: Set<string>): TimelineC
     const hidden = hiddenClusterIds(clusters);
     const q = normaliseQuery(query);
     const visible = cards.filter(
-      (c) => isVisible(c.clusterId, hidden) && cardMatchesWithDocs(c, q, docHits),
+      (c) => isVisible(c.clusterIds, hidden) && cardMatchesWithDocs(c, q, docHits),
     );
 
     const dated: Card[] = [];

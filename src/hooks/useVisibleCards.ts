@@ -19,6 +19,6 @@ export function useVisibleCards(): Card[] {
   return useMemo(() => {
     const hidden = hiddenClusterIds(clusters);
     const q = normaliseQuery(searchQuery);
-    return cards.filter((c) => isVisible(c.clusterId, hidden) && cardMatchesEntity(c, q));
+    return cards.filter((c) => isVisible(c.clusterIds, hidden) && cardMatchesEntity(c, q));
   }, [cards, clusters, searchQuery]);
 }

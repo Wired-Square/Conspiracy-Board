@@ -1,7 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
+import { z } from 'zod';
 import type { Board } from '../types/board';
 import { safeParseBoardJson } from '../data/schema';
+import { invokeChecked } from './ipc';
+import {
+  docHitSchema,
+  docStatusSchema,
+  fetchedImageSchema,
+  loadedBoardSchema,
+  mediaEntrySchema,
+  mediaMetaSchema,
+  readBundleSchema,
+} from './ipcSchemas';
 import {
   byRecency,
   emptyBoardIndex,
@@ -12,15 +23,7 @@ import {
 import { orderByManifest, parseManifest } from '../data/bundle';
 import { bytesToB64, b64ToBytes } from '../lib/base64';
 import { setMediaDir } from './media';
-import {
-  toPickedFiles,
-  type DocHit,
-  type DocStatus,
-  type MediaEntry,
-  type MediaMeta,
-  type PickedFile,
-  type StorageAdapter,
-} from './StorageAdapter';
+import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAdapter';
 
 // Boards as files, under the app's data directory (see src-tauri/src/board_store.rs
 // for the layout and why writes are atomic). The shell only ever sees strings:
@@ -39,7 +42,7 @@ function nextPaint(): Promise<void> {
 
 /** Whatever the index says, or an empty one — a missing file is just first run. */
 async function readIndex(): Promise<BoardIndex> {
-  const raw = await invoke<string | null>('load_index');
+  const raw = await invokeChecked('load_index', z.string().nullable());
   return (raw && parseBoardIndexJson(raw)) || emptyBoardIndex();
 }
 
@@ -59,8 +62,30 @@ type EntityBodies = {
 };
 const lastSaved = new Map<string, EntityBodies>();
 
+// Serialised JSON per entity, keyed by object identity. The store replaces an
+// entity object on every mutation — updateCard, onNodesChange, arrangeCards,
+// deleteCluster, updateCluster, updateConnection all spread a fresh object —
+// so an unchanged reference always means unchanged JSON, and a save only pays
+// for stringifying the entities that actually changed since the last one.
+// That replace-don't-mutate discipline is load-bearing here: an in-place
+// mutation anywhere in the store would serve stale JSON from this cache.
+const bodyCache = new WeakMap<object, string>();
+const bodyJson = (x: { id: string }): string => {
+  let s = bodyCache.get(x);
+  if (s === undefined) {
+    s = JSON.stringify(x);
+    bodyCache.set(x, s);
+  }
+  return s;
+};
+
 const bodyMap = (xs: { id: string }[]): Map<string, string> =>
-  new Map(xs.map((x) => [x.id, JSON.stringify(x)]));
+  new Map(xs.map((x) => [x.id, bodyJson(x)]));
+
+// What the index last recorded for each board, as summary JSON — so a save
+// whose summary is unchanged (a viewport-only autosave; updatedAt untouched)
+// skips the read-modify-write of index.json entirely.
+const lastSummary = new Map<string, string>();
 
 const boardBodies = (board: Board): EntityBodies => ({
   cards: bodyMap(board.cards),
@@ -75,7 +100,7 @@ export const tauriStorage: StorageAdapter = {
     // before anything is read — not lazily inside a read, where two callers could
     // race it.
     await invoke('init_storage');
-    setMediaDir(await invoke<string>('media_dir_path'));
+    setMediaDir(await invokeChecked('media_dir_path', z.string()));
   },
 
   async listBoards() {
@@ -83,16 +108,11 @@ export const tauriStorage: StorageAdapter = {
   },
 
   async loadBoard(id) {
-    let res: { json: string | null; legacy: boolean };
-    try {
-      res = await invoke('load_board', { id });
-    } catch {
-      // A corrupt or locked database reads as "unreadable this time", never a throw:
-      // the store's load paths (loadBoardForOpen, gcMedia, the media audit) all treat
-      // a null load as "leave it be", never as a board to delete.
-      return null;
-    }
-    if (!res.json) return null;
+    // A corrupt or locked database reads as "unreadable this time", never a throw:
+    // the store's load paths (loadBoardForOpen, gcMedia, the media audit) all treat
+    // a null load as "leave it be", never as a board to delete.
+    const res = await invokeChecked('load_board', loadedBoardSchema, { id }).catch(() => null);
+    if (!res?.json) return null;
     const board = safeParseBoardJson(res.json);
     if (!board) return null;
     if (res.legacy) {
@@ -139,13 +159,17 @@ export const tauriStorage: StorageAdapter = {
     lastSaved.set(id, next);
 
     // Derived from the board we just wrote, never from a caller — so the index
-    // cannot claim something the board does not say.
+    // cannot claim something the board does not say. Skipped when this board's
+    // summary already reads exactly the same, which is every viewport-only save.
     const summary = summarize(id, board);
+    const summaryJson = JSON.stringify(summary);
+    if (lastSummary.get(id) === summaryJson) return;
     const index = await readIndex();
     const entries = index.entries.some((e) => e.id === id)
       ? index.entries.map((e) => (e.id === id ? summary : e))
       : [...index.entries, summary];
     await writeIndex({ ...index, entries });
+    lastSummary.set(id, summaryJson);
   },
 
   async deleteBoard(id) {
@@ -153,6 +177,7 @@ export const tauriStorage: StorageAdapter = {
     // that opens as null, where an unlisted file is merely invisible.
     await invoke('delete_board', { id });
     lastSaved.delete(id);
+    lastSummary.delete(id);
     const index = await readIndex();
     await writeIndex({ ...index, entries: index.entries.filter((e) => e.id !== id) });
   },
@@ -166,24 +191,24 @@ export const tauriStorage: StorageAdapter = {
   },
 
   saveMedia(bytes, ext) {
-    return invoke<string>('save_media', { ext, b64: bytesToB64(bytes) });
+    return invokeChecked('save_media', z.string(), { ext, b64: bytesToB64(bytes) });
   },
 
   async fetchImage(url) {
-    const res = await invoke<{ b64: string; mime: string | null }>('fetch_image', { url });
+    const res = await invokeChecked('fetch_image', fetchedImageSchema, { url });
     return { bytes: b64ToBytes(res.b64), mime: res.mime ?? undefined };
   },
 
   async readMedia(name) {
-    return b64ToBytes(await invoke<string>('read_media', { name }));
+    return b64ToBytes(await invokeChecked('read_media', z.string(), { name }));
   },
 
   extractMediaMeta(name) {
-    return invoke<MediaMeta>('extract_media_meta', { name });
+    return invokeChecked('extract_media_meta', mediaMetaSchema, { name });
   },
 
   ocrImage(name) {
-    return invoke<string>('ocr_image', { name });
+    return invokeChecked('ocr_image', z.string(), { name });
   },
 
   openMedia(name) {
@@ -191,15 +216,15 @@ export const tauriStorage: StorageAdapter = {
   },
 
   gcMedia(keep) {
-    return invoke<number>('gc_media', { keep });
+    return invokeChecked('gc_media', z.number(), { keep });
   },
 
   listMedia() {
-    return invoke<MediaEntry[]>('list_media');
+    return invokeChecked('list_media', z.array(mediaEntrySchema));
   },
 
   verifyMedia(name) {
-    return invoke<boolean>('verify_media', { name });
+    return invokeChecked('verify_media', z.boolean(), { name });
   },
 
   openMediaDir() {
@@ -207,19 +232,19 @@ export const tauriStorage: StorageAdapter = {
   },
 
   processMedia(name, force) {
-    return invoke<DocStatus>('process_media', { name, force });
+    return invokeChecked('process_media', docStatusSchema, { name, force });
   },
 
   searchDocuments(query, limit) {
-    return invoke<DocHit[]>('search_documents', { query, limit });
+    return invokeChecked('search_documents', z.array(docHitSchema), { query, limit });
   },
 
   pendingMedia() {
-    return invoke<string[]>('pending_media');
+    return invokeChecked('pending_media', z.array(z.string()));
   },
 
   pruneDocuments() {
-    return invoke<number>('prune_documents');
+    return invokeChecked('prune_documents', z.number());
   },
 
   rebuildIndex() {
@@ -227,13 +252,13 @@ export const tauriStorage: StorageAdapter = {
   },
 
   indexStatuses() {
-    return invoke<DocStatus[]>('index_statuses');
+    return invokeChecked('index_statuses', z.array(docStatusSchema));
   },
 
   async boardLocation(id) {
     // The shell builds the path — it is the only thing that knows the data
     // directory, and it validates the id before letting it near the filesystem.
-    return invoke<string>('board_location', { id });
+    return invokeChecked('board_location', z.string(), { id });
   },
 
   async revealBoard(id) {
@@ -271,10 +296,9 @@ export const tauriStorage: StorageAdapter = {
             // The shell unzips, stores the media, and hands the board strings back
             // to parse here — the schema stays this side of the seam. A legacy
             // .json is offered as a one-board list, so both arrive the same shape.
-            const res = await invoke<{ manifest: string | null; boards: { id: string; json: string }[] }>(
-              'read_bundle',
-              { b64: bytesToB64(await file.arrayBuffer()) },
-            );
+            const res = await invokeChecked('read_bundle', readBundleSchema, {
+              b64: bytesToB64(await file.arrayBuffer()),
+            });
             const parsed = res.boards
               .map((b) => ({ id: b.id, board: safeParseBoardJson(b.json) }))
               .filter((b): b is { id: string; board: Board } => b.board !== null);

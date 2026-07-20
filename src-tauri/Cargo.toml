@@ -59,7 +59,6 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # would give us a second, incompatible set of the same Objective-C types, and
 # the WKWebView handle we get from Tauri would not unify with them.
 objc2 = "0.6.4"
-objc2-app-kit = "0.3.2"
 objc2-foundation = { version = "0.3.2", features = ["NSData", "NSArray", "NSDictionary", "NSString", "NSError"] }
 # Vision reads text out of an imported image (a text-message screenshot, chiefly),
 # on-device and offline, so a card can carry the conversation as searchable text.

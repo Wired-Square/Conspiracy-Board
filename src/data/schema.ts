@@ -8,8 +8,10 @@ import type { Board } from '../types/board';
  * which accepts *missing*, not null. Stripping nulls before validation lets such a
  * board load — and, since the stripped value is what's kept, re-save clean. Without
  * it, one no-EXIF screenshot makes the whole board fail to parse and refuse to open.
+ * Exported for the IPC boundary, which faces the same Rust convention directly
+ * (see storage/ipcSchemas.ts).
  */
-function withoutNulls(v: unknown): unknown {
+export function withoutNulls(v: unknown): unknown {
   return v && typeof v === 'object' && !Array.isArray(v)
     ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null))
     : v;
@@ -83,11 +85,11 @@ const eventMetaSchema = z.object({
   sourceCardId: z.string().optional(),
 });
 
-const documentMetaSchema = z.object({
-  file: z.string().optional(),
-  name: z.string().optional(),
-  mime: z.string().optional(),
-  // Read from the file on import; absent on an older board or an unparsed file.
+// A document's properties as the shell's extractor reads them — absent on an
+// older board or an unparsed file. Exported (with imageMetaSchema below) so the
+// IPC boundary's extract_media_meta schema composes these shapes rather than
+// mirroring thirteen optional fields by hand (see storage/ipcSchemas.ts).
+export const documentPropsSchema = z.object({
   title: z.string().optional(),
   author: z.string().optional(),
   created: z.string().optional(),
@@ -96,7 +98,14 @@ const documentMetaSchema = z.object({
   words: z.number().optional(),
 });
 
-const imageMetaSchema = z.object({
+const documentMetaSchema = z.object({
+  file: z.string().optional(),
+  name: z.string().optional(),
+  mime: z.string().optional(),
+  ...documentPropsSchema.shape,
+});
+
+export const imageMetaSchema = z.object({
   width: z.number().optional(),
   height: z.number().optional(),
   takenAt: z.string().optional(),
@@ -117,7 +126,7 @@ const gradeSchema = z.enum([
   'refuted',
 ]);
 
-const cardSchema = z.object({
+const cardBase = z.object({
   id: z.string(),
   title: z.string(),
   notes: z.string().default(''),
@@ -137,7 +146,11 @@ const cardSchema = z.object({
   // Preprocessed so a field the extractor returned as null (no EXIF) reads as absent
   // rather than failing the whole board — see withoutNulls.
   imageMeta: z.preprocess(withoutNulls, imageMetaSchema).nullable().default(null),
+  // Legacy single membership (every board up to v3); widened into clusterIds
+  // by the transform below.
   clusterId: z.string().nullable().default(null),
+  // v4: ordered memberships — the first is the primary. Wins when both appear.
+  clusterIds: z.array(z.string()).optional(),
   position: vec2,
   // v2 and v3 additions. The defaults are what let a v1 or v2 board parse into a
   // complete v3 board without any field-level migration work.
@@ -163,6 +176,15 @@ const cardSchema = z.object({
   grade: gradeSchema.optional(),
 });
 
+// The scalar→array widening for cluster membership (v4): a legacy `clusterId`
+// becomes a one-element `clusterIds`, null becomes the empty array, and the
+// scalar is dropped so downstream readers see one shape — the same trick
+// emailAttachmentSchema uses for the bare-filename attachment form.
+const cardSchema = cardBase.transform(({ clusterId, ...card }) => ({
+  ...card,
+  clusterIds: card.clusterIds ?? (clusterId ? [clusterId] : []),
+}));
+
 const connectionSchema = z.object({
   id: z.string(),
   source: z.string(),
@@ -175,7 +197,7 @@ const connectionSchema = z.object({
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number() });
 
 const boardBase = z.object({
-  version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   meta: z.object({ title: z.string(), updatedAt: z.string() }),
   clusters: z.array(clusterSchema),
   cards: z.array(cardSchema),
@@ -184,17 +206,18 @@ const boardBase = z.object({
 });
 
 /**
- * v1 and v2 → v3 needs no field work: every addition since v1 is `.default()`-ed
- * or optional on cardSchema, so an old board parses into a complete v3 board and
- * this transform only restamps the version. That holds for v3 specifically
- * because `kind` still defaults to 'evidence' — which is what every pre-v3 card
- * already silently was — so widening the enum costs nothing on the way in.
+ * v1–v3 → v4 needs almost no field work: every addition since v1 is
+ * `.default()`-ed or optional on the card schema, and the one shape change —
+ * cluster membership going from a scalar `clusterId` to the ordered
+ * `clusterIds` — is widened by cardSchema's transform on the way in. This
+ * transform only restamps the version.
  *
- * The bump earns its keep on the way *out*, and more than v2's did: a v2 build
- * meeting `kind: 'person'` fails the enum, safeParseBoardJson returns null, and
- * the board is refused whole — loudly — rather than loading with every person
- * and organisation silently reduced to evidence. There is no undo in this app;
- * failing to open is the kind failure.
+ * The bump earns its keep on the way *out*: a v3 build meeting a v4 board
+ * would strip the unknown `clusterIds` key and default `clusterId` to null,
+ * silently unfiling every card from every cluster. Instead it fails the
+ * version literal, safeParseBoardJson returns null, and the board is refused
+ * whole — loudly. (The same reasoning drove v3: a v2 build meeting
+ * `kind: 'person'` would have reduced every person to evidence.)
  *
  * Moving image blobs out of the JSON is now underway, but only its *field*
  * half lives here: this schema accepts the new `imageFile` and structured
@@ -203,7 +226,7 @@ const boardBase = z.object({
  * is async and effectful, so it cannot happen in a pure transform; it runs in
  * the store's load path (`migrateBoardMedia`) instead.
  */
-export const boardSchema = boardBase.transform((b) => ({ ...b, version: 3 as const }));
+export const boardSchema = boardBase.transform((b) => ({ ...b, version: 4 as const }));
 
 /** Parse and validate unknown input into a Board, throwing on invalid data. */
 export function parseBoard(input: unknown): Board {

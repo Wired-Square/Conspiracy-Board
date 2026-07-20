@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Card, EmailMeta } from '../types/board';
 import {
   actorIds,
+  allSuggestedLinks,
   buildRoster,
   emailParticipants,
   entitiesForAddress,
@@ -10,7 +11,6 @@ import {
   isLinkedDocument,
   participantsOf,
   relationsOf,
-  suggestedLinks,
   unaccountedAddresses,
   unseenDomains,
   unseenParticipants,
@@ -28,7 +28,7 @@ const card = (kind: Card['kind'], extra: Partial<Card> = {}): Card => ({
   imageFile: null,
   imageCrop: null,
   imageMeta: null,
-  clusterId: null,
+  clusterIds: [],
   position: { x: 0, y: 0 },
   kind,
   occurredAt: null,
@@ -321,9 +321,9 @@ describe('direction — who sent it, who got it', () => {
   });
 });
 
-describe('suggestedLinks', () => {
+describe('allSuggestedLinks', () => {
   // Jane is on one email; Acme owns the domain that email came through, so the
-  // three of them are all participants of each other.
+  // three of them are all participants of each other — three suggestible pairs.
   const jane = person('p_jane', 'jane@acme.example');
   const acme = org('o_acme', ['acme.example']);
   const email = mail('e1', 'jane@acme.example', ['bob@other.example']);
@@ -331,37 +331,58 @@ describe('suggestedLinks', () => {
   const roster = buildRoster(cards);
   const all = new Set(cards.map((c) => c.id));
 
-  it('strings the focused card to its participants', () => {
-    expect(suggestedLinks(roster, 'e1', all, []).sort()).toEqual(['o_acme', 'p_jane']);
+  const sorted = (ps: { source: string; target: string }[]) =>
+    [...ps].sort((a, b) => `${a.source}:${a.target}`.localeCompare(`${b.source}:${b.target}`));
+
+  const allThree = [
+    { source: 'e1', target: 'o_acme' },
+    { source: 'e1', target: 'p_jane' },
+    { source: 'o_acme', target: 'p_jane' },
+  ];
+
+  it('strings every participant pair among the visible cards', () => {
+    expect(sorted(allSuggestedLinks(roster, all, []))).toEqual(allThree);
   });
 
-  it('says nothing about a card nobody can see', () => {
-    expect(suggestedLinks(roster, 'e1', new Set(['e1']), [])).toEqual([]);
-  });
-
-  it('says nothing when the focused card is itself hidden', () => {
-    expect(suggestedLinks(roster, 'e1', new Set(['p_jane', 'o_acme']), [])).toEqual([]);
-  });
-
-  it('drops a participant already joined by hand — the suggestion has been taken', () => {
-    // Either direction: string has no direction the roster cares about.
-    expect(suggestedLinks(roster, 'e1', all, [{ source: 'e1', target: 'p_jane' }])).toEqual([
-      'o_acme',
+  it('excludes every pair with a hidden end', () => {
+    expect(allSuggestedLinks(roster, new Set(['e1']), [])).toEqual([]);
+    // Hiding one card drops only its pairs; the others still string.
+    expect(sorted(allSuggestedLinks(roster, new Set(['p_jane', 'o_acme']), []))).toEqual([
+      { source: 'o_acme', target: 'p_jane' },
     ]);
-    expect(suggestedLinks(roster, 'e1', all, [{ source: 'p_jane', target: 'e1' }])).toEqual([
-      'o_acme',
-    ]);
   });
 
-  it('ignores string between two other cards', () => {
+  it('excludes a pair already strung, whichever way the string was drawn', () => {
+    for (const links of [
+      [{ source: 'e1', target: 'p_jane' }],
+      [{ source: 'p_jane', target: 'e1' }],
+    ]) {
+      expect(sorted(allSuggestedLinks(roster, all, links))).toEqual([
+        { source: 'e1', target: 'o_acme' },
+        { source: 'o_acme', target: 'p_jane' },
+      ]);
+    }
+  });
+
+  it('drops only the strung pair, not the rest of either card’s suggestions', () => {
     const links = [{ source: 'p_jane', target: 'o_acme' }];
-    expect(suggestedLinks(roster, 'e1', all, links).sort()).toEqual(['o_acme', 'p_jane']);
+    expect(sorted(allSuggestedLinks(roster, all, links))).toEqual([
+      { source: 'e1', target: 'o_acme' },
+      { source: 'e1', target: 'p_jane' },
+    ]);
   });
 
   it('has nothing to say about a card with no addresses', () => {
     const lonely = card('evidence', { id: 'c_lonely' });
     const r = buildRoster([...cards, lonely]);
-    expect(suggestedLinks(r, 'c_lonely', new Set([...all, 'c_lonely']), [])).toEqual([]);
+    expect(sorted(allSuggestedLinks(r, new Set([...all, 'c_lonely']), []))).toEqual(allThree);
+  });
+
+  it('emits each unordered pair once, lower id first', () => {
+    const pairs = allSuggestedLinks(roster, all, []);
+    const keys = pairs.map((p) => `${p.source}:${p.target}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const p of pairs) expect(p.source < p.target).toBe(true);
   });
 });
 

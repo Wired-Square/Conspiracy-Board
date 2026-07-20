@@ -9,6 +9,7 @@ import { countIssues } from '../../lib/maintenance';
 import { plural } from '../../lib/format';
 import { DOCUMENT_FILE_ACCEPT, IMAGE_FILE_ACCEPT } from '../../lib/import/files';
 import { arrangedPositions, type LayoutNode } from '../../lib/autoLayout';
+import { primaryClusterId } from '../../lib/clusters';
 import { CARD_H, CARD_W } from '../../lib/layout';
 import { storage } from '../../storage';
 import type { CardKind } from '../../types/board';
@@ -69,7 +70,8 @@ export function Toolbar() {
       position: n.position,
       width: n.measured?.width ?? CARD_W,
       height: n.measured?.height ?? CARD_H,
-      clusterId: n.data.card.clusterId,
+      // The layout's gravity cluster is the card's primary.
+      clusterId: primaryClusterId(n.data.card.clusterIds),
     }));
     const positions = arrangedPositions(layoutNodes, connections);
     if (!positions.size) return;

@@ -10,7 +10,7 @@ const card = (over: Partial<Card> = {}): Card => ({
   imageFile: null,
   imageCrop: null,
   imageMeta: null,
-  clusterId: null,
+  clusterIds: [],
   position: { x: 0, y: 0 },
   kind: 'evidence',
   occurredAt: null,
@@ -45,7 +45,7 @@ describe('cardMediaRefs', () => {
 describe('boardMediaRefs', () => {
   it('is the union across every card — the GC keep-set', () => {
     const board = {
-      version: 3,
+      version: 4,
       meta: { title: 't', updatedAt: '2024-01-01T00:00:00.000Z' },
       clusters: [],
       cards: [card({ imageFile: 'one.png' }), card({ imageFile: 'two.png' }), card()],

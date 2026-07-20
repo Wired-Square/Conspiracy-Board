@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBoardStore } from '../../store/boardStore';
 import { useImageEditorStore } from '../../store/imageEditorStore';
 import { touches } from '../../lib/connections';
@@ -24,6 +24,7 @@ import {
   viewFor,
 } from '../../lib/kinds';
 import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { asPrimary, primaryClusterId, withMembership, withoutMembership } from '../../lib/clusters';
 import { eventFor } from '../../lib/events';
 import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';
@@ -45,15 +46,61 @@ function imageFacts(m: ImageMeta): [string, string][] {
 export function CardEditor() {
   const selectedId = useBoardStore((s) => s.selectedCardId);
   const card = useBoardStore((s) => s.cards.find((c) => c.id === s.selectedCardId));
-  const clusters = useBoardStore((s) => s.clusters);
-  const updateCard = useBoardStore((s) => s.updateCard);
   const selectCard = useBoardStore((s) => s.selectCard);
-  const setView = useBoardStore((s) => s.setView);
-  const openImageEditor = useImageEditorStore((s) => s.openFor);
 
   // No selection, no dialog: the editor is a modal now, not a persistent column,
   // so the canvas and timeline fill the whole window when nothing is selected.
   if (!selectedId || !card) return null;
+
+  return (
+    <Modal title="Edit card" onClose={() => selectCard(null)}>
+      {/* Keyed, so the title/notes drafts reset when the selection moves. */}
+      <CardEditorForm key={card.id} card={card} />
+    </Modal>
+  );
+}
+
+/** How long typing in title/notes may pause before the draft commits. */
+const DRAFT_COMMIT_MS = 300;
+
+function CardEditorForm({ card }: { card: Card }) {
+  const clusters = useBoardStore((s) => s.clusters);
+  const updateCard = useBoardStore((s) => s.updateCard);
+  const setView = useBoardStore((s) => s.setView);
+  const openImageEditor = useImageEditorStore((s) => s.openFor);
+
+  // Title and notes are the fields that are *typed* into, and each keystroke
+  // used to write through to the store — which rebuilds the card's node and
+  // re-derives the roster and the participant edges per character. So the two
+  // edit a local draft here and commit on a typing pause, on blur, and on
+  // unmount. Deliberate trade, worth a note: an external change to them while
+  // the editor is open (reprocessCard filling notes from OCR) won't refresh an
+  // open draft. Every other field is a discrete control and writes through.
+  const [title, setTitle] = useState(card.title);
+  const [notes, setNotes] = useState(card.notes);
+  const pending = useRef<Partial<Pick<Card, 'title' | 'notes'>>>({});
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const flush = useCallback(() => {
+    if (commitTimer.current) {
+      clearTimeout(commitTimer.current);
+      commitTimer.current = undefined;
+    }
+    const patch = pending.current;
+    pending.current = {};
+    // updateCard is a no-op if the card was deleted under a pending commit.
+    if (patch.title !== undefined || patch.notes !== undefined) updateCard(card.id, patch);
+  }, [card.id, updateCard]);
+
+  const stage = (patch: Partial<Pick<Card, 'title' | 'notes'>>) => {
+    pending.current = { ...pending.current, ...patch };
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(flush, DRAFT_COMMIT_MS);
+  };
+
+  // Closing the editor or moving the selection unmounts this (it is keyed by
+  // card id) — commit whatever is still pending on the way out.
+  useEffect(() => flush, [flush]);
 
   // Changing a card's kind can move it: an evidence card switched to email
   // leaves the board for the record. Follow it, or the card the user is editing
@@ -67,12 +114,16 @@ export function CardEditor() {
   const hasImage = !!imageSrc;
 
   return (
-    <Modal title="Edit card" onClose={() => selectCard(null)}>
+    <>
       <label className="field">
         <span>Title</span>
         <input
-          value={card.title}
-          onChange={(e) => updateCard(card.id, { title: e.target.value })}
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            stage({ title: e.target.value });
+          }}
+          onBlur={flush}
         />
       </label>
 
@@ -135,22 +186,52 @@ export function CardEditor() {
         />
       )}
 
-      <label className="field">
-        <span>Cluster</span>
-        <select
-          value={card.clusterId ?? ''}
-          onChange={(e) =>
-            updateCard(card.id, { clusterId: e.target.value || null })
-          }
-        >
-          <option value="">— none —</option>
-          {clusters.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="field">
+        <span>Clusters</span>
+        {/* Ticking appends, so tick order is membership order and the first
+            ticked is the primary — the one operation that matters on an
+            ordering whose only meaningful position is the head. */}
+        <ul className="cluster-picker">
+          {clusters.map((c) => {
+            const member = card.clusterIds.includes(c.id);
+            return (
+              <li key={c.id} className="cluster-picker__row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={member}
+                    onChange={() =>
+                      updateCard(card.id, {
+                        clusterIds: member
+                          ? withoutMembership(card.clusterIds, c.id)
+                          : withMembership(card.clusterIds, c.id),
+                      })
+                    }
+                  />
+                  <span className="cluster-picker__swatch" style={{ background: c.color }} aria-hidden />
+                  {c.label}
+                </label>
+                {member &&
+                  (c.id === primaryClusterId(card.clusterIds) ? (
+                    <span className="cluster-picker__primary">primary</span>
+                  ) : (
+                    <button
+                      className="link-button"
+                      onClick={() =>
+                        updateCard(card.id, { clusterIds: asPrimary(card.clusterIds, c.id) })
+                      }
+                    >
+                      Make primary
+                    </button>
+                  ))}
+              </li>
+            );
+          })}
+        </ul>
+        <span className="field__hint">
+          The first cluster is the primary — it colours the card; the others show as dots.
+        </span>
+      </div>
 
       <div className="field">
         <span>Picture</span>
@@ -183,16 +264,21 @@ export function CardEditor() {
       <label className="field field--grow">
         <span>Notes (markdown)</span>
         <textarea
-          value={card.notes}
-          onChange={(e) => updateCard(card.id, { notes: e.target.value })}
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.target.value);
+            stage({ notes: e.target.value });
+          }}
+          onBlur={flush}
           rows={8}
         />
       </label>
 
-      {card.notes.trim() && (
+      {/* The preview reads the draft, so it stays live without a store write. */}
+      {notes.trim() && (
         <div className="field">
           <span>Preview</span>
-          <MarkdownView>{card.notes}</MarkdownView>
+          <MarkdownView>{notes}</MarkdownView>
         </div>
       )}
 
@@ -204,7 +290,7 @@ export function CardEditor() {
           worked out on its own. */}
       <ParticipantsSection cardId={card.id} />
       <DeleteCard card={card} />
-    </Modal>
+    </>
   );
 }
 
@@ -233,8 +319,9 @@ function EventToggle({ card }: { card: Card }) {
 }
 
 /**
- * Delete, confirmed in place: this is the only irreversible thing on the panel,
- * and there is no undo anywhere in the app.
+ * Delete, confirmed in place. There is a single-level undo behind it now (the
+ * toast, and Cmd+Z — see undoLastDelete), but one chance is still worth a
+ * confirm on the only destructive control on the panel.
  *
  * The confirm counts the string first. Deleting a card takes its connections
  * with it (see deleteCard), and a card's links are the one thing about it you

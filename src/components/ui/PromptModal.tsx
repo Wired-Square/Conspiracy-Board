@@ -16,7 +16,6 @@ export function PromptHost() {
 
 function PromptDialog({ request }: { request: PromptRequest }) {
   const [value, setValue] = useState(request.kind === 'text' ? request.initialValue ?? '' : '');
-  const [showDetails, setShowDetails] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Select the prefilled text on open, so Rename is type-over and New is ready.
@@ -29,16 +28,14 @@ function PromptDialog({ request }: { request: PromptRequest }) {
   const cancel = () => {
     clear();
     if (request.kind === 'text') request.resolve(null);
-    else if (request.kind === 'confirm') request.resolve(false);
-    else request.resolve();
+    else request.resolve(false);
   };
   const submittable = request.kind !== 'text' || value.trim().length > 0;
   const submit = () => {
     if (!submittable) return;
     clear();
     if (request.kind === 'text') request.resolve(value.trim());
-    else if (request.kind === 'confirm') request.resolve(true);
-    else request.resolve();
+    else request.resolve(true);
   };
 
   return (
@@ -47,19 +44,9 @@ function PromptDialog({ request }: { request: PromptRequest }) {
       onClose={cancel}
       footer={
         <>
-          {request.details && (
-            <button
-              className="link-button modal__details-toggle"
-              onClick={() => setShowDetails((s) => !s)}
-            >
-              {showDetails ? 'Hide details' : 'Details'}
-            </button>
-          )}
-          {request.kind !== 'alert' && (
-            <button className="link-button" onClick={cancel}>
-              {request.cancelLabel ?? 'Cancel'}
-            </button>
-          )}
+          <button className="link-button" onClick={cancel}>
+            {request.cancelLabel ?? 'Cancel'}
+          </button>
           <button className={request.danger ? 'is-danger' : ''} onClick={submit} disabled={!submittable}>
             {request.confirmLabel ?? 'OK'}
           </button>
@@ -67,7 +54,6 @@ function PromptDialog({ request }: { request: PromptRequest }) {
       }
     >
       {request.message && <p>{request.message}</p>}
-      {request.details && showDetails && <pre className="modal__details">{request.details}</pre>}
       {request.kind === 'text' && (
         <label className="field">
           {request.label && <span>{request.label}</span>}

@@ -10,6 +10,7 @@ import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/
 import type { CardNode, StringEdge } from '../types/reactflow';
 import { boardToFlow, cardToNode, connectionToEdge } from '../data/mappers';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
+import { withoutMembership } from '../lib/clusters';
 import { touches } from '../lib/connections';
 import { setLocalCallingCode } from '../lib/phone';
 import { eventFor } from '../lib/events';
@@ -36,6 +37,17 @@ import {
 } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
+
+/**
+ * What the last delete removed, so undoLastDelete can put exactly that back:
+ * the card with only the string that touched it, or the cluster with its place
+ * in the list and each member card's previous memberships (so a deleted
+ * primary restores as primary). Single level — each delete replaces this — and
+ * only the affected slices, never the whole board, so holding one is bytes.
+ */
+export type DeleteSnapshot =
+  | { kind: 'card'; card: Card; connections: Connection[] }
+  | { kind: 'cluster'; cluster: Cluster; index: number; memberships: Map<string, string[]> };
 
 const AUTOSAVE_MS = 500;
 
@@ -117,7 +129,7 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
     imageFile: null,
     imageCrop: null,
     imageMeta: null,
-    clusterId: null,
+    clusterIds: [],
     kind: DEFAULT_KIND,
     occurredAt: null,
     occurredAtPrecision: 'minute',
@@ -248,8 +260,16 @@ type BoardState = {
    * that isn't itself an event.
    */
   setIsEvent: (cardId: string, on: boolean) => void;
-  /** Remove a card, and every piece of string tied to it. Irreversible. */
+  /** Remove a card, and every piece of string tied to it. Undoable — once. */
   deleteCard: (id: string) => void;
+  /**
+   * The last deletion, restorable until the next delete or a board switch.
+   * The toast offers it and Cmd+Z takes it (see useUndoShortcut); hiding the
+   * toast does not clear it.
+   */
+  lastDelete: DeleteSnapshot | null;
+  /** Put back what the last delete removed. See DeleteSnapshot. */
+  undoLastDelete: () => void;
   toggleCluster: (id: string) => void;
   addCluster: (label?: string) => string;
   updateCluster: (id: string, patch: Partial<Omit<Cluster, 'id'>>) => void;
@@ -259,7 +279,13 @@ type BoardState = {
   deleteConnection: (id: string) => void;
 
   // Persistence.
-  toBoard: () => Board;
+  /**
+   * Assemble the canonical board. Restamps `meta.updatedAt` by default — the
+   * board is being written out, which is what recency means. Pass false for a
+   * write that must not touch recency (a viewport-only autosave), so merely
+   * looking around never reorders the library.
+   */
+  toBoard: (restamp?: boolean) => Board;
   save: () => Promise<void>;
   /** Bundle the given library boards (by id) and save to a chosen file; false if cancelled. */
   exportBundle: (ids: string[]) => Promise<boolean>;
@@ -271,6 +297,19 @@ type BoardState = {
 
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 
+// Saves are chained, never raced: a fresh autosave can fire while a slow write
+// is still in flight, and two saves interleaving would race the adapter's
+// row-diff cache (each would diff against the same "last saved" and write it
+// back out of order). The chain serialises them; each save snapshots the board
+// when its turn comes, so the later save writes the later state.
+let saveChain: Promise<void> = Promise.resolve();
+
+// Whether anything *content* has changed since the last save. setViewport
+// schedules a save without setting it, so a pan/zoom persists the camera
+// without restamping updatedAt — merely looking around must not reorder the
+// library by recency (the same reasoning openBoard documents).
+let contentDirty = false;
+
 // init() must be idempotent: StrictMode double-invokes effects in dev, and two
 // concurrent inits would both see an empty library and both seed it, leaving the
 // user with two identical boards. Sharing one promise makes the second call
@@ -278,7 +317,7 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 let initPromise: Promise<void> | undefined;
 
 export const useBoardStore = create<BoardState>((set, get) => {
-  const scheduleAutosave = () => {
+  const scheduleSave = () => {
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
       // Clearing the handle here is what lets flushAutosave tell "pending" from
@@ -286,6 +325,37 @@ export const useBoardStore = create<BoardState>((set, get) => {
       autosaveTimer = undefined;
       void get().save();
     }, AUTOSAVE_MS);
+  };
+
+  /** A content edit: mark the board dirty, then debounce a save. */
+  const scheduleAutosave = () => {
+    contentDirty = true;
+    scheduleSave();
+  };
+
+  const doSave = async () => {
+    // Snapshot id and board here — when this save's turn in the chain comes,
+    // not when it was requested. Tauri does real async IO; without this, a
+    // slow write in flight during a board switch would land this board's
+    // bytes under the next board's id.
+    const id = get().currentBoardId;
+    if (!id) return;
+    const dirty = contentDirty;
+    contentDirty = false;
+    // A viewport-only save keeps the stored updatedAt, so the adapter can see
+    // the summary is unchanged and skip rewriting the index.
+    const board = get().toBoard(dirty);
+
+    try {
+      await storage.saveBoard(id, board);
+      if (get().lastError) set({ lastError: null });
+    } catch (err) {
+      // A failed content save stays dirty, so the retry restamps.
+      if (dirty) contentDirty = true;
+      // Autosave runs from a debounced timer with no caller to catch this, so
+      // the error has to land in state or it is lost entirely.
+      set({ lastError: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   /** Write any pending edits before leaving the current board behind. */
@@ -318,6 +388,8 @@ export const useBoardStore = create<BoardState>((set, get) => {
       edges,
       viewport: board.viewport,
       selectedCardId: null,
+      // A snapshot from one board must not be restorable into another.
+      lastDelete: null,
       // A new board opens on the board, whatever the last one was showing.
       view: 'board',
       // The toolbar isn't remounted on a board switch, so a stale query would
@@ -423,6 +495,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
     viewport: undefined,
     currentBoardId: null,
     selectedCardId: null,
+    lastDelete: null,
     view: 'board',
     searchQuery: '',
     lastError: null,
@@ -548,16 +621,24 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
     onNodesChange(changes) {
       const nodes = applyNodeChanges(changes, get().nodes);
-      // Fold dragged positions back into canonical cards; ignore transient
-      // select/dimension churn. (Deletion is an M2 feature; see deleteKeyCode.)
-      if (changes.some((c) => c.type === 'position')) {
+      // Fold positions back into canonical cards only when the drag settles:
+      // React Flow fires a position change per pointermove with dragging: true
+      // and a final one with dragging: false on release (keyboard and
+      // programmatic moves carry no flag, so they commit at once). Committing
+      // per frame gave `cards` a new identity every pointermove, which re-ran
+      // everything derived from it — the roster's four passes, the participant
+      // edges' pair sweep, the timeline — on every frame of a drag. During the
+      // drag only `nodes` moves; `node.data.card.position` lags, harmlessly:
+      // nothing renders it (Tidy reads React Flow's own positions).
+      // Select/dimension churn is ignored as before. (Deletion is an M2
+      // feature; see deleteKeyCode.)
+      const settled = changes.some((c) => c.type === 'position' && !c.dragging);
+      if (settled) {
         const positionById = new Map(nodes.map((n) => [n.id, n.position]));
         set({
           nodes,
-          // Only the dragged card gets a new identity. React Flow fires a
-          // position change per pointermove, and the timeline now derives from
-          // `cards` in a render path — respreading all of them would re-render
-          // every chip on every frame.
+          // Only a moved card gets a new identity, so unmoved chips and rows
+          // keep theirs.
           cards: get().cards.map((card) => {
             const p = positionById.get(card.id);
             return p && (p.x !== card.position.x || p.y !== card.position.y)
@@ -581,7 +662,9 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
     setViewport(vp) {
       set({ viewport: vp });
-      scheduleAutosave();
+      // Persist the camera, but don't mark content dirty: panning must not
+      // restamp updatedAt (see contentDirty above).
+      scheduleSave();
     },
 
     selectCard(id) {
@@ -601,7 +684,8 @@ export const useBoardStore = create<BoardState>((set, get) => {
       const position = vp
         ? { x: -vp.x / vp.zoom + 200, y: -vp.y / vp.zoom + 160 }
         : { x: 200, y: 160 };
-      const card = blankCard(id, { clusterId: get().clusters[0]?.id ?? null, ...init, position });
+      const first = get().clusters[0];
+      const card = blankCard(id, { clusterIds: first ? [first.id] : [], ...init, position });
       set({
         cards: [...get().cards, card],
         nodes: [...get().nodes, cardToNode(card, get().clusters)],
@@ -671,7 +755,11 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
       const positions = gridPositions(fresh.length, get().cards);
       const added: Card[] = fresh.map((d, i) =>
-        blankCard(newCardId(), { clusterId: opts?.clusterId ?? null, ...d, position: positions[i] }),
+        blankCard(newCardId(), {
+          clusterIds: opts?.clusterId ? [opts.clusterId] : [],
+          ...d,
+          position: positions[i],
+        }),
       );
 
       set({
@@ -787,8 +875,14 @@ export const useBoardStore = create<BoardState>((set, get) => {
     },
 
     updateCard(id, patch) {
-      const cards = get().cards.map((c) => (c.id === id ? { ...c, ...patch } : c));
-      const updated = cards.find((c) => c.id === id)!;
+      // A no-op for a card that is gone: the editor's title/notes commits are
+      // debounced now, so one can land after deleteCard took the card away.
+      // This is the most-called mutator, so one indexed scan, not three.
+      const i = get().cards.findIndex((c) => c.id === id);
+      if (i === -1) return;
+      const updated = { ...get().cards[i], ...patch };
+      const cards = [...get().cards];
+      cards[i] = updated;
       set({
         cards,
         // Keep the derived node in sync with the canonical card.
@@ -812,7 +906,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
           // the user can rename it. Beside the source, so it lands sensibly when the
           // source is drawn (a record isn't, but an evidence source is).
           title: source.title || 'Event',
-          clusterId: source.clusterId,
+          clusterIds: [...source.clusterIds],
           position: { x: source.position.x + 48, y: source.position.y + 48 },
           kind: 'event',
           occurredAt: source.occurredAt,
@@ -839,15 +933,65 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // fail to draw. The editor counts these first (see touches) so the user is
       // told what they are about to lose rather than finding out later.
       const { cards, nodes, connections, edges, selectedCardId } = get();
+      const card = cards.find((c) => c.id === id);
+      if (!card) return;
+      // One partition: what stays on the board, and what the undo snapshot takes.
+      const kept: Connection[] = [];
+      const taken: Connection[] = [];
+      for (const c of connections) (touches(c, id) ? taken : kept).push(c);
       set({
         cards: cards.filter((c) => c.id !== id),
         nodes: nodes.filter((n) => n.id !== id),
-        connections: connections.filter((c) => !touches(c, id)),
+        connections: kept,
         edges: edges.filter((e) => !touches(e, id)),
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
+        // The card and exactly the string it took with it, for undo.
+        lastDelete: { kind: 'card', card, connections: taken },
       });
+      scheduleAutosave();
+    },
+
+    undoLastDelete() {
+      const snap = get().lastDelete;
+      if (!snap) return;
+
+      if (snap.kind === 'card') {
+        // The board may have moved on since the delete: a cluster it was in may
+        // be gone, and so may the card at a string's far end. Restore what
+        // still holds and drop the rest, rather than resurrecting dangling ids.
+        const clusterIds = new Set(get().clusters.map((c) => c.id));
+        const card = {
+          ...snap.card,
+          clusterIds: snap.card.clusterIds.filter((x) => clusterIds.has(x)),
+        };
+        const present = new Set([...get().cards.map((c) => c.id), card.id]);
+        const connections = snap.connections.filter(
+          (c) => present.has(c.source) && present.has(c.target),
+        );
+        set({
+          cards: [...get().cards, card],
+          nodes: [...get().nodes, cardToNode(card, get().clusters)],
+          connections: [...get().connections, ...connections],
+          edges: [...get().edges, ...connections.map(connectionToEdge)],
+          lastDelete: null,
+        });
+      } else {
+        // Memberships restore as they were at deletion — an edit made in
+        // between is overwritten. Acceptable for a single-level undo.
+        const clusters = [...get().clusters];
+        clusters.splice(Math.min(snap.index, clusters.length), 0, snap.cluster);
+        set({
+          clusters,
+          cards: get().cards.map((c) => {
+            const was = snap.memberships.get(c.id);
+            return was ? { ...c, clusterIds: was } : c;
+          }),
+          lastDelete: null,
+        });
+        refreshNodes();
+      }
       scheduleAutosave();
     },
 
@@ -883,12 +1027,23 @@ export const useBoardStore = create<BoardState>((set, get) => {
     },
 
     deleteCluster(id) {
+      const index = get().clusters.findIndex((c) => c.id === id);
+      if (index === -1) return;
+      const cluster = get().clusters[index];
+      // One pass over the cards: keep them, just drop their membership of the
+      // deleted cluster (untouched cards keep their identity; deleting a
+      // card's primary promotes its next membership) — while collecting each
+      // member's previous memberships, order included, for undo.
+      const memberships = new Map<string, string[]>();
+      const cards = get().cards.map((c) => {
+        if (!c.clusterIds.includes(id)) return c;
+        memberships.set(c.id, c.clusterIds);
+        return { ...c, clusterIds: withoutMembership(c.clusterIds, id) };
+      });
       set({
         clusters: get().clusters.filter((c) => c.id !== id),
-        // Keep the cards; just drop their reference to the deleted cluster.
-        cards: get().cards.map((c) =>
-          c.clusterId === id ? { ...c, clusterId: null } : c,
-        ),
+        cards,
+        lastDelete: { kind: 'cluster', cluster, index, memberships },
       });
       refreshNodes();
       scheduleAutosave();
@@ -936,13 +1091,13 @@ export const useBoardStore = create<BoardState>((set, get) => {
       scheduleAutosave();
     },
 
-    toBoard() {
+    toBoard(restamp = true) {
       // Canonical state is kept current as the user edits (positions folded in
       // onNodesChange), so the board can be assembled directly.
       const { meta, clusters, cards, connections, viewport } = get();
       return {
-        version: 3,
-        meta: { ...meta, updatedAt: new Date().toISOString() },
+        version: 4,
+        meta: restamp ? { ...meta, updatedAt: new Date().toISOString() } : meta,
         clusters,
         cards,
         connections,
@@ -950,23 +1105,11 @@ export const useBoardStore = create<BoardState>((set, get) => {
       };
     },
 
-    async save() {
-      // Snapshot both id and board before the first await. Web storage is
-      // synchronous under the hood, but Tauri does real async IO — without this,
-      // a slow write in flight during a board switch would land this board's
-      // bytes under the next board's id.
-      const id = get().currentBoardId;
-      if (!id) return;
-      const board = get().toBoard();
-
-      try {
-        await storage.saveBoard(id, board);
-        if (get().lastError) set({ lastError: null });
-      } catch (err) {
-        // Autosave runs from a debounced timer with no caller to catch this, so
-        // the error has to land in state or it is lost entirely.
-        set({ lastError: err instanceof Error ? err.message : String(err) });
-      }
+    save() {
+      // Chained, never raced — see saveChain above. doSave never throws, so a
+      // failed save cannot wedge the chain.
+      saveChain = saveChain.then(doSave);
+      return saveChain;
     },
 
     async exportBundle(ids) {
