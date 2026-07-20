@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { touches } from '../lib/connections';
+import { isEntityKind } from '../lib/kinds';
+import { actorScale } from '../lib/layout';
 import type { CardNode, StringEdge } from '../types/reactflow';
 
 /**
@@ -28,6 +30,13 @@ import type { CardNode, StringEdge } from '../types/reactflow';
  * `hl`, so a card you point at keeps itself and its neighbours lit and its
  * strings traceable even mid-search. With `matchIds` null this is exactly the
  * focus-only behaviour it always was.
+ *
+ * It also writes each actor's `tieScale` — the polaroid grows with how
+ * connected the actor is. Sized from the same `edges` the board draws (string
+ * and derived participant links alike), so what you see is what is counted;
+ * it lives in this pass because the edge set is only assembled here, and the
+ * identity-preservation below already exists to make per-node decoration
+ * cheap. Keyed on `edges` alone, so hovering never re-derives it.
  */
 export function useHighlightConnections(
   nodes: CardNode[],
@@ -36,6 +45,15 @@ export function useHighlightConnections(
   selectedId: string | null,
   matchIds: Set<string> | null,
 ): { nodes: CardNode[]; edges: StringEdge[] } {
+  const degrees = useMemo(() => {
+    const d = new Map<string, number>();
+    for (const e of edges) {
+      d.set(e.source, (d.get(e.source) ?? 0) + 1);
+      d.set(e.target, (d.get(e.target) ?? 0) + 1);
+    }
+    return d;
+  }, [edges]);
+
   return useMemo(() => {
     const searching = matchIds !== null;
     const connectedEdgeIds = new Set<string>();
@@ -70,9 +88,15 @@ export function useHighlightConnections(
         matchIds !== null && matchIds.has(n.id),
       );
       const selected = n.id === selectedId;
-      return n.className === className && (n.selected ?? false) === selected
+      // Only the actors grow; the argument's paper stays one size.
+      const tieScale = isEntityKind(n.data.card.kind)
+        ? actorScale(degrees.get(n.id) ?? 0)
+        : undefined;
+      return n.className === className &&
+        (n.selected ?? false) === selected &&
+        n.data.tieScale === tieScale
         ? n
-        : { ...n, className, selected };
+        : { ...n, className, selected, data: { ...n.data, tieScale } };
     });
     const decoratedEdges = edges.map((e) => {
       const className = classify(
@@ -83,5 +107,5 @@ export function useHighlightConnections(
     });
 
     return { nodes: decoratedNodes, edges: decoratedEdges };
-  }, [nodes, edges, focusId, selectedId, matchIds]);
+  }, [nodes, edges, degrees, focusId, selectedId, matchIds]);
 }

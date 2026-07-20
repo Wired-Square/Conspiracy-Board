@@ -244,7 +244,9 @@ button:hover {
 .evidence-card {
   --accent: #888;
   position: relative;
-  width: 210px;
+  /* One width rule for every face: --card-scale is set only on actors (see
+     tieScale), so paper resolves the fallback and stays 210. */
+  width: calc(210px * var(--card-scale, 1));
   background: var(--card-paper);
   color: var(--card-ink);
   border-radius: 4px;
@@ -354,6 +356,10 @@ button:hover {
    than something said about them, and on a corkboard that has always been a
    photograph. Film white, not the cream of the paper around it, and a wide
    frame at the foot to write the name on. */
+/* An actor's presence follows their connections: the polaroid widens with the
+   strings tied to it (--card-scale, set per node from tieScale — 1 for a
+   loner, capped at 1.5). Width only, via the base rule above: the photo grows
+   with its aspect ratio and the caption stays readable at one size. */
 .evidence-card--polaroid {
   background: #f7f5f0;
   padding: 11px 11px 0;

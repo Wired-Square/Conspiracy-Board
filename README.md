@@ -154,7 +154,11 @@ that forgets makes a card that appears nowhere at all.
 **The actors are polaroids.** A person and an organisation are the only cards
 that are *somebody* rather than something said about them, and on a corkboard
 that has always been a photograph — the same picture every card can carry, finally
-being the point. They have no date, either: a person does not *happen*.
+being the point. They have no date, either: a person does not *happen*. And their
+size follows their strings: an actor's polaroid grows with the connections drawn
+to it — hand-strung and derived alike — so the centre of a web reads as the
+centre at a glance (sub-linearly and capped, so the most-connected person on an
+mbox board is a bigger card, not a poster).
 
 **`event` vs `evidence` is a moment versus a state.** An event *happened* — grading
 it asks *did it happen?* Evidence *is so*, with no moment — grading asks *is it

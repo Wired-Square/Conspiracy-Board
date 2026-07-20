@@ -130,7 +130,13 @@ function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
       // argument keeps the default paper deliberately, so the face follows the
       // register and nothing else.
       className={`evidence-card${actor ? ' evidence-card--polaroid' : ''}${selected ? ' is-selected' : ''}`}
-      style={{ ['--accent' as string]: accent }}
+      // --card-scale grows an actor's polaroid with its connections. Set only
+      // when the hook derived one (actors only), so paper faces carry no inert
+      // style; the stylesheet's var(--card-scale, 1) owns the default.
+      style={{
+        ['--accent' as string]: accent,
+        ...(data.tieScale !== undefined && { ['--card-scale' as string]: data.tieScale }),
+      }}
     >
       {actor ? <PolaroidFace card={card} /> : <PaperFace card={card} />}
       {/* The primary wears the accent; membership of any further clusters shows

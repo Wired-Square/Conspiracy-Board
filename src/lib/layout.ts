@@ -14,6 +14,18 @@ const STEP_Y = 220;
 const MAX_COLS = 6;
 
 /**
+ * How much an actor's card grows with its connections: 1 at no strings, rising
+ * with the square root of the degree (so the tenth string matters less than
+ * the first), capped so the most-connected person on an mbox board stays a
+ * card rather than a poster. Degree is a count of what the board draws —
+ * hand-strung connections and derived participant links alike (see
+ * useHighlightConnections). Rounded only to keep the inline style value tidy.
+ */
+export function actorScale(degree: number): number {
+  return Math.round(Math.min(1.5, 1 + 0.08 * Math.sqrt(degree)) * 100) / 100;
+}
+
+/**
  * Grid positions for `count` new cards, placed clear of the existing board.
  *
  * "Clear of" means clear of what is *drawn*. A record card still carries a
