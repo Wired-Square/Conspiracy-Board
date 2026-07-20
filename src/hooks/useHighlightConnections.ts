@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { touches } from '../lib/connections';
 import { isEntityKind } from '../lib/kinds';
 import { actorScale } from '../lib/layout';
-import type { CardNode, StringEdge } from '../types/reactflow';
+import type { CardNode, CardNodeData, StringEdge } from '../types/reactflow';
 
 /**
  * Return display-ready nodes/edges: `hl`/`dim` classNames so the focused card
@@ -54,6 +54,15 @@ export function useHighlightConnections(
     return d;
   }, [edges]);
 
+  // Interned augmented data, per (store data, scale) pair. The nodes handed in
+  // are always store-derived and never carry tieScale, so writing it with a
+  // bare spread would mint a fresh `data` object on every pass and defeat
+  // memo(EvidenceCardNode) for every actor on every hover and drag frame.
+  // Interning makes the same store data + the same scale yield the *same*
+  // object, so the memoised card bails exactly as it did before actors scaled.
+  // WeakMap-keyed on the store data, so replaced cards collect with it.
+  const dataCache = useRef(new WeakMap<CardNodeData, Map<number, CardNodeData>>());
+
   return useMemo(() => {
     const searching = matchIds !== null;
     const connectedEdgeIds = new Set<string>();
@@ -79,6 +88,17 @@ export function useHighlightConnections(
       return dim ? 'dim' : undefined;
     };
 
+    // A paper face never scales, so its data passes through untouched; an
+    // actor's data is the interned augmentation (see dataCache above).
+    const dataFor = (data: CardNodeData, tieScale: number | undefined): CardNodeData => {
+      if (tieScale === undefined) return data;
+      let byScale = dataCache.current.get(data);
+      if (!byScale) dataCache.current.set(data, (byScale = new Map()));
+      let augmented = byScale.get(tieScale);
+      if (!augmented) byScale.set(tieScale, (augmented = { ...data, tieScale }));
+      return augmented;
+    };
+
     // Preserve object identity when nothing about a node's presentation changed,
     // so memoised cards don't all re-render on every selection change or drag
     // frame. Cheap at 8 cards; not at the couple of hundred an mbox can add.
@@ -89,14 +109,13 @@ export function useHighlightConnections(
       );
       const selected = n.id === selectedId;
       // Only the actors grow; the argument's paper stays one size.
-      const tieScale = isEntityKind(n.data.card.kind)
-        ? actorScale(degrees.get(n.id) ?? 0)
-        : undefined;
-      return n.className === className &&
-        (n.selected ?? false) === selected &&
-        n.data.tieScale === tieScale
+      const data = dataFor(
+        n.data,
+        isEntityKind(n.data.card.kind) ? actorScale(degrees.get(n.id) ?? 0) : undefined,
+      );
+      return n.className === className && (n.selected ?? false) === selected && n.data === data
         ? n
-        : { ...n, className, selected, data: { ...n.data, tieScale } };
+        : { ...n, className, selected, data };
     });
     const decoratedEdges = edges.map((e) => {
       const className = classify(
