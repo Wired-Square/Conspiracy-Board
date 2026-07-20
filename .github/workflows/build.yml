@@ -25,10 +25,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --draft \
-            --title "Conspiracy ${{ github.ref_name }}" \
-            --generate-notes
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} already exists — leaving it in place."
+          else
+            gh release create "${{ github.ref_name }}" \
+              --draft \
+              --title "Conspiracy ${{ github.ref_name }}" \
+              --generate-notes
+          fi
 
   build:
     needs: [create-release]
@@ -59,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
