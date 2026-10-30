@@ -152,7 +152,7 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
   // The Inbox reveal needs nothing from the webview — the folder is a fixed path —
   // so the shell handles it directly rather than round-tripping an event.
   if id == "inbox.reveal" {
-    if let Err(e) = crate::board_store::open_inbox(app) {
+    if let Err(e) = crate::board_store::inbox::open_inbox(app) {
       log::warn!("Could not show the Inbox: {e}");
     }
     return;

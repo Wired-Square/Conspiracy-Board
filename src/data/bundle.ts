@@ -9,7 +9,7 @@ import type { Board } from '../types/board';
 // freshly-parsed `meta.title`, since a hand-edited manifest could disagree.
 //
 // This module is pure (no IO) so the format lives in one place and can be tested
-// directly. The shell (src-tauri/src/board_store.rs) treats the manifest as opaque
+// directly. The shell (src-tauri/src/board_store/bundle.rs) treats the manifest as opaque
 // bytes — it authors nothing and validates nothing here.
 
 export const BUNDLE_FORMAT = 'conspiracy-bundle';

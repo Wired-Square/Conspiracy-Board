@@ -5,7 +5,7 @@ import { useBoardStore } from '../store/boardStore';
 import { NEW_CLUSTER, useEmailImportStore } from '../store/emailImportStore';
 import { useTauriListen } from './useTauriListen';
 
-// Files the shell sweeps out of the Inbox folder (src-tauri/src/board_store.rs).
+// Files the shell sweeps out of the Inbox folder (src-tauri/src/board_store/inbox.rs).
 //
 // The folder is the way in for what a webview drop can't take. Dragging a whole
 // Mail conversation onto the page hands it only plain text — the messages never

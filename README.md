@@ -602,7 +602,7 @@ Folder** opens it — and the one automatic way in. Drag a Mail conversation to 
 in Finder and Finder writes one `.eml` per message; a screenshot or a PDF
 dropped there imports the same way.
 
-The shell (`start_inbox_watcher`, `board_store.rs`) sweeps the folder every 1.5s,
+The shell (`start_inbox_watcher`, `board_store/inbox.rs`) sweeps the folder every 1.5s,
 takes each file once its size settles so a half-written one is never read, and
 moves taken files into `Inbox/.imported` so nothing imports twice. Each batch is
 then routed by `src/platform/inbox.ts`: email opens the import preview — a

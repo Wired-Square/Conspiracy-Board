@@ -18,7 +18,8 @@ use std::sync::{Mutex, MutexGuard};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use tauri::{AppHandle, State};
 
-use crate::board_store::{media_ext, media_file, media_names, library_dir};
+use crate::board_store::library_dir;
+use crate::board_store::media::{media_ext, media_file, media_names};
 use crate::extract::{extract_text, ExtractOutcome};
 
 /// The extractors and their versions. Bump it when an extractor changes (a better OCR

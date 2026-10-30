@@ -16,25 +16,25 @@ pub fn run() {
       board_store::init_storage,
       board_store::load_index,
       board_store::save_index,
-      board_store::load_board,
-      board_store::save_board,
-      board_store::retire_legacy_board,
-      board_store::delete_board,
-      board_store::board_location,
-      board_store::reveal_board,
-      board_store::media_dir_path,
-      board_store::save_media,
-      board_store::download_image,
-      board_store::read_media,
-      board_store::extract_media_meta,
-      board_store::ocr_image,
-      board_store::gc_media,
-      board_store::open_media,
-      board_store::list_media,
-      board_store::verify_media,
-      board_store::open_media_dir,
-      board_store::write_bundle,
-      board_store::read_bundle,
+      board_store::board_db::load_board,
+      board_store::board_db::save_board,
+      board_store::board_db::retire_legacy_board,
+      board_store::board_db::delete_board,
+      board_store::board_db::board_location,
+      board_store::board_db::reveal_board,
+      board_store::media::media_dir_path,
+      board_store::media::save_media,
+      board_store::media::download_image,
+      board_store::media::read_media,
+      board_store::media::extract_media_meta,
+      board_store::media::ocr_image,
+      board_store::media::gc_media,
+      board_store::media::open_media,
+      board_store::media::list_media,
+      board_store::media::verify_media,
+      board_store::media::open_media_dir,
+      board_store::bundle::write_bundle,
+      board_store::bundle::read_bundle,
       library_index::process_media,
       library_index::search_documents,
       library_index::pending_media,
@@ -78,7 +78,7 @@ pub fn run() {
       // Watch the Inbox drop-folder — the one automatic way in. Mail dragged to
       // Finder becomes one .eml per message, which this hands to the importer;
       // images and documents dropped there import the same way.
-      board_store::start_inbox_watcher(app.handle().clone());
+      board_store::inbox::start_inbox_watcher(app.handle().clone());
 
       Ok(())
     })

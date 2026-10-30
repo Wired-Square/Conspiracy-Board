@@ -1,5 +1,5 @@
 // base64 ↔ bytes, in one place. A Tauri command is JSON, so media bytes cross the
-// webview↔shell boundary as base64 (see src-tauri/src/board_store.rs), and both a
+// webview↔shell boundary as base64 (see src-tauri/src/board_store/media.rs), and both a
 // data: URL and an Apple Mail drop arrive base64 too. Chunked encode because
 // spreading a large array into String.fromCharCode overflows the call stack.
 
