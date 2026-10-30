@@ -5,6 +5,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { DEFAULT_BOARD_TITLE } from '../../data/emptyBoard';
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import { storage } from '../../storage';
+import { reactStyle } from '../ui/reactStyle';
 
 export function BoardPropertiesModal({ onClose }: { onClose: () => void }) {
   const title = useBoardStore((s) => s.meta.title);
@@ -53,7 +54,7 @@ export function BoardPropertiesModal({ onClose }: { onClose: () => void }) {
         <span>Grades</span>
         <ul className="grade-key">
           {GRADES.map((g) => (
-            <li key={g} style={gradeTint(g)}>
+            <li key={g} style={reactStyle(gradeTint(g))}>
               <span className="grade-key__swatch" />
               <span className="grade-key__label">{GRADE_META[g].label}</span>
               <span className="grade-key__definition">{GRADE_META[g].definition}</span>

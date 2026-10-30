@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { ImageCrop } from '../types/board';
 
 // The maths behind the image cropper, kept pure and away from the component so it
@@ -51,7 +50,7 @@ export function viewToCrop(scale: number, tx: number, ty: number, { fw, fh, natW
 
 // A stable identity for the no-crop case, so an uncropped <img> is handed the same
 // object every render rather than a fresh {} each time.
-const NO_CROP: CSSProperties = {};
+const NO_CROP: Record<string, string> = {};
 
 /**
  * The picture's crop as an inline style for its `<img>`, or `NO_CROP` for the
@@ -64,7 +63,7 @@ const NO_CROP: CSSProperties = {};
  * and shifted by its offset, both as percentages of the box. The one place the crop
  * becomes CSS, so every render site is a single spread and none re-derives it.
  */
-export function cardImageStyle(card: { imageCrop: ImageCrop | null }): CSSProperties {
+export function cardImageStyle(card: { imageCrop: ImageCrop | null }): Record<string, string> {
   const c = card.imageCrop;
   if (!c) return NO_CROP;
   return {
@@ -73,7 +72,7 @@ export function cardImageStyle(card: { imageCrop: ImageCrop | null }): CSSProper
     top: `calc(${-c.y} / ${c.h} * 100%)`,
     width: `calc(100% / ${c.w})`,
     height: 'auto',
-    maxWidth: 'none',
-    maxHeight: 'none',
+    'max-width': 'none',
+    'max-height': 'none',
   };
 }

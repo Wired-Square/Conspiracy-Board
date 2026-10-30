@@ -30,6 +30,7 @@ import { eventFor } from '../../lib/events';
 import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';
 import type { Card, CardKind, Connection, ImageMeta } from '../../types/board';
+import { reactStyle } from '../ui/reactStyle';
 
 /** A photo's EXIF as display rows: size, when, camera, where. */
 function imageFacts(m: ImageMeta): [string, string][] {
@@ -237,7 +238,7 @@ function CardEditorForm({ card }: { card: Card }) {
         <span>Picture</span>
         {imageSrc && (
           <div className={`card-editor__preview${card.imageCrop ? ' is-cropped' : ''}`}>
-            <img src={imageSrc} alt="" style={cardImageStyle(card)} />
+            <img src={imageSrc} alt="" style={reactStyle(cardImageStyle(card))} />
           </div>
         )}
         {/* A file or a URL, framed by pan-and-zoom, then downloaded into the media

@@ -2,6 +2,7 @@ import { EdgeLabelRenderer, useInternalNode, type EdgeProps } from '@xyflow/reac
 import type { StringEdge } from '../../types/reactflow';
 import { gradeTint } from '../../lib/grades';
 import { getEdgeParams } from './floating';
+import { reactStyle } from '../ui/reactStyle';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -40,7 +41,7 @@ export function RedStringEdge({ source, target, data }: EdgeProps<StringEdge>) {
 
   return (
     <>
-      <g style={grade ? gradeTint(grade) : undefined}>
+      <g style={grade ? reactStyle(gradeTint(grade)) : undefined}>
         {/* A derived link hangs under the same gravity but is drawn as one thin,
             faint strand: no shadow, no sheen, no knots. Nobody pinned it —
             the app inferred it from an address, and it must not read as

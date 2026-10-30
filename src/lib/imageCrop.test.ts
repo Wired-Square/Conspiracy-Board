@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ImageCrop } from '../types/board';
-import { clampOffset, coverScale, cropToView, viewToCrop, type Geom } from './imageCrop';
+import { cardImageStyle, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from './imageCrop';
 
 // A 4:3 frame and a 4:3 image, the case the cropper is built around.
 const GEOM: Geom = { fw: 400, fh: 300, natW: 800, natH: 600 };
@@ -54,5 +54,16 @@ describe('clampOffset', () => {
     roughly(ty, -100);
     // But not so far that an edge comes into view.
     expect(clampOffset(scale, 10, 10, GEOM)).toEqual({ tx: 0, ty: 0 });
+  });
+});
+
+describe('cardImageStyle', () => {
+  it('is empty without a crop and kebab-case with one', () => {
+    expect(cardImageStyle({ imageCrop: null })).toEqual({});
+    expect(cardImageStyle({ imageCrop: { x: 0.25, y: 0, w: 0.5, h: 0.5 } })).toMatchObject({
+      position: 'absolute',
+      width: 'calc(100% / 0.5)',
+      'max-width': 'none',
+    });
   });
 });

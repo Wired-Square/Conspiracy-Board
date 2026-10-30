@@ -8,6 +8,7 @@ import { GRADE_META, gradeTint } from '../../lib/grades';
 import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
+import { reactStyle } from '../ui/reactStyle';
 
 // A short plain-text preview of the markdown notes for the card face.
 function notesPreview(notes: string): string {
@@ -51,7 +52,7 @@ function PolaroidFace({ card }: { card: Card }) {
           // inside React Flow's transformed pane — images deferred and often never
           // loaded. onlyRenderVisibleElements already keeps off-screen cards
           // imageless, so eager here costs nothing.
-          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
+          <img src={image} alt="" draggable={false} decoding="async" style={reactStyle(cardImageStyle(card))} />
         ) : (
           // Empty film, not a hole: a polaroid nobody has found a photograph
           // for yet still reads as one waiting.
@@ -88,7 +89,7 @@ function PaperFace({ card }: { card: Card }) {
       {image && (
         <div className={`evidence-card__image${card.imageCrop ? ' is-cropped' : ''}`}>
           {/* Eager, like the polaroid above — see the note there. */}
-          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
+          <img src={image} alt="" draggable={false} decoding="async" style={reactStyle(cardImageStyle(card))} />
         </div>
       )}
       <div className="evidence-card__body">
@@ -103,7 +104,7 @@ function PaperFace({ card }: { card: Card }) {
             good the claim is. Different questions, so both are allowed to
             answer at once. */}
         {grade && (
-          <span className="grade-chip" style={gradeTint(grade)}>
+          <span className="grade-chip" style={reactStyle(gradeTint(grade))}>
             {GRADE_META[grade].label}
           </span>
         )}
