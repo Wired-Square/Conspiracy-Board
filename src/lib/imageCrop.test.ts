@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ImageCrop } from '../types/board';
-import { cardImageStyle, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from './imageCrop';
+import { cardImageStyle, clampOffset, coverScale, cropToView, initialView, viewToCrop, zoomAbout, zoomCeiling, type Geom } from './imageCrop';
 
 // A 4:3 frame and a 4:3 image, the case the cropper is built around.
 const GEOM: Geom = { fw: 400, fh: 300, natW: 800, natH: 600 };
@@ -65,5 +65,37 @@ describe('cardImageStyle', () => {
       width: 'calc(100% / 0.5)',
       'max-width': 'none',
     });
+  });
+});
+
+describe('initialView', () => {
+  it('opens cover-fit and centred without a crop', () => {
+    const wide: Geom = { fw: 400, fh: 300, natW: 1000, natH: 500 };
+    const v = initialView(wide, null);
+    roughly(v.scale, 0.6);
+    roughly(v.min, 0.6);
+    roughly(v.tx, (400 - 600) / 2);
+    roughly(v.ty, 0);
+  });
+
+  it('restores a stored crop', () => {
+    const v = initialView(GEOM, { x: 0.25, y: 0.25, w: 0.5, h: 0.5 });
+    roughly(v.scale, 1);
+    roughly(v.tx, -200);
+    roughly(v.ty, -150);
+  });
+});
+
+describe('zoomAbout', () => {
+  it('keeps the frame centre fixed and clamps to the ceiling', () => {
+    const v = zoomAbout(initialView(GEOM, null), 1, GEOM);
+    roughly(v.scale, 1);
+    roughly(v.tx, -200);
+    roughly(v.ty, -150);
+    roughly(zoomAbout(v, 100, GEOM).scale, zoomCeiling(0.5));
+  });
+
+  it('never zooms below cover-fit', () => {
+    roughly(zoomAbout(initialView(GEOM, null), 0.1, GEOM).scale, 0.5);
   });
 });

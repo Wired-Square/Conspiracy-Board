@@ -1,20 +1,12 @@
 import { memo, useMemo, useState } from 'react';
-import type { Card, Connection } from '../../types/board';
+import type { Card } from '../../types/board';
 import { useRoster } from '../../hooks/useRoster';
 import { useVisibleCards } from '../../hooks/useVisibleCards';
 import { clusterColor, NO_CLUSTER_ACCENT, primaryClusterId } from '../../lib/clusters';
-import { isRecordKind } from '../../lib/kinds';
-import { communicationParties } from '../../lib/comms';
 import { mediaIconForKind } from '../../lib/mediaIcon';
 import { MediaIcon } from '../ui/MediaIcon';
-import {
-  actorIds,
-  isLinkedDocument,
-  unaccountedAddresses,
-  type Roster,
-} from '../../lib/roster';
-import { formatOccurredAt, newestFirst } from '../../lib/dates';
-import { shortAddress } from '../../lib/email/addresses';
+import { recordRows, whoLine } from '../../lib/record';
+import { formatOccurredAt } from '../../lib/dates';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
 import { reactStyle } from '../ui/reactStyle';
@@ -27,47 +19,6 @@ import { useBoardStore } from '../../hooks/useStores';
 // A list, not a second canvas: nothing here has a position worth choosing, and
 // there is no auto-layout to choose one. Rows with pictures read as a contact
 // sheet, which is what a pile of evidence photographs actually is.
-
-/** "Dutch Sable → Vivian Vane +2" — who a communication was between. Email, a text
- *  message and a phone call all have a from and a to (see communicationParties). */
-function whoLine(card: Card): string | null {
-  const parties = communicationParties(card);
-  if (!parties) return null;
-  const to = parties.to.length
-    ? shortAddress(parties.to[0]) + (parties.to.length > 1 ? ` +${parties.to.length - 1}` : '')
-    : null;
-  const from = shortAddress(parties.from);
-  return to ? `${from} → ${to}` : from;
-}
-
-/**
- * What is still to do with this piece of paper, or null when it is done with.
- *
- * A record earns its place by being tied to somebody: an email when every
- * address on it belongs to a card, a document when string reaches an actor.
- * Until then it is a name nobody has looked up — and this is the list you work
- * off, which is what turns a mail import from a pile into a queue.
- */
-function whatsLoose(
-  card: Card,
-  roster: Roster,
-  connections: readonly Connection[],
-  actors: ReadonlySet<string>,
-): string | null {
-  switch (card.kind) {
-    case 'document':
-      return isLinkedDocument(card.id, connections, actors) ? null : 'names nobody';
-    case 'email': {
-      const n = unaccountedAddresses(card, roster).length;
-      return n ? `${n} address${n === 1 ? '' : 'es'} unaccounted` : null;
-    }
-    default:
-      // Only the record is asked, and the record is these two. A third kind must
-      // answer for itself rather than defaulting to "nothing to do here", which
-      // is the one wrong answer this list can give.
-      return null;
-  }
-}
 
 export function RecordView() {
   const clusters = useBoardStore((s) => s.clusters);
@@ -83,17 +34,10 @@ export function RecordView() {
   // list stays whole by default and this narrows it to the work.
   const [onlyLoose, setOnlyLoose] = useState(false);
 
-  // One pass: the rows, and how many are loose. The count in the bar must not
-  // disagree with the list under it. The actors are found once here rather than
-  // per row — the answer is the same for every document on the board.
-  const { rows, looseCount } = useMemo(() => {
-    const actors = actorIds(allCards);
-    const rows = cards
-      .filter((c) => isRecordKind(c.kind))
-      .map((card) => ({ card, loose: whatsLoose(card, roster, connections, actors) }))
-      .sort((a, b) => newestFirst(a.card, b.card));
-    return { rows, looseCount: rows.filter((r) => r.loose).length };
-  }, [cards, roster, connections, allCards]);
+  const { rows, looseCount } = useMemo(
+    () => recordRows(cards, allCards, roster, connections),
+    [cards, roster, connections, allCards],
+  );
 
   const shown = onlyLoose ? rows.filter((r) => r.loose) : rows;
 

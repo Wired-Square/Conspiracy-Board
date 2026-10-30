@@ -14,9 +14,8 @@ import { edgeTypes } from './edges/edgeTypes';
 import { useHighlightConnections } from '../hooks/useHighlightConnections';
 import { useParticipantEdges } from '../hooks/useParticipantEdges';
 import { useRoster } from '../hooks/useRoster';
-import { hiddenClusterIds, isVisible, NO_CLUSTER_ACCENT } from '../lib/clusters';
-import { isBoardKind } from '../lib/kinds';
-import { cardMatchesEntity, normaliseQuery } from '../lib/search';
+import { NO_CLUSTER_ACCENT } from '../lib/clusters';
+import { drawnCardIds, linksWithin, searchMatchIds } from '../lib/visibility';
 import type { CardNode } from '../types/reactflow';
 import { useBoardStore } from '../hooks/useStores';
 import { onConnect, onEdgesChange, onNodesChange, useFlowStore } from './canvas/flowAdapter';
@@ -33,13 +32,6 @@ export function BoardCanvas() {
   const setViewport = useBoardStore((s) => s.setViewport);
   const selectCard = useBoardStore((s) => s.selectCard);
 
-  // Cluster visibility → which cards (and therefore edges) are shown.
-  // The predicate is shared with the timeline; see lib/clusters.
-  const hidden = useMemo(() => hiddenClusterIds(clusters), [clusters]);
-
-  // Two reasons a card is not drawn: every cluster it is in is hidden, or it is
-  // the record and belongs in the Record view.
-  //
   // Which ids are visible is derived from `cards`, not `nodes`: during a drag
   // `nodes` changes every pointermove but `cards` holds still until the drag
   // settles (see flowAdapter's onNodesChange), so everything keyed on this set — the
@@ -50,36 +42,21 @@ export function BoardCanvas() {
   // keeps a node for every card, so switching kind works in both directions:
   // a filter there would have to add and drop nodes as a card's kind changes.
   // The canvas simply declines to draw.
-  const visibleNodeIds = useMemo(
-    () =>
-      new Set(
-        cards
-          .filter((c) => isVisible(c.clusterIds, hidden) && isBoardKind(c.kind))
-          .map((c) => c.id),
-      ),
-    [cards, hidden],
-  );
+  const visibleNodeIds = useMemo(() => drawnCardIds(cards, clusters), [cards, clusters]);
 
   const visibleNodes = useMemo(
     () => nodes.filter((n) => visibleNodeIds.has(n.id)),
     [nodes, visibleNodeIds],
   );
 
-  // The cards the search matches, among those actually drawn — null when nothing
-  // is being searched, which the highlight pass reads as "don't dim by search".
-  // The board keeps every match in place and fades the rest, so a search reads
-  // the argument without redrawing it. This is the in-memory entity matcher
+  // The board keeps every search match in place and fades the rest, so a search
+  // reads the argument without redrawing it. This is the in-memory entity matcher
   // (names, addresses, numbers) — full text is the timeline's search, not this.
   // From `cards`, like visibleNodeIds, so it too holds still during a drag.
-  const matchIds = useMemo(() => {
-    const q = normaliseQuery(searchQuery);
-    if (!q) return null;
-    return new Set(
-      cards
-        .filter((c) => visibleNodeIds.has(c.id) && cardMatchesEntity(c, q))
-        .map((c) => c.id),
-    );
-  }, [cards, visibleNodeIds, searchQuery]);
+  const matchIds = useMemo(
+    () => searchMatchIds(cards, visibleNodeIds, searchQuery),
+    [cards, visibleNodeIds, searchQuery],
+  );
 
   // Frame the search: when a settled query has matches drawn on the board, move
   // the viewport to them — one match zooms in and centres, several fit together
@@ -116,10 +93,7 @@ export function BoardCanvas() {
     }
   }, [searching, matchIds, fitView, getViewport, moveViewport]);
 
-  const visibleEdges = useMemo(
-    () => edges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)),
-    [edges, visibleNodeIds],
-  );
+  const visibleEdges = useMemo(() => linksWithin(edges, visibleNodeIds), [edges, visibleNodeIds]);
 
   // Hover lives here, not in the store: it changes on every pointermove, and the
   // store is deliberately the canonical board plus one scalar of UI state.

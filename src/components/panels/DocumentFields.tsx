@@ -5,7 +5,7 @@ import type { MediaMeta } from '../../storage/StorageAdapter';
 import { saveFile } from '../../storage/media';
 import { documentMime } from '../../lib/fileTypes';
 import { pickDocumentMeta } from '../../lib/import/meta';
-import { formatOccurredAt } from '../../lib/dates';
+import { documentFacts } from '../../lib/mediaFacts';
 import { MetaList } from '../ui/MetaList';
 import { useBoardStore } from '../../hooks/useStores';
 
@@ -37,14 +37,6 @@ export function DocumentFields({ card }: { card: Card }) {
     });
   };
 
-  const facts: [string, string][] = [];
-  if (doc.title) facts.push(['Title', doc.title]);
-  if (doc.author) facts.push(['Author', doc.author]);
-  if (doc.pages != null) facts.push(['Pages', String(doc.pages)]);
-  if (doc.words != null) facts.push(['Words', doc.words.toLocaleString('en-AU')]);
-  if (doc.created) facts.push(['Created', formatOccurredAt(doc.created, 'day')]);
-  if (doc.modified) facts.push(['Modified', formatOccurredAt(doc.modified, 'day')]);
-
   return (
     <div className="field">
       <span>File</span>
@@ -69,7 +61,7 @@ export function DocumentFields({ card }: { card: Card }) {
         hidden
         onChange={(e) => void onPick(e.target.files?.[0])}
       />
-      <MetaList facts={facts} />
+      <MetaList facts={documentFacts(doc)} />
       <span className="field__hint">
         Kept in the library and opened in the app it belongs to. The card is a note; this
         is the paper it is about.

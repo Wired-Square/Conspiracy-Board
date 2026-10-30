@@ -34,3 +34,9 @@ export function otherEnd(link: Link, cardId: string): string | null {
 export function touches(link: Link, cardId: string): boolean {
   return otherEnd(link, cardId) !== null;
 }
+
+/** " (and 3 connections)", or nothing when the card is tied to none. */
+export function strungNote(links: readonly Link[], cardId: string): string {
+  const n = links.filter((l) => touches(l, cardId)).length;
+  return n ? ` (and ${n} connection${n === 1 ? '' : 's'})` : '';
+}

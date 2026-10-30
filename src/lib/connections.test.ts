@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { touches } from './connections';
+import { strungNote, touches } from './connections';
 
 describe('touches', () => {
   const link = { source: 'card_a', target: 'card_b' };
@@ -18,5 +18,17 @@ describe('touches', () => {
 
   it('is true of a self-link, which the store refuses to make anyway', () => {
     expect(touches({ source: 'card_a', target: 'card_a' }, 'card_a')).toBe(true);
+  });
+});
+
+describe('strungNote', () => {
+  it('counts the string a delete would take', () => {
+    const links = [
+      { source: 'a', target: 'b' },
+      { source: 'c', target: 'a' },
+      { source: 'b', target: 'c' },
+    ];
+    expect(strungNote(links, 'a')).toBe(' (and 2 connections)');
+    expect(strungNote(links.slice(2), 'a')).toBe('');
   });
 });

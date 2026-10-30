@@ -3,9 +3,18 @@ import { useReactFlow } from '@xyflow/react';
 import { useTimelineCards } from '../../hooks/useTimelineCards';
 import { useDocHits } from '../../hooks/useDocHits';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { dayKey, daysBetween, daysBetweenCards, formatDayKey, formatOccurredAt } from '../../lib/dates';
+import { formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
-import { CARD_KINDS } from '../../lib/kinds';
+import {
+  dayGroups,
+  eventGaps,
+  kindTally,
+  measureBetween,
+  measureMarks,
+  nextPicks,
+  stepEvent,
+  type EventStep,
+} from '../../lib/timeline';
 import { CARD_H, CARD_W } from '../../lib/layout';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
@@ -88,13 +97,7 @@ export function TimelineDrawer() {
   // The kinds actually on the strip (from the raw, pre-filter sets so they're stable
   // as you toggle) and how many of each — the checklist rows and their counts. In
   // CARD_KINDS order; actors never reach here, so they never list.
-  const { presentKinds, kindCounts } = useMemo(() => {
-    const counts = new Map<CardKind, number>();
-    const tally = (c: { kind: CardKind }) => counts.set(c.kind, (counts.get(c.kind) ?? 0) + 1);
-    rawDated.forEach(tally);
-    rawUndated.forEach(tally);
-    return { presentKinds: CARD_KINDS.filter((k) => counts.has(k)), kindCounts: counts };
-  }, [rawDated, rawUndated]);
+  const { presentKinds, kindCounts } = useMemo(() => kindTally(rawDated, rawUndated), [rawDated, rawUndated]);
 
   const [open, setOpen] = useState(() => dated.length > 0);
   const [showUndated, setShowUndated] = useState(false);
@@ -168,11 +171,11 @@ export function TimelineDrawer() {
   const onPick = useCallback(
     (id: string) => {
       const { measuring, datedById } = measureRef.current;
-      // Measuring picks endpoints instead of navigating: first pick, then second,
-      // then a third starts over. Undated chips can't be measured, so ignore them.
+      // Measuring picks endpoints instead of navigating. Undated chips can't be
+      // measured, so ignore them.
       if (measuring) {
         if (!datedById.has(id)) return;
-        setPicks((p) => (p.length >= 2 ? [id] : p.includes(id) ? p : [...p, id]));
+        setPicks((p) => nextPicks(p, id));
         return;
       }
       selectCard(id);
@@ -194,15 +197,8 @@ export function TimelineDrawer() {
   // move the timeline, they don't select the card or move the board.
   const events = useMemo(() => dated.filter((c) => c.kind === 'event'), [dated]);
 
-  // Elapsed days from one event to the next, keyed by the later event's id — the
-  // milestone-to-milestone reading, shown as a badge on each event chip.
-  const eventGap = useMemo(() => {
-    const gap = new Map<string, number>();
-    events.forEach((e, i) => {
-      if (i > 0) gap.set(e.id, daysBetweenCards(events[i - 1], e));
-    });
-    return gap;
-  }, [events]);
+  // The milestone-to-milestone reading, shown as a badge on each event chip.
+  const eventGap = useMemo(() => eventGaps(events), [events]);
 
   const [eventCursor, setEventCursor] = useState(0);
   const cursor = events.length ? Math.min(eventCursor, events.length - 1) : 0;
@@ -210,13 +206,9 @@ export function TimelineDrawer() {
   const atEnd = cursor === events.length - 1;
 
   const goToEvent = useCallback(
-    (where: 'start' | 'prev' | 'next' | 'end') => {
+    (where: EventStep) => {
       if (events.length === 0) return;
-      const idx =
-        where === 'start' ? 0
-        : where === 'end' ? events.length - 1
-        : where === 'prev' ? Math.max(0, cursor - 1)
-        : Math.min(events.length - 1, cursor + 1);
+      const idx = stepEvent(where, cursor, events.length);
       setEventCursor(idx);
       setOpen(true);
       scrollChipIntoView(events[idx].id);
@@ -224,40 +216,11 @@ export function TimelineDrawer() {
     [events, cursor, scrollChipIntoView],
   );
 
-  // Group consecutive chips under a day heading, and note the elapsed gap
-  // between one day and the next.
-  const groups = useMemo(() => {
-    const out: { key: string; gapDays: number; cards: typeof dated }[] = [];
-    for (const card of dated) {
-      const key = dayKey(card.occurredAt!, card.occurredAtPrecision);
-      const last = out[out.length - 1];
-      if (last && last.key === key) last.cards.push(card);
-      else out.push({ key, gapDays: last ? daysBetween(last.key, key) : 0, cards: [card] });
-    }
-    return out;
-  }, [dated]);
+  // Consecutive chips under a day heading, with the elapsed gap between days.
+  const groups = useMemo(() => dayGroups(dated), [dated]);
 
-  // The measurement, ordered earliest→latest so the readout and the A/B badges
-  // read in time order however the two chips were clicked.
-  const measurement = useMemo(() => {
-    if (picks.length < 2) return null;
-    const a = datedById.get(picks[0]);
-    const b = datedById.get(picks[1]);
-    if (!a || !b) return null;
-    const [from, to] = a.occurredAt! <= b.occurredAt! ? [a, b] : [b, a];
-    return { from, to, days: daysBetweenCards(from, to) };
-  }, [picks, datedById]);
-
-  const measureMarks = useMemo(() => {
-    const marks = new Map<string, 'A' | 'B'>();
-    if (measurement) {
-      marks.set(measurement.from.id, 'A');
-      marks.set(measurement.to.id, 'B');
-    } else if (picks[0]) {
-      marks.set(picks[0], 'A');
-    }
-    return marks;
-  }, [measurement, picks]);
+  const measurement = useMemo(() => measureBetween(picks, datedById), [picks, datedById]);
+  const marks = useMemo(() => measureMarks(measurement, picks), [measurement, picks]);
 
   return (
     <section className={`timeline${open ? ' is-open' : ''}`}>
@@ -404,7 +367,7 @@ export function TimelineDrawer() {
                           selected={card.id === selectedCardId}
                           onPick={onPick}
                           sincePrevEvent={eventGap.get(card.id)}
-                          measureMark={measureMarks.get(card.id) ?? null}
+                          measureMark={marks.get(card.id) ?? null}
                         />
                       ))}
                     </div>
