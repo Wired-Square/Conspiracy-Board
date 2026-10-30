@@ -2,9 +2,9 @@ import { useMemo } from 'react';
 import type { Card } from '../types/board';
 import { isTimelineKind } from '../lib/kinds';
 import { markedEventSourceIds } from '../lib/events';
-import { useBoardStore } from '../store/boardStore';
 import { hiddenClusterIds, isVisible } from '../lib/clusters';
 import { cardMatchesWithDocs, normaliseQuery } from '../lib/search';
+import { useBoardStore } from './useStores';
 
 export type TimelineCards = {
   /** Visible dated cards, oldest first. */

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
-import { useBoardStore } from '../../store/boardStore';
 import { formatOccurredAt } from '../../lib/dates';
 import { DEFAULT_BOARD_TITLE } from '../../data/emptyBoard';
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import { storage } from '../../storage';
 import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 export function BoardPropertiesModal({ onClose }: { onClose: () => void }) {
   const title = useBoardStore((s) => s.meta.title);

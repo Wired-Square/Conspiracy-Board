@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
-import { useBoardStore } from '../../store/boardStore';
 import { closeDialog } from '../../store/dialogStore';
 import { plural } from '../../lib/format';
 import type { Board } from '../../types/board';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * Choose which boards from a picked bundle to bring in, and what to call each. A

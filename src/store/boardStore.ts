@@ -1,14 +1,5 @@
-import { create } from 'zustand';
-import {
-  applyNodeChanges,
-  applyEdgeChanges,
-  type NodeChange,
-  type EdgeChange,
-  type Connection as RFConnection,
-} from '@xyflow/react';
+import { createStore } from 'zustand/vanilla';
 import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/board';
-import type { CardNode, StringEdge } from '../types/reactflow';
-import { boardToFlow, cardToNode, connectionToEdge } from '../data/mappers';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
 import { withoutMembership } from '../lib/clusters';
 import { touches } from '../lib/connections';
@@ -27,7 +18,7 @@ import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
 import { openDialog } from './dialogStore';
-import { useJobQueueStore } from './jobQueueStore';
+import { jobQueueStore } from './jobQueueStore';
 import type { MediaMeta, PickedFile } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
@@ -134,15 +125,12 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
 }
 
 export type BoardState = {
-  // Canonical content (authoritative for everything except live node positions).
+  // Canonical content (authoritative for everything except a drag in flight;
+  // see the canvas's flowAdapter).
   meta: Board['meta'];
   clusters: Cluster[];
   cards: Card[];
   connections: Connection[];
-
-  // Derived React Flow view.
-  nodes: CardNode[];
-  edges: StringEdge[];
   viewport: Viewport | undefined;
 
   /** The board currently open. Mirrors the adapter's persisted pointer. */
@@ -206,10 +194,6 @@ export type BoardState = {
    *  normalising phone numbers. Kept on meta and pushed to lib/phone live. */
   setCountryCode: (code: string) => void;
 
-  // React Flow change handlers.
-  onNodesChange: (changes: NodeChange<CardNode>[]) => void;
-  onEdgesChange: (changes: EdgeChange<StringEdge>[]) => void;
-  onConnect: (conn: RFConnection) => void;
   setViewport: (vp: Viewport) => void;
 
   // Selection.
@@ -243,9 +227,10 @@ export type BoardState = {
    */
   adoptOrphan: (file: string) => Promise<void>;
   /**
-   * Reposition many cards in one pass (the Tidy control). One set and one autosave
-   * for the whole board, where looping updateCard would re-map the nodes and
-   * re-schedule a save per card.
+   * Reposition many cards in one pass (Tidy, or a settled drag). One set and one
+   * autosave for the whole board, where looping updateCard would re-schedule a
+   * save per card. Only a moved card gets a new identity, so unmoved chips and
+   * rows keep theirs.
    */
   arrangeCards: (positions: Map<string, Vec2>) => void;
   updateCard: (id: string, patch: Partial<Omit<Card, 'id'>>) => void;
@@ -317,7 +302,7 @@ let contentDirty = false;
 // await the first instead of racing it.
 let initPromise: Promise<void> | undefined;
 
-export const useBoardStore = create<BoardState>((set, get) => {
+export const boardStore = createStore<BoardState>()((set, get) => {
   const syncSavePending = () => {
     const pending = autosaveTimer !== undefined || savesInFlight > 0;
     if (get().savePending !== pending) set({ savePending: pending });
@@ -373,26 +358,15 @@ export const useBoardStore = create<BoardState>((set, get) => {
     await get().save();
   };
 
-  // Rebuild all derived nodes from canonical cards. Needed after cluster
-  // colour/assignment changes, since each node caches its cluster colour.
-  // Safe because card positions are kept current by onNodesChange, and because
-  // selection is derived at render (see useHighlightConnections) rather than
-  // stored on the node.
-  const refreshNodes = () =>
-    set({ nodes: get().cards.map((c) => cardToNode(c, get().clusters)) });
-
   const hydrate = (board: Board) => {
     // Phone normalisation reads a module-level locale (lib/phone); a board carries
     // its own, so set it before any card's numbers are matched or shown.
     setLocalCallingCode(board.meta.countryCode ?? '+61');
-    const { nodes, edges } = boardToFlow(board);
     set({
       meta: board.meta,
       clusters: board.clusters,
       cards: board.cards,
       connections: board.connections,
-      nodes,
-      edges,
       viewport: board.viewport,
       selectedCardId: null,
       // A snapshot from one board must not be restorable into another.
@@ -497,8 +471,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
   return {
     ...emptyBoard(),
-    nodes: [],
-    edges: [],
     viewport: undefined,
     currentBoardId: null,
     selectedCardId: null,
@@ -562,7 +534,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
         // Pick up indexing where a previous run left off: extract text for any media
         // not yet in the search index (a crash mid-batch, or files from before the
         // index existed). A background projection, so first paint doesn't wait on it.
-        void useJobQueueStore.getState().resume();
+        void jobQueueStore.getState().resume();
       })();
       return initPromise;
     },
@@ -627,47 +599,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       scheduleAutosave();
     },
 
-    onNodesChange(changes) {
-      const nodes = applyNodeChanges(changes, get().nodes);
-      // Fold positions back into canonical cards only when the drag settles:
-      // React Flow fires a position change per pointermove with dragging: true
-      // and a final one with dragging: false on release (keyboard and
-      // programmatic moves carry no flag, so they commit at once). Committing
-      // per frame gave `cards` a new identity every pointermove, which re-ran
-      // everything derived from it — the roster's four passes, the participant
-      // edges' pair sweep, the timeline — on every frame of a drag. During the
-      // drag only `nodes` moves; `node.data.card.position` lags, harmlessly:
-      // nothing renders it (Tidy reads React Flow's own positions).
-      // Select/dimension churn is ignored as before. (Deletion is an M2
-      // feature; see deleteKeyCode.)
-      const settled = changes.some((c) => c.type === 'position' && !c.dragging);
-      if (settled) {
-        const positionById = new Map(nodes.map((n) => [n.id, n.position]));
-        set({
-          nodes,
-          // Only a moved card gets a new identity, so unmoved chips and rows
-          // keep theirs.
-          cards: get().cards.map((card) => {
-            const p = positionById.get(card.id);
-            return p && (p.x !== card.position.x || p.y !== card.position.y)
-              ? { ...card, position: p }
-              : card;
-          }),
-        });
-        scheduleAutosave();
-      } else {
-        set({ nodes });
-      }
-    },
-
-    onEdgesChange(changes) {
-      set({ edges: applyEdgeChanges(changes, get().edges) });
-    },
-
-    onConnect(conn) {
-      if (conn.source && conn.target) get().addConnection(conn.source, conn.target);
-    },
-
     setViewport(vp) {
       set({ viewport: vp });
       // Persist the camera, but don't mark content dirty: panning must not
@@ -696,7 +627,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       const card = blankCard(id, { clusterIds: first ? [first.id] : [], ...init, position });
       set({
         cards: [...get().cards, card],
-        nodes: [...get().nodes, cardToNode(card, get().clusters)],
         selectedCardId: id,
         // Go to wherever it went. + Add > Document and a message dropped from
         // Mail both make a card the board does not draw; without this they make
@@ -770,10 +700,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
         }),
       );
 
-      set({
-        cards: [...get().cards, ...added],
-        nodes: [...get().nodes, ...added.map((c) => cardToNode(c, get().clusters))],
-      });
+      set({ cards: [...get().cards, ...added] });
       scheduleAutosave();
       return [...completedIds, ...added.map((c) => c.id)];
     },
@@ -790,7 +717,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // Index the just-saved files' text in the background, so a search finds words
       // inside them (not only the fields on the card). Idempotent, so re-imports and
       // the startup resume() never double-work.
-      useJobQueueStore.getState().enqueue(
+      jobQueueStore.getState().enqueue(
         drafts.flatMap((d) => [d.imageFile, d.document?.file].filter((n): n is string => !!n)),
       );
       // One file: open it, so its picture/metadata is right there. Several: just go
@@ -866,17 +793,12 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
     arrangeCards(positions) {
       if (!positions.size) return;
-      const cards = get().cards.map((c) => {
-        const p = positions.get(c.id);
-        return p ? { ...c, position: p } : c;
-      });
       set({
-        cards,
-        // Keep each moved node's measured size and cluster colour — only its
-        // position, and the card it mirrors, change.
-        nodes: get().nodes.map((n) => {
-          const p = positions.get(n.id);
-          return p ? { ...n, position: p, data: { ...n.data, card: { ...n.data.card, position: p } } } : n;
+        cards: get().cards.map((card) => {
+          const p = positions.get(card.id);
+          return p && (p.x !== card.position.x || p.y !== card.position.y)
+            ? { ...card, position: p }
+            : card;
         }),
       });
       scheduleAutosave();
@@ -888,16 +810,9 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // This is the most-called mutator, so one indexed scan, not three.
       const i = get().cards.findIndex((c) => c.id === id);
       if (i === -1) return;
-      const updated = { ...get().cards[i], ...patch };
       const cards = [...get().cards];
-      cards[i] = updated;
-      set({
-        cards,
-        // Keep the derived node in sync with the canonical card.
-        nodes: get().nodes.map((n) =>
-          n.id === id ? cardToNode(updated, get().clusters) : n,
-        ),
-      });
+      cards[i] = { ...cards[i], ...patch };
+      set({ cards });
       scheduleAutosave();
     },
 
@@ -921,10 +836,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
           occurredAtPrecision: source.occurredAtPrecision,
           event: { sourceCardId: cardId },
         });
-        set({
-          cards: [...get().cards, event],
-          nodes: [...get().nodes, cardToNode(event, get().clusters)],
-        });
+        set({ cards: [...get().cards, event] });
         scheduleAutosave();
         // The string from the source to the event it evidences.
         get().addConnection(cardId, id, 'evidences');
@@ -940,7 +852,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // nothing in the schema would catch it, so it would persist and quietly
       // fail to draw. The editor counts these first (see touches) so the user is
       // told what they are about to lose rather than finding out later.
-      const { cards, nodes, connections, edges, selectedCardId } = get();
+      const { cards, connections, selectedCardId } = get();
       const card = cards.find((c) => c.id === id);
       if (!card) return;
       // One partition: what stays on the board, and what the undo snapshot takes.
@@ -949,9 +861,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       for (const c of connections) (touches(c, id) ? taken : kept).push(c);
       set({
         cards: cards.filter((c) => c.id !== id),
-        nodes: nodes.filter((n) => n.id !== id),
         connections: kept,
-        edges: edges.filter((e) => !touches(e, id)),
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
@@ -980,9 +890,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
         );
         set({
           cards: [...get().cards, card],
-          nodes: [...get().nodes, cardToNode(card, get().clusters)],
           connections: [...get().connections, ...connections],
-          edges: [...get().edges, ...connections.map(connectionToEdge)],
           lastDelete: null,
         });
       } else {
@@ -998,7 +906,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
           }),
           lastDelete: null,
         });
-        refreshNodes();
       }
       scheduleAutosave();
     },
@@ -1029,8 +936,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       set({
         clusters: get().clusters.map((c) => (c.id === id ? { ...c, ...patch } : c)),
       });
-      // Cached node colours need rebuilding when a cluster colour changes.
-      if (patch.color !== undefined) refreshNodes();
       scheduleAutosave();
     },
 
@@ -1053,7 +958,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
         cards,
         lastDelete: { kind: 'cluster', cluster, index, memberships },
       });
-      refreshNodes();
       scheduleAutosave();
     },
 
@@ -1071,37 +975,23 @@ export const useBoardStore = create<BoardState>((set, get) => {
         kind: 'red-string',
         ...(trimmed ? { label: trimmed } : {}),
       };
-      set({
-        connections: [...get().connections, connection],
-        edges: [...get().edges, connectionToEdge(connection)],
-      });
+      set({ connections: [...get().connections, connection] });
       scheduleAutosave();
     },
 
     updateConnection(id, patch) {
-      const connections = get().connections.map((c) => (c.id === id ? { ...c, ...patch } : c));
-      const updated = connections.find((c) => c.id === id)!;
-      set({
-        connections,
-        // Keep the derived edge in sync with the canonical connection, exactly as
-        // updateCard does for its node. Rebuilding through connectionToEdge is
-        // what carries a new grade to the thing that draws the string.
-        edges: get().edges.map((e) => (e.id === id ? connectionToEdge(updated) : e)),
-      });
+      set({ connections: get().connections.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
       scheduleAutosave();
     },
 
     deleteConnection(id) {
-      set({
-        connections: get().connections.filter((c) => c.id !== id),
-        edges: get().edges.filter((e) => e.id !== id),
-      });
+      set({ connections: get().connections.filter((c) => c.id !== id) });
       scheduleAutosave();
     },
 
     toBoard(restamp = true) {
-      // Canonical state is kept current as the user edits (positions folded in
-      // onNodesChange), so the board can be assembled directly.
+      // Canonical state is kept current as the user edits (a drag's positions are
+      // folded in when it settles), so the board can be assembled directly.
       const { meta, clusters, cards, connections, viewport } = get();
       return {
         version: 4,

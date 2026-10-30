@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
-import { useBoardStore } from '../../store/boardStore';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import { extOf } from '../../lib/fileTypes';
 import { clamp, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
+import { useBoardStore } from '../../hooks/useStores';
 
 // The crop is authored in a 4:3 frame, matching how a card shows its picture. The
 // minimum scale is cover-fit, so the frame is never left showing bare film. The

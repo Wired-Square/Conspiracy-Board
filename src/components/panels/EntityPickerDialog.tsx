@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { CardKind } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
 import { Modal } from '../ui/Modal';
+import { useBoardStore } from '../../hooks/useStores';
 
 /** A "＋ New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */

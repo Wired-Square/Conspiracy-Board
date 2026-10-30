@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useBoardStore, type BoardState } from '../store/boardStore';
+import { boardStore, type BoardState } from '../store/boardStore';
 import { openDialog } from '../store/dialogStore';
 import { storage } from '../storage';
 import { prompt } from '../store/promptStore';
@@ -17,7 +17,7 @@ type ViewMenuEvent = { view: View };
 
 /** Rebuild the native menu from the current library and view. */
 async function syncMenu() {
-  const { currentBoardId, meta, view } = useBoardStore.getState();
+  const { currentBoardId, meta, view } = boardStore.getState();
   const summaries = await storage.listBoards();
   // The index lags a rename by the 500ms autosave, and the current board is the
   // only one renamable from the menu — so show its live title straight away.
@@ -29,7 +29,7 @@ async function syncMenu() {
 }
 
 async function handle(event: BoardMenuEvent) {
-  const store = useBoardStore.getState();
+  const store = boardStore.getState();
   switch (event.action) {
     case 'new': {
       const name = await prompt({
@@ -88,11 +88,11 @@ export function startBoardMenu(): () => void {
   // doesn't change, so the subscription below wouldn't put the tick back. A real
   // switch leaves it to the subscription, so the menu rebuilds once.
   const offView = listenTauri<ViewMenuEvent>('menu:view', (e) => {
-    const changed = useBoardStore.getState().view !== e.payload.view;
-    useBoardStore.getState().setView(e.payload.view);
+    const changed = boardStore.getState().view !== e.payload.view;
+    boardStore.getState().setView(e.payload.view);
     if (!changed) void syncMenu();
   });
-  const unsubscribe = useBoardStore.subscribe((s, prev) => {
+  const unsubscribe = boardStore.subscribe((s, prev) => {
     if (menuChanged(s, prev)) requestSync();
   });
   requestSync();

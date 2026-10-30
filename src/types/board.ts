@@ -1,6 +1,6 @@
 // Domain model for a conspiracy board. This is the canonical shape persisted to
 // a board file, and to data/board.json. React Flow nodes/edges are a derived
-// view (see src/data/mappers.ts) and are never persisted directly.
+// view (see components/canvas/flowAdapter.ts) and are never persisted directly.
 
 export interface Vec2 {
   x: number;

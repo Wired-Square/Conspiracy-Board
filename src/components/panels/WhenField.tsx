@@ -6,7 +6,7 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from '../../lib/dates';
-import { useBoardStore } from '../../store/boardStore';
+import { useBoardStore } from '../../hooks/useStores';
 
 type WhenMode = 'none' | DatePrecision;
 

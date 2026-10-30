@@ -1,7 +1,7 @@
 import { b64ToBytes } from '../lib/base64';
 import { isEmailFile, isMediaFile } from '../lib/fileTypes';
-import { useBoardStore } from '../store/boardStore';
-import { NEW_CLUSTER, useEmailImportStore } from '../store/emailImportStore';
+import { boardStore } from '../store/boardStore';
+import { emailImportStore, NEW_CLUSTER } from '../store/emailImportStore';
 import { listenTauri } from './listen';
 
 // Files the shell sweeps out of the Inbox folder (src-tauri/src/board_store/inbox.rs).
@@ -25,10 +25,10 @@ async function filesArrived({ files }: InboxBatch) {
   const emails = picked.filter((f) => isEmailFile(f.name));
   const media = picked.filter((f) => isMediaFile(f.name));
 
-  if (media.length) await useBoardStore.getState().addImportedMedia(media);
+  if (media.length) await boardStore.getState().addImportedMedia(media);
 
   if (emails.length) {
-    const store = useEmailImportStore.getState();
+    const store = emailImportStore.getState();
     store.openWith();
     // A folder batch is usually a whole thread, so group it into a fresh cluster by
     // default; a lone message stays ungrouped. The modal lets the user change either.

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useBoardStore } from '../../store/boardStore';
+import { useBoardStore } from '../../hooks/useStores';
 
 export function ClusterPanel() {
   const clusters = useBoardStore((s) => s.clusters);

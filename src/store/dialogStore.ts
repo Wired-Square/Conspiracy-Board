@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createStore } from 'zustand/vanilla';
 import type { Board } from '../types/board';
 
 // Which dialogs are open, held outside React so the native menu and the store can
@@ -22,12 +22,12 @@ const CLOSED: Dialogs = {
   bundleImportBoards: null,
 };
 
-export const useDialogStore = create<Dialogs>(() => CLOSED);
+export const dialogStore = createStore<Dialogs>()(() => CLOSED);
 
 export function openDialog(open: Partial<Dialogs>): void {
-  useDialogStore.setState(open);
+  dialogStore.setState(open);
 }
 
 export function closeDialog(name: keyof Dialogs): void {
-  useDialogStore.setState({ [name]: CLOSED[name] });
+  dialogStore.setState({ [name]: CLOSED[name] });
 }

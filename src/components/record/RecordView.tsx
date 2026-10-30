@@ -1,6 +1,5 @@
 import { memo, useMemo, useState } from 'react';
 import type { Card, Connection } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { useRoster } from '../../hooks/useRoster';
 import { useVisibleCards } from '../../hooks/useVisibleCards';
 import { clusterColor, NO_CLUSTER_ACCENT, primaryClusterId } from '../../lib/clusters';
@@ -19,6 +18,7 @@ import { shortAddress } from '../../lib/email/addresses';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
 import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox
 // would bury the argument under two hundred cards of post — so it is here, in

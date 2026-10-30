@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ReactFlowProvider, Panel } from '@xyflow/react';
-import { useBoardStore } from './store/boardStore';
-import { useEmailImportStore } from './store/emailImportStore';
 import { BoardCanvas } from './components/BoardCanvas';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
@@ -26,7 +24,8 @@ import { startUndoShortcut } from './platform/undoShortcut';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startQuitGuard } from './platform/quitGuard';
-import { closeDialog, useDialogStore } from './store/dialogStore';
+import { closeDialog } from './store/dialogStore';
+import { useBoardStore, useDialogStore, useEmailImportStore } from './hooks/useStores';
 
 // Subscribes to importStatus on its own, so a per-media progress event re-renders
 // this leaf rather than App and the whole canvas beneath it.

@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createStore } from 'zustand/vanilla';
 import { parseEmailFile, parseEmailText, type EmailDraft } from '../lib/email/parseEmails';
 import type { PickedFile } from '../storage/StorageAdapter';
 
@@ -36,7 +36,7 @@ type EmailImportState = {
   parsePaste: (raw: string) => Promise<void>;
 };
 
-export const useEmailImportStore = create<EmailImportState>((set) => {
+export const emailImportStore = createStore<EmailImportState>()((set) => {
   // Clears any previous result, so a re-parse in the same modal session doesn't
   // re-render the old preview on every progress tick.
   const startParse = () => set({ busy: true, progress: null, drafts: [], errors: [] });

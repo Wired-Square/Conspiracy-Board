@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useBoardStore, type DeleteSnapshot } from '../../store/boardStore';
+import { type DeleteSnapshot } from '../../store/boardStore';
+import { useBoardStore } from '../../hooks/useStores';
 
 const SHOW_MS = 10_000;
 

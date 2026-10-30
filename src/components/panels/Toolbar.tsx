@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useBoardStore } from '../../store/boardStore';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { useEmailImportStore } from '../../store/emailImportStore';
-import { useMediaAuditStore } from '../../store/mediaAuditStore';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
 import { plural } from '../../lib/format';
@@ -16,6 +13,7 @@ import type { CardKind } from '../../types/board';
 import type { CardNode } from '../../types/reactflow';
 import { VIEW_META, type View } from '../../types/view';
 import { Menu } from '../ui/Menu';
+import { useBoardStore, useEmailImportStore, useMediaAuditStore } from '../../hooks/useStores';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
 

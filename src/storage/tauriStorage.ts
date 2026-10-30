@@ -56,7 +56,7 @@ type EntityBodies = {
 const lastSaved = new Map<string, EntityBodies>();
 
 // Serialised JSON per entity, keyed by object identity. The store replaces an
-// entity object on every mutation — updateCard, onNodesChange, arrangeCards,
+// entity object on every mutation — updateCard, arrangeCards,
 // deleteCluster, updateCluster, updateConnection all spread a fresh object —
 // so an unchanged reference always means unchanged JSON, and a save only pays
 // for stringifying the entities that actually changed since the last one.

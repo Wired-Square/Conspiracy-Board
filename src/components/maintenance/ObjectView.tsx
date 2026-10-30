@@ -1,8 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel } from '@xyflow/react';
-import { useBoardStore } from '../../store/boardStore';
-import { jobsPending, useJobQueueStore } from '../../store/jobQueueStore';
-import { useMediaAuditStore } from '../../store/mediaAuditStore';
+import { jobsPending } from '../../store/jobQueueStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
@@ -14,6 +12,7 @@ import { mediaIconFor } from '../../lib/mediaIcon';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
+import { useBoardStore, useJobQueueStore, useMediaAuditStore } from '../../hooks/useStores';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
 // what the boards reference, plus a way to re-run the processing that first read

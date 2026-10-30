@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useBoardStore } from './boardStore';
+import { boardStore } from './boardStore';
 
-const pending = () => useBoardStore.getState().savePending;
-const pan = () => useBoardStore.getState().setViewport({ x: 0, y: 0, zoom: 1 });
+const pending = () => boardStore.getState().savePending;
+const pan = () => boardStore.getState().setViewport({ x: 0, y: 0, zoom: 1 });
 
 describe('savePending', () => {
   afterEach(() => {
@@ -20,7 +20,7 @@ describe('savePending', () => {
   it('is released by flushSaves without waiting out the debounce', async () => {
     vi.useFakeTimers();
     pan();
-    await useBoardStore.getState().flushSaves();
+    await boardStore.getState().flushSaves();
     expect(pending()).toBe(false);
   });
 });

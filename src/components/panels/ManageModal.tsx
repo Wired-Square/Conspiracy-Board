@@ -1,9 +1,9 @@
 import { Modal } from '../ui/Modal';
-import { useBoardStore } from '../../store/boardStore';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { prompt, confirm } from '../../store/promptStore';
 import { errorMessage } from '../../lib/errors';
+import { useBoardStore } from '../../hooks/useStores';
 
 // Managing the open board — rename it, reveal its file, or delete it — gathered
 // into one dialog rather than three separate File-menu items. The rename and

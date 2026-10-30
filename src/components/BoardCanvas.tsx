@@ -9,7 +9,6 @@ import {
   type NodeMouseHandler,
   type Viewport as RFViewport,
 } from '@xyflow/react';
-import { useBoardStore } from '../store/boardStore';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/edgeTypes';
 import { useHighlightConnections } from '../hooks/useHighlightConnections';
@@ -19,19 +18,18 @@ import { hiddenClusterIds, isVisible, NO_CLUSTER_ACCENT } from '../lib/clusters'
 import { isBoardKind } from '../lib/kinds';
 import { cardMatchesEntity, normaliseQuery } from '../lib/search';
 import type { CardNode } from '../types/reactflow';
+import { useBoardStore } from '../hooks/useStores';
+import { onConnect, onEdgesChange, onNodesChange, useFlowStore } from './canvas/flowAdapter';
 
 export function BoardCanvas() {
   const cards = useBoardStore((s) => s.cards);
-  const nodes = useBoardStore((s) => s.nodes);
-  const edges = useBoardStore((s) => s.edges);
+  const nodes = useFlowStore((s) => s.nodes);
+  const edges = useFlowStore((s) => s.edges);
   const clusters = useBoardStore((s) => s.clusters);
   const viewport = useBoardStore((s) => s.viewport);
   const selectedCardId = useBoardStore((s) => s.selectedCardId);
   const searchQuery = useBoardStore((s) => s.searchQuery);
 
-  const onNodesChange = useBoardStore((s) => s.onNodesChange);
-  const onEdgesChange = useBoardStore((s) => s.onEdgesChange);
-  const onConnect = useBoardStore((s) => s.onConnect);
   const setViewport = useBoardStore((s) => s.setViewport);
   const selectCard = useBoardStore((s) => s.selectCard);
 
@@ -43,17 +41,15 @@ export function BoardCanvas() {
   // the record and belongs in the Record view.
   //
   // Which ids are visible is derived from `cards`, not `nodes`: during a drag
-  // the store rebuilds `nodes` every pointermove but leaves `cards` alone until
-  // the drag settles (see onNodesChange), so everything keyed on this set — the
+  // `nodes` changes every pointermove but `cards` holds still until the drag
+  // settles (see flowAdapter's onNodesChange), so everything keyed on this set — the
   // participant edges above all — stays put through a drag instead of
   // recomputing per frame.
   //
-  // The filter lives in the canvas rather than the mappers on purpose. The
-  // store keeps a node for every card and updateCard *maps over* that array in
-  // place — it never adds or removes — so a mapper-level filter would break
-  // switching kind in both directions: evidence→email would strand a node on
-  // the canvas, and email→evidence would never get one. The canvas simply
-  // declines to draw.
+  // The filter lives here rather than in flowAdapter on purpose. The adapter
+  // keeps a node for every card, so switching kind works in both directions:
+  // a filter there would have to add and drop nodes as a card's kind changes.
+  // The canvas simply declines to draw.
   const visibleNodeIds = useMemo(
     () =>
       new Set(

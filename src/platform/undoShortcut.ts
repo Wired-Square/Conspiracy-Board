@@ -1,4 +1,4 @@
-import { useBoardStore } from '../store/boardStore';
+import { boardStore } from '../store/boardStore';
 
 /** Whether the key event happened inside something that has its own undo. */
 function inEditable(target: EventTarget | null): boolean {
@@ -19,9 +19,9 @@ export function startUndoShortcut(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== 'z') return;
     if (inEditable(e.target)) return;
-    if (!useBoardStore.getState().lastDelete) return;
+    if (!boardStore.getState().lastDelete) return;
     e.preventDefault();
-    useBoardStore.getState().undoLastDelete();
+    boardStore.getState().undoLastDelete();
   };
   window.addEventListener('keydown', onKeyDown);
   return () => window.removeEventListener('keydown', onKeyDown);

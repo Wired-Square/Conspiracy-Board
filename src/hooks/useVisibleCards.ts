@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import type { Card } from '../types/board';
-import { useBoardStore } from '../store/boardStore';
 import { hiddenClusterIds, isVisible } from '../lib/clusters';
 import { cardMatchesEntity, normaliseQuery } from '../lib/search';
+import { useBoardStore } from './useStores';
 
 /**
  * Canonical cards the record can currently see, per cluster visibility and the

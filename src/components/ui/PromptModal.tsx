@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
-import { usePromptStore, type PromptRequest } from '../../store/promptStore';
+import { promptStore, type PromptRequest } from '../../store/promptStore';
+import { usePromptStore } from '../../hooks/useStores';
 
 /**
  * Renders the one active prompt/confirm request (see promptStore) on the shared
@@ -24,7 +25,7 @@ function PromptDialog({ request }: { request: PromptRequest }) {
   }, []);
 
   // Clearing narrows on `kind`, so resolve gets its exact type with no cast.
-  const clear = () => usePromptStore.setState({ request: null });
+  const clear = () => promptStore.setState({ request: null });
   const cancel = () => {
     clear();
     if (request.kind === 'text') request.resolve(null);

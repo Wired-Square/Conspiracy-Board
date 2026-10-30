@@ -1,4 +1,4 @@
-import { useBoardStore } from '../store/boardStore';
+import { boardStore } from '../store/boardStore';
 import { listenTauri } from './listen';
 
 type ImportProgress = { done: number; total: number };
@@ -10,8 +10,8 @@ type ImportProgress = { done: number; total: number };
 // overlay can't revive it.
 export function startImportProgress(): () => void {
   return listenTauri<ImportProgress>('import:progress', (e) => {
-    if (useBoardStore.getState().importStatus === null) return;
+    if (boardStore.getState().importStatus === null) return;
     const { done, total } = e.payload;
-    useBoardStore.setState({ importStatus: `Importing media ${done} of ${total}…` });
+    boardStore.setState({ importStatus: `Importing media ${done} of ${total}…` });
   });
 }

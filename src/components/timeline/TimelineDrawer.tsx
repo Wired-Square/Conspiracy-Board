@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useBoardStore } from '../../store/boardStore';
 import { useTimelineCards } from '../../hooks/useTimelineCards';
 import { useDocHits } from '../../hooks/useDocHits';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -11,6 +10,7 @@ import { CARD_H, CARD_W } from '../../lib/layout';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * A chronological strip under the board.
@@ -159,7 +159,7 @@ export function TimelineDrawer() {
   }, []);
 
   // onPick is handed to every memoized chip, so it must keep a stable identity: a
-  // card drag respreads `cards` each pointermove (see boardStore's onNodesChange),
+  // card drag respreads `cards` each pointermove (see flowAdapter's onNodesChange),
   // which rebuilds `datedById`, so depending on it directly would re-render the
   // whole strip every frame. The measure context is read through a ref instead.
   const measureRef = useRef({ measuring, datedById });

@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { useBoardStore } from './boardStore';
+import { createStore } from 'zustand/vanilla';
+import { boardStore } from './boardStore';
 import { storage } from '../storage';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { auditMedia, type CurrentRef, type MediaRow } from '../lib/maintenance';
@@ -29,7 +29,7 @@ type MediaAuditState = {
   refresh: () => Promise<void>;
 };
 
-export const useMediaAuditStore = create<MediaAuditState>((set) => ({
+export const mediaAuditStore = createStore<MediaAuditState>()((set) => ({
   rows: [],
   loading: true,
   error: null,
@@ -42,7 +42,7 @@ export const useMediaAuditStore = create<MediaAuditState>((set) => ({
     try {
       // The open board's references come from memory — its live, possibly-unsaved
       // state — each tagged with its owner and media kind for the row's reprocess.
-      const { cards, currentBoardId } = useBoardStore.getState();
+      const { cards, currentBoardId } = boardStore.getState();
       const currentRefs: CurrentRef[] = cards.flatMap((c) =>
         cardMediaEntries(c).map((e) => ({
           file: e.file,

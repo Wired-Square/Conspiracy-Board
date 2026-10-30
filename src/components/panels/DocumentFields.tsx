@@ -1,6 +1,5 @@
 import { useRef } from 'react';
 import type { Card } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { storage } from '../../storage';
 import type { MediaMeta } from '../../storage/StorageAdapter';
 import { saveFile } from '../../storage/media';
@@ -8,6 +7,7 @@ import { documentMime } from '../../lib/fileTypes';
 import { pickDocumentMeta } from '../../lib/import/meta';
 import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * The file behind a document card. A document *is* a piece of the record — a

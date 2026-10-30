@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
-import { useBoardStore } from '../../store/boardStore';
 import { closeDialog } from '../../store/dialogStore';
 import { plural } from '../../lib/format';
 import type { BoardSummary } from '../../data/boardIndex';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * Choose what to bundle: this board, some boards, or the whole library. The chosen

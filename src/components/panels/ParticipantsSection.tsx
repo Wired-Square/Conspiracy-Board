@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import type { Card } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { useRoster } from '../../hooks/useRoster';
 import { relationsOf } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
 import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * What this card shares addresses with — derived, read-only, click to open.

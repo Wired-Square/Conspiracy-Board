@@ -51,7 +51,7 @@ export function extraClusterColors(
   clusters: Cluster[],
 ): string[] {
   // The overwhelming case — zero or one membership — allocates nothing: this
-  // runs for every card on every refreshNodes.
+  // runs for every card whose clusters change.
   if (clusterIds.length <= 1) return NO_EXTRAS;
   const colors: string[] = [];
   for (const id of clusterIds.slice(1)) {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { buildRoster, type Roster } from '../lib/roster';
-import { useBoardStore } from '../store/boardStore';
+import { useBoardStore } from './useStores';
 
 /**
  * The participant graph for the current board, built once per change to the

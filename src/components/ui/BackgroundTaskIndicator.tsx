@@ -1,4 +1,5 @@
-import { jobsPending, useJobQueueStore } from '../../store/jobQueueStore';
+import { jobsPending } from '../../store/jobQueueStore';
+import { useJobQueueStore } from '../../hooks/useStores';
 
 // A small, non-blocking pill that background indexing is running — the search index
 // reading text out of imported files. Unlike BusyOverlay, it never covers the screen:

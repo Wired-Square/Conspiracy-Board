@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useBoardStore } from '../../store/boardStore';
 import { touches } from '../../lib/connections';
 import { KIND_META } from '../../lib/kinds';
 import { GradeField } from './GradeField';
 import { EntityPickerDialog } from './EntityPickerDialog';
+import { useBoardStore } from '../../hooks/useStores';
 
 export function ConnectionsSection({ cardId }: { cardId: string }) {
   const cards = useBoardStore((s) => s.cards);
@@ -40,7 +40,7 @@ export function ConnectionsSection({ cardId }: { cardId: string }) {
                 {other?.title || '(unknown)'}
               </button>
               {/* The string's label, editable in place — its own paper tag on the
-                  board reads from this, so a rename lands there live (see mappers,
+                  board reads from this, so a rename lands there live (see flowAdapter,
                   updateConnection). Blank clears it back to an unlabelled string. */}
               <input
                 className="connection-label"

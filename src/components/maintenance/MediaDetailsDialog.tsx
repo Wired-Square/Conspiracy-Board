@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useBoardStore } from '../../store/boardStore';
 import { storage } from '../../storage';
 import type { MediaMeta } from '../../storage/StorageAdapter';
 import { formatBytes } from '../../lib/format';
@@ -7,6 +6,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { Modal } from '../ui/Modal';
 import { MetaList } from '../ui/MetaList';
+import { useBoardStore } from '../../hooks/useStores';
 
 // What one media file is and what it carries — reached from a row's "Details" button.
 // The identity (name, size, status) is already in hand on the MediaRow; the embedded

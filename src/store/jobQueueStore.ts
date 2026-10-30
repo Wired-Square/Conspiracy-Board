@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createStore } from 'zustand/vanilla';
 import { storage } from '../storage';
 
 // The background worker for the search index: it turns imported files into searchable
@@ -32,7 +32,7 @@ type JobQueueState = {
  *  component selecting it re-renders only when the count changes. */
 export const jobsPending = (s: JobQueueState): number => s.queue.length + s.inFlight.length;
 
-export const useJobQueueStore = create<JobQueueState>((set, get) => {
+export const jobQueueStore = createStore<JobQueueState>()((set, get) => {
   const runOne = (name: string) => {
     const forced = get().force.has(name);
     storage

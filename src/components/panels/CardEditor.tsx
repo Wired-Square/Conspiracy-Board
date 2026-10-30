@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBoardStore } from '../../store/boardStore';
 import { openDialog } from '../../store/dialogStore';
 import { touches } from '../../lib/connections';
 import { MarkdownView } from '../ui/MarkdownView';
@@ -31,6 +30,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';
 import type { Card, CardKind, Connection, ImageMeta } from '../../types/board';
 import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 /** A photo's EXIF as display rows: size, when, camera, where. */
 function imageFacts(m: ImageMeta): [string, string][] {

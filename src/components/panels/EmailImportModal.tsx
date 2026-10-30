@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Modal } from '../ui/Modal';
-import { useBoardStore } from '../../store/boardStore';
-import { useJobQueueStore } from '../../store/jobQueueStore';
-import { NEW_CLUSTER, useEmailImportStore } from '../../store/emailImportStore';
+import { jobQueueStore } from '../../store/jobQueueStore';
+import { NEW_CLUSTER } from '../../store/emailImportStore';
 import { useRoster } from '../../hooks/useRoster';
 import { EMAIL_FILE_ACCEPT } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta, matchDraft } from '../../lib/email/meta';
@@ -17,8 +16,9 @@ import { formatBytes, plural } from '../../lib/format';
 import { storage } from '../../storage';
 import { persistDraftMedia } from '../../lib/email/persistMedia';
 import type { EmailDraft } from '../../lib/email/parseEmails';
-import type { CardDraft } from '../../store/boardStore';
+import { boardStore, type CardDraft } from '../../store/boardStore';
 import type { Card } from '../../types/board';
+import { useBoardStore, useEmailImportStore } from '../../hooks/useStores';
 
 /** Parsing is on the main thread; a few hundred messages is ~1-2s, which the
  *  progress count covers. A worker would be right at thousands, not hundreds. */
@@ -84,7 +84,7 @@ export function EmailImportModal() {
   // Mounted only while open (see App), so there is no self-hide guard here and
   // the paste box below starts empty every time.
   const { tab, drafts, errors, clusterId, busy, progress, close, setTab, setClusterId, parseFiles, parsePaste } =
-    useEmailImportStore();
+    useEmailImportStore((s) => s);
 
   const clusters = useBoardStore((s) => s.clusters);
   const cards = useBoardStore((s) => s.cards);
@@ -209,7 +209,7 @@ export function EmailImportModal() {
 
     // Index each message's .eml and attachments in the background, so a search finds
     // words in the mail itself, not only the subject/addresses on the card.
-    useJobQueueStore.getState().enqueue(
+    jobQueueStore.getState().enqueue(
       emailDrafts.flatMap((d) =>
         [d.email?.emlFile, ...(d.email?.attachments ?? []).map((a) => a.file)].filter(
           (n): n is string => !!n,
@@ -247,7 +247,7 @@ export function EmailImportModal() {
     // the store rather than slicing addedIds: addCards sorts the batch by date,
     // so the ids do not come back in the order they went in.
     const drawn = new Set(
-      useBoardStore
+      boardStore
         .getState()
         .cards.filter((c) => isBoardKind(c.kind))
         .map((c) => c.id),
