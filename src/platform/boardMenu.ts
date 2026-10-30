@@ -1,11 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useEffect } from 'react';
-import { useBoardStore } from '../store/boardStore';
+import { useBoardStore, type BoardState } from '../store/boardStore';
 import { openDialog } from '../store/dialogStore';
 import { storage } from '../storage';
 import { prompt } from '../store/promptStore';
 import type { View } from '../types/view';
-import { useTauriListen } from './useTauriListen';
+import { listenTauri } from './listen';
 
 // The webview half of the native File and View menus (built in
 // src-tauri/src/menu.rs). It keeps the menu's board list and view checkmark in
@@ -61,29 +60,46 @@ async function handle(event: BoardMenuEvent) {
   }
 }
 
-/** Drive the native menus from React: dispatch their clicks, keep them in sync. */
-export function useBoardMenu() {
-  useTauriListen<BoardMenuEvent>('menu:board', (e) => void handle(e.payload));
+// The board list, its titles, the checkmark and the current view are a pure
+// function of these fields — every mutation moves one (new/open/import/delete
+// move currentBoardId; rename moves meta.title; the dropdown moves view) — so
+// watching them re-syncs the menu after any change, and on first load when the
+// list arrives. (Recency *order* can lag an unrelated edit until the next
+// switch/rename; the contents are always right.)
+const menuChanged = (s: BoardState, prev: BoardState) =>
+  s.currentBoardId !== prev.currentBoardId || s.meta.title !== prev.meta.title || s.view !== prev.view;
+
+/** Drive the native menus: dispatch their clicks, keep them in sync. */
+export function startBoardMenu(): () => void {
+  // One rebuild per burst: opening a board moves several of the fields at once.
+  let queued = false;
+  const requestSync = () => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      void syncMenu();
+    });
+  };
+
+  const offBoard = listenTauri<BoardMenuEvent>('menu:board', (e) => void handle(e.payload));
   // A View-menu click switches the surface. Only re-sync by hand when it re-picks
   // the surface already showing — the OS unticks the item on click but `view`
-  // doesn't change, so the effect below (which fires on change) wouldn't put the
-  // tick back. A real switch leaves it to the effect, so the menu rebuilds once.
-  useTauriListen<ViewMenuEvent>('menu:view', (e) => {
+  // doesn't change, so the subscription below wouldn't put the tick back. A real
+  // switch leaves it to the subscription, so the menu rebuilds once.
+  const offView = listenTauri<ViewMenuEvent>('menu:view', (e) => {
     const changed = useBoardStore.getState().view !== e.payload.view;
     useBoardStore.getState().setView(e.payload.view);
     if (!changed) void syncMenu();
   });
+  const unsubscribe = useBoardStore.subscribe((s, prev) => {
+    if (menuChanged(s, prev)) requestSync();
+  });
+  requestSync();
 
-  // The board list, its titles, the checkmark and the current view are a pure
-  // function of these fields — every mutation moves one (new/open/import/delete
-  // move currentBoardId; rename moves meta.title; the dropdown moves view) — so
-  // watching them re-syncs the menu after any change, and on first load when the
-  // list arrives. (Recency *order* can lag an unrelated edit until the next
-  // switch/rename; the contents are always right.)
-  const currentBoardId = useBoardStore((s) => s.currentBoardId);
-  const title = useBoardStore((s) => s.meta.title);
-  const view = useBoardStore((s) => s.view);
-  useEffect(() => {
-    void syncMenu();
-  }, [currentBoardId, title, view]);
+  return () => {
+    offBoard();
+    offView();
+    unsubscribe();
+  };
 }

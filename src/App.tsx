@@ -20,11 +20,12 @@ import { BusyOverlay } from './components/ui/BusyOverlay';
 import { BackgroundTaskIndicator } from './components/ui/BackgroundTaskIndicator';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
-import { useInbox } from './platform/inbox';
-import { useUndoShortcut } from './hooks/useUndoShortcut';
-import { useBoardMenu } from './platform/boardMenu';
-import { useImportProgress } from './platform/importProgress';
-import { useQuitGuard } from './platform/quitGuard';
+import { useStart } from './hooks/useStart';
+import { startInbox } from './platform/inbox';
+import { startUndoShortcut } from './platform/undoShortcut';
+import { startBoardMenu } from './platform/boardMenu';
+import { startImportProgress } from './platform/importProgress';
+import { startQuitGuard } from './platform/quitGuard';
 import { closeDialog, useDialogStore } from './store/dialogStore';
 
 // Subscribes to importStatus on its own, so a per-media progress event re-renders
@@ -53,15 +54,15 @@ export default function App() {
 
   // Files the shell sweeps out of the Inbox drop-folder — the one automatic way
   // in for email, images and documents (see src/platform/inbox.ts).
-  useInbox();
+  useStart(startInbox);
   // Cmd+Z restores the last delete, board-wide.
-  useUndoShortcut();
+  useStart(startUndoShortcut);
   // The native File menu (src-tauri/src/menu.rs) drives board management.
-  useBoardMenu();
+  useStart(startBoardMenu);
   // Refines the import busy-overlay text as the shell stores a bundle's media.
-  useImportProgress();
+  useStart(startImportProgress);
   // Holds Cmd+Q until a pending autosave has landed.
-  useQuitGuard();
+  useStart(startQuitGuard);
 
   if (!ready) {
     return <div className="loading">Pinning the board…</div>;

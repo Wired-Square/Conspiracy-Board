@@ -133,7 +133,7 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
   };
 }
 
-type BoardState = {
+export type BoardState = {
   // Canonical content (authoritative for everything except live node positions).
   meta: Board['meta'];
   clusters: Cluster[];
@@ -186,7 +186,7 @@ type BoardState = {
   /**
    * A message while a bundle import is working, or null when idle — drives the
    * busy overlay. Set when reading begins and cleared when it's done; the shell's
-   * `import:progress` events refine it to "media x of y" (see useImportProgress).
+   * `import:progress` events refine it to "media x of y" (see startImportProgress).
    */
   importStatus: string | null;
   /** An autosave is pending or a save is in flight; the shell holds a quit on it. */
@@ -262,7 +262,7 @@ type BoardState = {
   deleteCard: (id: string) => void;
   /**
    * The last deletion, restorable until the next delete or a board switch.
-   * The toast offers it and Cmd+Z takes it (see useUndoShortcut); hiding the
+   * The toast offers it and Cmd+Z takes it (see startUndoShortcut); hiding the
    * toast does not clear it.
    */
   lastDelete: DeleteSnapshot | null;

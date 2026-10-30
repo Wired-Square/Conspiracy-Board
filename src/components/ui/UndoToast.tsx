@@ -13,7 +13,7 @@ function label(snap: DeleteSnapshot): string {
  * The way back from a delete: a pill beside BackgroundTaskIndicator offering
  * Undo for a few seconds after a card or cluster is deleted. Hiding is only
  * the toast giving up the space — the snapshot stays restorable (Cmd+Z, see
- * useUndoShortcut) until the next delete or a board switch clears it.
+ * startUndoShortcut) until the next delete or a board switch clears it.
  */
 export function UndoToast() {
   const snap = useBoardStore((s) => s.lastDelete);

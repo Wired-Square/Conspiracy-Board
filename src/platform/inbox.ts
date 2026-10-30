@@ -2,7 +2,7 @@ import { b64ToBytes } from '../lib/base64';
 import { isEmailFile, isMediaFile } from '../lib/fileTypes';
 import { useBoardStore } from '../store/boardStore';
 import { NEW_CLUSTER, useEmailImportStore } from '../store/emailImportStore';
-import { useTauriListen } from './useTauriListen';
+import { listenTauri } from './listen';
 
 // Files the shell sweeps out of the Inbox folder (src-tauri/src/board_store/inbox.rs).
 //
@@ -38,6 +38,6 @@ async function filesArrived({ files }: InboxBatch) {
 }
 
 /** Import the files the shell finds in the Inbox folder. */
-export function useInbox() {
-  useTauriListen<InboxBatch>('inbox-files', (e) => void filesArrived(e.payload));
+export function startInbox(): () => void {
+  return listenTauri<InboxBatch>('inbox-files', (e) => void filesArrived(e.payload));
 }
