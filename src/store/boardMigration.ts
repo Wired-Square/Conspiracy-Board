@@ -1,6 +1,6 @@
 import type { Board, Card } from '../types/board';
 import { storage } from '../storage';
-import { downloadImage, extOf } from '../storage/media';
+import { extOf } from '../storage/media';
 import { b64ToBytes } from '../lib/base64';
 import { parseEmailFile } from '../lib/email/parseEmails';
 import { persistDraftMedia } from '../lib/email/persistMedia';
@@ -60,7 +60,7 @@ function dataUrlToBytes(url: string): ArrayBuffer {
 /**
  * Bring a board's pictures into the media library so no card depends on a URL. A
  * card whose `imageUrl` is a data: URL has its bytes decoded and written; a remote
- * http(s) URL is downloaded by the shell (`downloadImage`) — either way `imageFile`
+ * http(s) URL is downloaded by the shell (`storage.downloadImage`) — either way `imageFile`
  * is set and `imageUrl` cleared, leaving `imageCrop` at its default so the picture
  * is unchanged. Runs on every load so an imported or newly-linked board is caught
  * too; after the first successful pass a card has `imageFile` and there is nothing
@@ -82,7 +82,7 @@ export async function migrateBoardMedia(
           // The mime sits between 'data:' and the comma — extOf takes it from there.
           file = await storage.saveMedia(dataUrlToBytes(url), extOf(undefined, url.slice(5, url.indexOf(','))));
         } else if (url.startsWith('http://') || url.startsWith('https://')) {
-          file = await downloadImage(url);
+          file = await storage.downloadImage(url);
         }
         if (!file) return card; // A scheme we don't localise — leave it be.
         changed = true;

@@ -106,12 +106,11 @@ export interface StorageAdapter {
   /** Store bytes, named by their content hash; returns the filename to link. */
   saveMedia(bytes: ArrayBuffer, ext: string): Promise<string>;
   /**
-   * Download a remote image in the shell, returning its bytes and declared media
-   * type. The webview cannot do this itself — its CSP forbids fetching arbitrary
-   * hosts, and a cross-origin image drawn to a canvas to crop would taint it — so
-   * a pasted URL is fetched here and then stored like any other media.
+   * Download a remote image in the shell and store it, returning the filename to
+   * link. The webview cannot fetch it itself — its CSP forbids fetching arbitrary
+   * hosts, and a cross-origin image drawn to a canvas to crop would taint it.
    */
-  fetchImage(url: string): Promise<{ bytes: ArrayBuffer; mime?: string }>;
+  downloadImage(url: string): Promise<string>;
   /** Read a media file's bytes back (used to re-inline pictures on export). */
   readMedia(name: string): Promise<ArrayBuffer>;
   /**

@@ -28,6 +28,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -36,6 +37,7 @@ use base64::Engine as _;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
+use wslib_file_atomic::{Options, Readers};
 
 /// A media file younger than this is never swept by `gc_media`: it may have just
 /// been written and the board that references it not yet saved.
@@ -124,22 +126,26 @@ fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
   }
 }
 
-/// Write via a temporary file in the same directory, then rename. The index and a
-/// media file are each written whole, so a crash mid-write would otherwise leave a
-/// truncated file; rename is atomic, so the file is either the old one or the new one
-/// and never half of each. (Boards no longer come through here — each is a SQLite
-/// database with its own transactional write; see `save_board`.)
-fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
-  let dir = path.parent().ok_or("File path has no directory")?;
-  std::fs::create_dir_all(dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
+/// How the index and media files are written: staged beside the target as
+/// `<name>.new`, synced, then renamed over it, so a crash leaves the old file or the
+/// new one. (Boards are SQLite databases with their own transactional write.)
+fn atomic_writer() -> Options {
+  Options::new().readers(Readers::Readable).create_parents(true)
+}
 
-  let name = path.file_name().ok_or("File path has no name")?.to_string_lossy();
-  let tmp = path.with_file_name(format!("{name}.tmp"));
-  std::fs::write(&tmp, contents).map_err(|e| format!("Save failed: {e}"))?;
-  std::fs::rename(&tmp, path).map_err(|e| {
-    let _ = std::fs::remove_file(&tmp);
-    format!("Save failed: {e}")
-  })
+/// The staged name is fixed per target, so two writers to one path would clear each
+/// other's staging file; commands run concurrently, so writes take turns.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
+  let _turn = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+  atomic_writer().write(path, contents).map_err(|e| format!("Save failed: {e}"))
+}
+
+/// A media file part-way through `write_atomic`, which the sweep and the listings
+/// must never see: a valid media name with the staging suffix.
+fn is_staged_media(name: &str) -> bool {
+  name.strip_suffix(".new").is_some_and(valid_media_name)
 }
 
 /// Content-addressed name: the sha-256 of the bytes in hex, then a safe
@@ -192,12 +198,12 @@ pub(crate) fn store_media_bytes(app: &AppHandle, bytes: &[u8], ext: &str) -> Res
   Ok(name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn load_index(app: AppHandle) -> Result<Option<String>, String> {
   read_opt(index_file(&app)?)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_index(app: AppHandle, json: String) -> Result<(), String> {
   write_atomic(&index_file(&app)?, json.as_bytes())
 }
@@ -303,7 +309,7 @@ pub struct LoadedBoard {
   legacy: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn load_board(app: AppHandle, id: String) -> Result<LoadedBoard, String> {
   let db = board_db_file(&app, &id)?;
   if db.exists() {
@@ -317,7 +323,7 @@ pub fn load_board(app: AppHandle, id: String) -> Result<LoadedBoard, String> {
   }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_board(app: AppHandle, id: String, payload: SaveBoardPayload) -> Result<(), String> {
   let mut conn = open_board_db(&board_db_file(&app, &id)?)?;
   let tx = conn
@@ -334,7 +340,7 @@ pub fn save_board(app: AppHandle, id: String, payload: SaveBoardPayload) -> Resu
 /// Remove the legacy `boards/<id>.json` once its `.sqlite` is written and verified to
 /// reassemble. The seam calls this only after a successful migrating save, so the
 /// JSON is never removed before a coherent database exists to replace it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn retire_legacy_board(app: AppHandle, id: String) -> Result<(), String> {
   let db = board_db_file(&app, &id)?;
   if !db.exists() {
@@ -512,7 +518,7 @@ fn remove_if_present(path: &Path) -> Result<(), String> {
 /// Bring the library up before the first read or write, making its directories so
 /// the boards and media folders exist from the start rather than only after the
 /// first save.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn init_storage(app: AppHandle) -> Result<(), String> {
   for dir in [boards_dir(&app)?, media_dir(&app)?, inbox_dir(&app)?] {
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
@@ -522,7 +528,7 @@ pub fn init_storage(app: AppHandle) -> Result<(), String> {
 
 /// The absolute media directory, fetched once at startup so the webview can build
 /// `asset:` URLs for stored files without a round-trip per render.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn media_dir_path(app: AppHandle) -> Result<String, String> {
   Ok(media_dir(&app)?.to_string_lossy().into_owned())
 }
@@ -531,20 +537,10 @@ pub fn media_dir_path(app: AppHandle) -> Result<String, String> {
 /// an atomic media file, named by content hash, returning the name to link from
 /// the board. The caller supplies only the extension; the name is derived from
 /// the bytes, so it cannot be steered anywhere but into the media directory.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_media(app: AppHandle, ext: String, b64: String) -> Result<String, String> {
   let bytes = STANDARD.decode(b64.as_bytes()).map_err(|e| format!("Media was not valid base64: {e}"))?;
   store_media_bytes(&app, &bytes, &ext)
-}
-
-/// A downloaded image, handed back the same way media crosses the boundary: bytes
-/// as base64, plus whatever `Content-Type` the server declared so the webview can
-/// name the file's extension. The bytes are stored (`save_media`) on this side of
-/// the seam by the caller, not here — this only fetches.
-#[derive(serde::Serialize)]
-pub struct FetchedImage {
-  b64: String,
-  mime: Option<String>,
 }
 
 /// The most bytes we will pull down for one image. A pasted URL is trusted no more
@@ -552,13 +548,20 @@ pub struct FetchedImage {
 /// cannot make the shell buffer it all.
 const MAX_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
 
-/// Fetch a remote image so a pasted URL becomes a local file like any other media.
-/// This has to happen in the shell: the app's CSP forbids the webview fetching
-/// arbitrary hosts, and a cross-origin image drawn to a canvas to crop would taint
-/// it. http(s) only, a short timeout so a dead link never hangs a board load
-/// (migrateBoardMedia calls this for every remote URL), and a size cap.
-#[tauri::command]
-pub fn fetch_image(url: String) -> Result<FetchedImage, String> {
+/// Download a remote image into the media library, returning its name to link, so a
+/// pasted URL becomes a local file like any other media. This has to happen in the
+/// shell: the app's CSP forbids the webview fetching arbitrary hosts, and a
+/// cross-origin image drawn to a canvas to crop would taint it.
+#[tauri::command(async)]
+pub fn download_image(app: AppHandle, url: String) -> Result<String, String> {
+  let (bytes, mime) = fetch_image(&url)?;
+  store_media_bytes(&app, &bytes, fetched_ext(&url, mime.as_deref()))
+}
+
+/// http(s) only, a short timeout so a dead link never hangs a board load
+/// (migrateBoardMedia downloads every remote URL), and a size cap. Returns the bytes
+/// and the media type the server declared.
+fn fetch_image(url: &str) -> Result<(Vec<u8>, Option<String>), String> {
   if !(url.starts_with("http://") || url.starts_with("https://")) {
     return Err("Only http and https image URLs can be downloaded.".into());
   }
@@ -567,7 +570,7 @@ pub fn fetch_image(url: String) -> Result<FetchedImage, String> {
     .timeout_read(Duration::from_secs(20))
     .build();
   let resp = agent
-    .get(&url)
+    .get(url)
     .call()
     .map_err(|e| format!("Could not fetch the image: {e}"))?;
 
@@ -600,12 +603,31 @@ pub fn fetch_image(url: String) -> Result<FetchedImage, String> {
     return Err("That image is too large to download.".into());
   }
 
-  Ok(FetchedImage { b64: STANDARD.encode(&bytes), mime })
+  Ok((bytes, mime))
+}
+
+/// The extension to store a download under: the server's media type is the authority
+/// (`image/svg+xml` is `svg`); the URL's path is the fallback for a host that declared
+/// none. `media_name` sanitises whatever this returns.
+fn fetched_ext<'a>(url: &'a str, mime: Option<&'a str>) -> &'a str {
+  match mime {
+    Some(m) => m.split('/').nth(1).and_then(|sub| sub.split('+').next()).unwrap_or(""),
+    None => {
+      let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+      let before_query = after_scheme.split(['?', '#']).next().unwrap_or("");
+      let path = before_query.split_once('/').map_or("", |(_, path)| path);
+      let basename = path.rsplit('/').next().unwrap_or("");
+      match basename.rfind('.') {
+        Some(dot) if dot > 0 => &basename[dot + 1..],
+        _ => "",
+      }
+    }
+  }
 }
 
 /// Read a media file back as base64 — used to re-parse a stored `.eml` for its
 /// attachments (`recoverCardAttachments`) and to adopt an orphaned file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_media(app: AppHandle, name: String) -> Result<String, String> {
   let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
   Ok(STANDARD.encode(bytes))
@@ -640,7 +662,7 @@ pub struct MediaMeta {
 /// result. This lives in the shell for the same reasons the download does: the CSP
 /// keeps the webview from this work, and these are file-format parsers with no
 /// place in a UI bundle.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn extract_media_meta(app: AppHandle, name: String) -> Result<MediaMeta, String> {
   let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
   Ok(if bytes.starts_with(b"%PDF") {
@@ -656,7 +678,7 @@ pub fn extract_media_meta(app: AppHandle, name: String) -> Result<MediaMeta, Str
 /// words become the card's notes (see buildMediaDraft). Reads the file by its
 /// library name, same traversal guard as extract_media_meta. Empty when there's
 /// nothing to read, or on any platform without an OCR engine (only macOS has one).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ocr_image(app: AppHandle, name: String) -> Result<String, String> {
   let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
   Ok(ocr_bytes(&bytes))
@@ -859,23 +881,13 @@ fn gps_coord(exif: &exif::Exif, value: exif::Tag, reference: exif::Tag, negative
 /// The webview gathers the names still in use and hands them here — anything else
 /// in the media directory is unreferenced and removed. Call with a *complete*
 /// set: a board that failed to load must keep the whole app from sweeping, or it
-/// would cost that board its media. `.tmp` files from an in-flight write are left
-/// alone. Returns how many files were removed, for logging.
-#[tauri::command]
+/// would cost that board its media. Returns how many files were removed, for logging.
+#[tauri::command(async)]
 pub fn gc_media(app: AppHandle, keep: Vec<String>) -> Result<u32, String> {
   let keep: std::collections::HashSet<String> = keep.into_iter().collect();
-  let entries = match std::fs::read_dir(media_dir(&app)?) {
-    Ok(e) => e,
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-    Err(e) => return Err(format!("Could not read the media directory: {e}")),
-  };
   let mut removed = 0;
-  for entry in entries.flatten() {
-    if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-      continue;
-    }
-    let name = entry.file_name().to_string_lossy().into_owned();
-    if name.ends_with(".tmp") || keep.contains(&name) {
+  for (name, entry) in media_entries(&media_dir(&app)?)? {
+    if keep.contains(&name) {
       continue;
     }
     // Leave a very fresh file alone even if it looks unreferenced: it may have
@@ -894,6 +906,24 @@ pub fn gc_media(app: AppHandle, keep: Vec<String>) -> Result<u32, String> {
   Ok(removed)
 }
 
+/// Every file in the media directory with its name, leaving out writes in flight
+/// (`is_staged_media`). A missing directory is an empty library, not an error.
+fn media_entries(dir: &Path) -> Result<Vec<(String, std::fs::DirEntry)>, String> {
+  let entries = match std::fs::read_dir(dir) {
+    Ok(e) => e,
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+    Err(e) => return Err(format!("Could not read the media directory: {e}")),
+  };
+  Ok(
+    entries
+      .flatten()
+      .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
+      .map(|entry| (entry.file_name().to_string_lossy().into_owned(), entry))
+      .filter(|(name, _)| !is_staged_media(name))
+      .collect(),
+  )
+}
+
 /// One media file on disk, as the maintenance view needs it: the name it is
 /// linked by and its size. Read-only — this never deletes.
 #[derive(Clone, serde::Serialize)]
@@ -905,52 +935,21 @@ pub struct MediaEntry {
 
 /// Every file in the media library, so the webview can show them and work out
 /// which are referenced, missing, or orphaned. Purely a listing — unlike
-/// `gc_media`, which also reads the directory, this deletes nothing. A missing
-/// directory is an empty library, not an error. `*.tmp` in-flight writes are
-/// skipped, as in `gc_media`.
-#[tauri::command]
+/// `gc_media`, which also reads the directory, this deletes nothing.
+#[tauri::command(async)]
 pub fn list_media(app: AppHandle) -> Result<Vec<MediaEntry>, String> {
-  let entries = match std::fs::read_dir(media_dir(&app)?) {
-    Ok(e) => e,
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-    Err(e) => return Err(format!("Could not read the media directory: {e}")),
-  };
-  let mut out = Vec::new();
-  for entry in entries.flatten() {
-    if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-      continue;
-    }
-    let name = entry.file_name().to_string_lossy().into_owned();
-    if name.ends_with(".tmp") {
-      continue;
-    }
-    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-    out.push(MediaEntry { name, size });
-  }
-  Ok(out)
+  Ok(
+    media_entries(&media_dir(&app)?)?
+      .into_iter()
+      .map(|(name, entry)| MediaEntry { name, size: entry.metadata().map_or(0, |m| m.len()) })
+      .collect(),
+  )
 }
 
 /// Just the names of the media on disk (no sizes), for the search index to reconcile
 /// against — its pending set and its prune both compare to exactly what's in `media/`.
-/// A missing directory is an empty library; `.tmp` in-flight writes are skipped, as in
-/// `list_media`/`gc_media`.
 pub(crate) fn media_names(app: &AppHandle) -> Result<Vec<String>, String> {
-  let entries = match std::fs::read_dir(media_dir(app)?) {
-    Ok(e) => e,
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-    Err(e) => return Err(format!("Could not read the media directory: {e}")),
-  };
-  let mut out = Vec::new();
-  for entry in entries.flatten() {
-    if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-      continue;
-    }
-    let name = entry.file_name().to_string_lossy().into_owned();
-    if !name.ends_with(".tmp") {
-      out.push(name);
-    }
-  }
-  Ok(out)
+  Ok(media_entries(&media_dir(app)?)?.into_iter().map(|(name, _)| name).collect())
 }
 
 /// Verify a media file still hashes to its own name — the content-address is the
@@ -958,7 +957,7 @@ pub(crate) fn media_names(app: &AppHandle) -> Result<Vec<String>, String> {
 /// `false` on a mismatch (corruption or tampering); an error only when the file
 /// cannot be read. On demand, not eager: re-hashing every file on open would be
 /// far too costly for a library of large messages.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn verify_media(app: AppHandle, name: String) -> Result<bool, String> {
   let path = media_file(&app, &name)?;
   let bytes = std::fs::read(&path).map_err(|e| format!("Could not read the file: {e}"))?;
@@ -969,7 +968,7 @@ pub fn verify_media(app: AppHandle, name: String) -> Result<bool, String> {
 
 /// Show the media library folder in Finder — the "these are your files" promise,
 /// for the maintenance view. Mirrors `open_inbox`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_media_dir(app: AppHandle) -> Result<(), String> {
   let dir = media_dir(&app)?;
   std::fs::create_dir_all(&dir).map_err(|e| format!("Could not find the media folder: {e}"))?;
@@ -996,7 +995,7 @@ fn run_open(args: &[&std::ffi::OsStr], cannot: &str, refused: &str) -> Result<()
 /// on. `open` without `-R`, so it launches the file rather than revealing it.
 /// The path is never taken from the caller — only the name is, and `media_file`
 /// rejects a name that is not one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_media(app: AppHandle, name: String) -> Result<(), String> {
   let path = media_file(&app, &name)?;
   if !path.exists() {
@@ -1012,7 +1011,7 @@ pub fn open_media(app: AppHandle, name: String) -> Result<(), String> {
 /// are their files, holding their evidence, on their disk. A tool that will not
 /// say where it put them is not one to trust with them, and "somewhere in
 /// Application Support" is not an answer you can back up.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn board_location(app: AppHandle, id: String) -> Result<String, String> {
   Ok(board_db_file(&app, &id)?.to_string_lossy().into_owned())
 }
@@ -1024,7 +1023,7 @@ pub fn board_location(app: AppHandle, id: String) -> Result<String, String> {
 /// dependency, a capability and a permission to reason about for the same thing.
 /// The path is never taken from the caller — only the id is, and board_file
 /// rejects an id that is not one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
   let db = board_db_file(&app, &id)?;
   // The database if it exists, else a not-yet-migrated legacy JSON, else nothing:
@@ -1053,7 +1052,7 @@ pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
 /// Deleting something already gone is a success — the caller wanted it absent. Takes
 /// the database and its `-wal`/`-shm` sidecars, plus any legacy `boards/<id>.json`
 /// left from before this board was migrated.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_board(app: AppHandle, id: String) -> Result<(), String> {
   let db = board_db_file(&app, &id)?;
   remove_if_present(&db)?;
@@ -1072,17 +1071,17 @@ pub fn delete_board(app: AppHandle, id: String) -> Result<(), String> {
 // and the manifest text it authored; on the way back it is handed the strings to
 // parse. The one JSON the shell reads is nothing — it treats even the manifest as
 // opaque bytes. Export streams the archive straight to the file the user chose (so
-// a large bundle never sits in memory or crosses the IPC boundary); import receives
-// the `.zip` as base64 and reads it in memory. The `zip` crate is already a
+// a large bundle never sits in memory or crosses the IPC boundary); import reads
+// the file the user picked straight from its path. The `zip` crate is already a
 // dependency, used to read Office metadata. Layout:
 //
 //   manifest.json          { format, formatVersion, app, exportedAt, boards: [...] }
 //   boards/<id>.json        one per board (id is the library id, the filename stem)
 //   media/<hash>.<ext>      flat, content-addressed, deduped across boards
 
-/// The largest bundle we will read, as a guard on an untrusted `.zip`: the decoded
-/// input, and the running total of what we decompress out of it (a zip bomb inflates
-/// far past its stored size, so the stored-size check alone is not enough).
+/// The largest bundle we will read, as a guard on an untrusted `.zip`: the file, and
+/// the running total of what we decompress out of it (a zip bomb inflates far past
+/// its stored size, so the stored-size check alone is not enough).
 const MAX_BUNDLE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// One board in a bundle: its library id and its JSON, both opaque to the shell.
@@ -1122,7 +1121,7 @@ fn is_media_entry(name: &str) -> bool {
 /// file that has gone missing is skipped, not fatal: an export must not fail whole
 /// because one referenced file vanished (the same best-effort the old inline export
 /// took with an unreadable picture).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_bundle(
   app: AppHandle,
   path: String,
@@ -1197,30 +1196,54 @@ pub fn write_bundle(
 /// declines is simply orphaned, which the media sweep reclaims. Untrusted input,
 /// so every entry name is checked for traversal (`enclosed_name`) and against the
 /// same id/media-name guards a hand-edited board file is, and the total decompressed
-/// size is capped against a zip bomb.
-#[tauri::command]
-pub fn read_bundle(app: AppHandle, b64: String) -> Result<BundleContents, String> {
-  let bytes = STANDARD.decode(b64.as_bytes()).map_err(|e| format!("Bundle was not valid base64: {e}"))?;
-  if bytes.len() as u64 > MAX_BUNDLE_BYTES {
+/// size is capped against a zip bomb. A legacy `.json` board is read as a bundle of
+/// that one board.
+#[tauri::command(async)]
+pub fn read_bundle(app: AppHandle, path: String) -> Result<BundleContents, String> {
+  // The user picked this path through the OS open panel, so it is theirs to read.
+  let mut file = std::fs::File::open(&path).map_err(|e| format!("Could not open the file: {e}"))?;
+  if file.metadata().map_or(0, |m| m.len()) > MAX_BUNDLE_BYTES {
     return Err("That bundle is too large to import.".into());
   }
+  if path.to_ascii_lowercase().ends_with(".json") {
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|e| format!("Could not read the file: {e}"))?;
+    let json = String::from_utf8_lossy(&bytes).into_owned();
+    return Ok(BundleContents { manifest: None, boards: vec![BundleBoard { id: String::new(), json }] });
+  }
 
-  let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes[..]))
-    .map_err(|e| format!("That file isn't a readable bundle: {e}"))?;
+  let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("That file isn't a readable bundle: {e}"))?;
+  // How many media files this bundle will store, for the progress denominator —
+  // read from the central directory's names, no decompression. `is_media_entry`
+  // must stay in step with the media branch of `unpack_bundle` (which re-decides via
+  // `enclosed_name`) or `done` would never reach `total`.
+  let total = zip.file_names().filter(|n| is_media_entry(n)).count() as u32;
+  let mut done: u32 = 0;
+  unpack_bundle(&mut zip, MAX_BUNDLE_BYTES, |name, data| {
+    // store_media_bytes re-derives the content-address, so the stored name equals
+    // the bundle name and the board's references still resolve.
+    store_media_bytes(&app, data, media_ext(name))?;
+    done += 1;
+    // On a stride, and always the last, rather than every file: a bundle of
+    // thousands of media would otherwise flood the IPC bridge with events the
+    // "x of y" text can't even tell apart.
+    if done % 16 == 0 || done == total {
+      let _ = app.emit("import:progress", ImportProgress { done, total });
+    }
+    Ok(())
+  })
+}
 
+/// The boards and manifest of an opened bundle, handing each valid media entry to
+/// `store_media` by name. `budget` caps the total decompressed, shared across every
+/// entry, so a bomb of many small entries is caught as surely as one enormous entry.
+fn unpack_bundle<R: Read + std::io::Seek>(
+  zip: &mut zip::ZipArchive<R>,
+  mut budget: u64,
+  mut store_media: impl FnMut(&str, &[u8]) -> Result<(), String>,
+) -> Result<BundleContents, String> {
   let mut manifest: Option<String> = None;
   let mut boards: Vec<BundleBoard> = Vec::new();
-  // The decompression budget, shared across every entry, so a bomb of many small
-  // entries is caught as surely as one enormous entry.
-  let mut budget = MAX_BUNDLE_BYTES;
-
-  // How many media files this bundle will store, for the progress denominator —
-  // read from the central directory's names, no decompression. The immutable
-  // borrow ends with the statement, before the mutable pass below. `is_media_entry`
-  // must stay in step with the media branch of the loop (which re-decides via
-  // `enclosed_name`) or `done` would never reach `total`.
-  let total_media = zip.file_names().filter(|n| is_media_entry(n)).count() as u32;
-  let mut done: u32 = 0;
 
   for i in 0..zip.len() {
     let mut file = zip.by_index(i).map_err(|e| format!("Could not read the bundle: {e}"))?;
@@ -1249,17 +1272,7 @@ pub fn read_bundle(app: AppHandle, b64: String) -> Result<BundleContents, String
       (Some(Component::Normal(a)), Some(Component::Normal(name)), None) if a == "media" => {
         let name = name.to_string_lossy();
         if valid_media_name(&name) {
-          let data = read_capped(&mut file, &mut budget)?;
-          // store_media_bytes re-derives the content-address, so the stored name
-          // equals the bundle name and the board's references still resolve.
-          store_media_bytes(&app, &data, media_ext(&name))?;
-          done += 1;
-          // On a stride, and always the last, rather than every file: a bundle of
-          // thousands of media would otherwise flood the IPC bridge with events the
-          // "x of y" text can't even tell apart.
-          if done % 16 == 0 || done == total_media {
-            let _ = app.emit("import:progress", ImportProgress { done, total: total_media });
-          }
+          store_media(&name, &read_capped(&mut file, &mut budget)?)?;
         }
       }
       // Anything else (an unknown directory, a future addition) is ignored.
@@ -1613,5 +1626,100 @@ mod tests {
     assert!(!valid_media_name("")); // empty
     // A content-addressed name always passes.
     assert!(valid_media_name(&media_name(b"anything", "pdf")));
+  }
+
+  /// The sweep deletes whatever it lists that no board keeps, so a media file that
+  /// `write_atomic` has staged but not yet renamed must never be listed — pinned
+  /// against the crate's own staging name, so a change there fails here.
+  #[test]
+  fn media_listing_skips_a_staged_write() {
+    let dir = temp_dir_for("staged");
+    let name = media_name(b"photo", "png");
+    std::fs::write(dir.join(&name), b"photo").unwrap();
+    let staged = atomic_writer().staged_path(&dir.join(media_name(b"in flight", "png")));
+    std::fs::write(&staged, b"in flight").unwrap();
+    std::fs::create_dir(dir.join("not-a-file")).unwrap();
+
+    let listed: Vec<String> = media_entries(&dir).unwrap().into_iter().map(|(n, _)| n).collect();
+    assert_eq!(listed, vec![name]);
+    assert!(media_entries(&dir.join("absent")).unwrap().is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn write_atomic_replaces_whole_and_leaves_no_staging_file() {
+    let dir = temp_dir_for("atomic");
+    let path = dir.join("nested").join("index.json");
+    write_atomic(&path, b"first").unwrap();
+    write_atomic(&path, b"second").unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"second");
+    assert!(!atomic_writer().staged_path(&path).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn fetched_ext_prefers_the_media_type_then_the_url_path() {
+    assert_eq!(fetched_ext("https://x.test/a.jpg", Some("image/png")), "png");
+    assert_eq!(fetched_ext("https://x.test/a", Some("image/svg+xml")), "svg");
+    assert_eq!(fetched_ext("https://x.test/dir/pic.webp?w=200#top", None), "webp");
+    assert_eq!(fetched_ext("https://x.test", None), "");
+    assert_eq!(fetched_ext("https://x.test/.hidden", None), "");
+  }
+
+  // ---- Bundles ----
+
+  fn zip_of(entries: &[(&str, &[u8])]) -> zip::ZipArchive<std::io::Cursor<Vec<u8>>> {
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, data) in entries {
+      w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+      w.write_all(data).unwrap();
+    }
+    zip::ZipArchive::new(w.finish().unwrap()).unwrap()
+  }
+
+  fn unpack(entries: &[(&str, &[u8])], budget: u64) -> Result<(Vec<String>, Vec<String>), String> {
+    let mut stored = Vec::new();
+    let contents = unpack_bundle(&mut zip_of(entries), budget, |name, _| {
+      stored.push(name.to_string());
+      Ok(())
+    })?;
+    Ok((contents.boards.into_iter().map(|b| b.id).collect(), stored))
+  }
+
+  #[test]
+  fn unpack_bundle_skips_entries_that_escape_or_misname() {
+    let png = media_name(b"x", "png");
+    let (boards, media) = unpack(
+      &[
+        ("boards/brd_ok.json", b"{}"),
+        ("../boards/brd_up.json", b"{}"),
+        ("boards/../../brd_out.json", b"{}"),
+        ("/boards/brd_abs.json", b"{}"),
+        ("boards/bad id!.json", b"{}"),
+        (&format!("media/{png}"), b"x"),
+        (&format!("media/../{png}"), b"x"),
+        ("media/../../etc/passwd.png", b"x"),
+        ("media/two.dots.png", b"x"),
+        ("media/nested/a.png", b"x"),
+      ],
+      MAX_BUNDLE_BYTES,
+    )
+    .unwrap();
+    assert_eq!(boards, vec!["brd_ok"]);
+    assert_eq!(media, vec![png]);
+  }
+
+  #[test]
+  fn unpack_bundle_caps_the_total_decompressed() {
+    let half = [b'a'; 30];
+    // Each entry fits the budget alone; together they overrun it.
+    assert!(unpack(&[("boards/brd_a.json", &half)], 50).is_ok());
+    let err = unpack(&[("boards/brd_a.json", &half), ("boards/brd_b.json", &half)], 50).unwrap_err();
+    assert_eq!(err, "That bundle is too large to import.");
+  }
+
+  #[test]
+  fn unpack_bundle_without_boards_is_not_a_bundle() {
+    assert_eq!(unpack(&[("readme.txt", b"hi")], MAX_BUNDLE_BYTES).unwrap_err(), "This file isn't a Conspiracy bundle.");
   }
 }

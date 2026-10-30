@@ -13,7 +13,7 @@
 //! orchestrates: a background worker asks `pending_media` what still needs reading and
 //! calls `process_media` per file (see src/store/jobQueueStore.ts).
 
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use tauri::{AppHandle, State};
@@ -34,6 +34,12 @@ const MAX_ATTEMPTS: i64 = 3;
 /// lock is taken, so files read in parallel on the command threads and only the short
 /// writes serialise; WAL keeps a search responsive meanwhile.
 pub struct LibraryDb(pub Mutex<Connection>);
+
+impl LibraryDb {
+  fn lock_db(&self) -> Result<MutexGuard<'_, Connection>, String> {
+    self.0.lock().map_err(|_| "The search index is unavailable.".to_string())
+  }
+}
 
 /// Open (creating if absent) library.sqlite with its tables. Called once at setup.
 pub fn open(app: &AppHandle) -> Result<LibraryDb, String> {
@@ -95,13 +101,13 @@ pub struct DocHit {
 /// Read a file's text and index it. Idempotent: an unchanged file already indexed
 /// under the current engine is a no-op unless `force`. Extraction happens outside the
 /// lock; the two writes (documents + doc_fts) commit together so they can't drift.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn process_media(app: AppHandle, db: State<LibraryDb>, name: String, force: bool) -> Result<DocStatus, String> {
   let path = media_file(&app, &name)?; // guards the name against traversal
   let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
 
   if !force {
-    let conn = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+    let conn = db.lock_db()?;
     let existing: Option<(String, Option<String>, i64)> = conn
       .query_row("SELECT status, engine, size FROM documents WHERE name=?1", [&name], |r| {
         Ok((r.get(0)?, r.get(1)?, r.get(2)?))
@@ -120,7 +126,7 @@ pub fn process_media(app: AppHandle, db: State<LibraryDb>, name: String, force: 
   let bytes = std::fs::read(&path).map_err(|e| format!("Could not read media: {e}"))?;
   let outcome = extract_text(&bytes, media_ext(&name));
 
-  let mut guard = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let mut guard = db.lock_db()?;
   let tx = guard.transaction().map_err(|e| format!("Could not write the index: {e}"))?;
   let status = write_outcome(&tx, &name, size, &outcome)?;
   tx.commit().map_err(|e| format!("Could not write the index: {e}"))?;
@@ -165,7 +171,7 @@ fn write_outcome(tx: &Transaction, name: &str, size: u64, outcome: &ExtractOutco
 // The body stays synchronous; it only borrows the Mutex guard, never holding it across a wait.
 #[tauri::command(async)]
 pub fn search_documents(db: State<LibraryDb>, query: String, limit: u32) -> Result<Vec<DocHit>, String> {
-  let conn = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let conn = db.lock_db()?;
   run_search(&conn, &query, limit)
 }
 
@@ -204,10 +210,10 @@ fn fts_query(raw: &str) -> String {
 /// The files still needing extraction: everything on disk with no row, or a
 /// non-terminal row, or one indexed under an older engine, or a failure not yet at its
 /// retry cap. The worker asks for this at startup, so a crash mid-batch just resumes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pending_media(app: AppHandle, db: State<LibraryDb>) -> Result<Vec<String>, String> {
   let on_disk = media_names(&app)?;
-  let conn = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let conn = db.lock_db()?;
   let mut stmt = conn
     .prepare("SELECT status, engine, attempts FROM documents WHERE name=?1")
     .map_err(|e| format!("Could not read the index: {e}"))?;
@@ -238,10 +244,10 @@ pub fn pending_media(app: AppHandle, db: State<LibraryDb>) -> Result<Vec<String>
 /// Drop the rows for any media the library no longer holds — called after `gc_media`
 /// sweeps blobs. Reconciles against what's on disk, not against boards, so it stays
 /// board-agnostic like the rest of the index.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn prune_documents(app: AppHandle, db: State<LibraryDb>) -> Result<u32, String> {
   let keep: std::collections::HashSet<String> = media_names(&app)?.into_iter().collect();
-  let mut guard = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let mut guard = db.lock_db()?;
   let tx = guard.transaction().map_err(|e| format!("Could not prune the index: {e}"))?;
   let names: Vec<String> = {
     let mut stmt = tx.prepare("SELECT name FROM documents").map_err(|e| format!("Could not read the index: {e}"))?;
@@ -269,9 +275,9 @@ pub fn prune_documents(app: AppHandle, db: State<LibraryDb>) -> Result<u32, Stri
 
 /// Empty the index — the recovery path if it ever drifts. The worker then re-pumps
 /// `pending_media` (now the whole library) to rebuild it from `media/`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rebuild_index(db: State<LibraryDb>) -> Result<(), String> {
-  let conn = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let conn = db.lock_db()?;
   conn
     .execute_batch("DELETE FROM documents; DELETE FROM doc_fts;")
     .map_err(|e| format!("Could not clear the index: {e}"))
@@ -279,9 +285,9 @@ pub fn rebuild_index(db: State<LibraryDb>) -> Result<(), String> {
 
 /// Every document's name and status, for the Objects view to badge each file. Absent
 /// from this list means never processed (shown as pending until the worker reaches it).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn index_statuses(db: State<LibraryDb>) -> Result<Vec<DocStatus>, String> {
-  let conn = db.0.lock().map_err(|_| "The search index is unavailable.".to_string())?;
+  let conn = db.lock_db()?;
   let mut stmt = conn
     .prepare("SELECT name, status FROM documents")
     .map_err(|e| format!("Could not read the index: {e}"))?;

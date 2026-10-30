@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { z } from 'zod';
 import type { Board } from '../types/board';
 import { safeParseBoardJson } from '../data/schema';
@@ -7,7 +7,6 @@ import { invokeChecked } from './ipc';
 import {
   docHitSchema,
   docStatusSchema,
-  fetchedImageSchema,
   loadedBoardSchema,
   mediaEntrySchema,
   mediaMetaSchema,
@@ -29,16 +28,10 @@ import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAd
 // for the layout and why writes are atomic). The shell only ever sees strings:
 // the schema is TypeScript's, and parsing stays on this side of the seam.
 //
-// The file picker and the download are left to the webview. `<input type="file">`
-// opens the real macOS picker and an anchor download saves through the real save
-// panel, so routing either through the shell would be a plugin, a permission and
-// a dialog to maintain in exchange for nothing.
-
-/** Resolve after the browser has painted a frame — two rAFs, since the first only
- *  schedules the paint. Lets a just-set spinner appear before blocking work runs. */
-function nextPaint(): Promise<void> {
-  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-}
+// The media picker is left to the webview: `<input type="file">` opens the real
+// macOS picker. A bundle is the exception both ways — the shell writes and reads it
+// by path, so a large `.zip` never crosses the IPC boundary — which is what the
+// dialog plugin's open and save panels are for.
 
 /** Whatever the index says, or an empty one — a missing file is just first run. */
 async function readIndex(): Promise<BoardIndex> {
@@ -194,9 +187,8 @@ export const tauriStorage: StorageAdapter = {
     return invokeChecked('save_media', z.string(), { ext, b64: bytesToB64(bytes) });
   },
 
-  async fetchImage(url) {
-    const res = await invokeChecked('fetch_image', fetchedImageSchema, { url });
-    return { bytes: b64ToBytes(res.b64), mime: res.mime ?? undefined };
+  downloadImage(url) {
+    return invokeChecked('download_image', z.string(), { url });
   },
 
   async readMedia(name) {
@@ -278,52 +270,21 @@ export const tauriStorage: StorageAdapter = {
     return true;
   },
 
-  importFile(onReadStart) {
-    return new Promise<Board[] | null>((resolve, reject) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.zip,.json,application/zip,application/json';
-      input.onchange = async () => {
-        const file = input.files?.[0];
-        if (!file) return resolve(null);
-        onReadStart?.();
-        // Let the overlay paint before the base64 below, which blocks the main
-        // thread on a large file — its CSS spinner then keeps running on the
-        // compositor while that work holds the thread.
-        await nextPaint();
-        try {
-          if (/\.zip$/i.test(file.name)) {
-            // The shell unzips, stores the media, and hands the board strings back
-            // to parse here — the schema stays this side of the seam. A legacy
-            // .json is offered as a one-board list, so both arrive the same shape.
-            const res = await invokeChecked('read_bundle', readBundleSchema, {
-              b64: bytesToB64(await file.arrayBuffer()),
-            });
-            const parsed = res.boards
-              .map((b) => ({ id: b.id, board: safeParseBoardJson(b.json) }))
-              .filter((b): b is { id: string; board: Board } => b.board !== null);
-            const manifest = res.manifest ? parseManifest(res.manifest) : null;
-            resolve(orderByManifest(parsed, manifest).map((b) => b.board));
-          } else {
-            const board = safeParseBoardJson(await file.text());
-            resolve(board ? [board] : []);
-          }
-        } catch (err) {
-          // A malformed zip, or the shell refusing a non-bundle: surface it, don't
-          // swallow it, so the store can show the message.
-          reject(err);
-        }
-      };
-      // The `cancel` event fires when the dialog is dismissed; without it the
-      // promise would hang forever and leak on every cancelled import. A cancel that
-      // some webviews fire *alongside* a real selection sees the file already in
-      // input.files (set at selection, whichever event runs first) and leaves the
-      // outcome to onchange — so only a genuine dismissal, with no file, resolves null.
-      input.addEventListener('cancel', () => {
-        if (!input.files?.[0]) resolve(null);
-      });
-      input.click();
+  async importFile(onReadStart) {
+    const path = await open({
+      filters: [{ name: 'Conspiracy bundle or board', extensions: ['zip', 'json'] }],
     });
+    if (!path) return null;
+    onReadStart?.();
+    // The shell reads the file, stores a bundle's media, and hands the board strings
+    // back to parse here — the schema stays this side of the seam. A legacy .json
+    // arrives as a one-board bundle, so both take the same path.
+    const res = await invokeChecked('read_bundle', readBundleSchema, { path });
+    const parsed = res.boards
+      .map((b) => ({ id: b.id, board: safeParseBoardJson(b.json) }))
+      .filter((b): b is { id: string; board: Board } => b.board !== null);
+    const manifest = res.manifest ? parseManifest(res.manifest) : null;
+    return orderByManifest(parsed, manifest).map((b) => b.board);
   },
 
   pickFiles(accept, multiple = false) {

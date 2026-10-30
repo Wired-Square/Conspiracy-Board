@@ -9,9 +9,8 @@ mod ocr;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    // The native save panel for "Export Bundle…", so the user chooses where the
-    // `.zip` lands. The only plugin here: a save location is a thing the webview
-    // genuinely cannot ask for, where the file picker and download it still owns are.
+    // The native open and save panels for a bundle, which the shell reads and
+    // writes by path so a large `.zip` never crosses IPC.
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
       board_store::init_storage,
@@ -25,7 +24,7 @@ pub fn run() {
       board_store::reveal_board,
       board_store::media_dir_path,
       board_store::save_media,
-      board_store::fetch_image,
+      board_store::download_image,
       board_store::read_media,
       board_store::extract_media_meta,
       board_store::ocr_image,

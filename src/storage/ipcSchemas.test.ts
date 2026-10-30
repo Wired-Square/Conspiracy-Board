@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   docHitSchema,
   docStatusSchema,
-  fetchedImageSchema,
   loadedBoardSchema,
   mediaEntrySchema,
   mediaMetaSchema,
@@ -16,7 +15,6 @@ describe('IPC return-payload schemas', () => {
       legacy: false,
     });
     expect(loadedBoardSchema.parse({ json: null, legacy: true }).json).toBeNull();
-    expect(fetchedImageSchema.parse({ b64: 'aGk=', mime: null }).mime).toBeNull();
     expect(mediaEntrySchema.parse({ name: 'ab.png', size: 12 }).size).toBe(12);
     expect(docStatusSchema.parse({ name: 'ab.pdf', status: 'indexed' }).status).toBe('indexed');
     expect(docHitSchema.parse({ name: 'ab.pdf', snippet: '…x…', rank: -1.2 }).rank).toBe(-1.2);

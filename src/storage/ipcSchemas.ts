@@ -15,11 +15,6 @@ export const loadedBoardSchema: z.ZodType<{ json: string | null; legacy: boolean
   legacy: z.boolean(),
 });
 
-export const fetchedImageSchema: z.ZodType<{ b64: string; mime: string | null }> = z.object({
-  b64: z.string(),
-  mime: z.string().nullable(),
-});
-
 /**
  * extract_media_meta: Rust's `Option::None` arrives as `null`; strip to absent.
  * Composed from the schema layer's own shapes — MediaMeta is by construction

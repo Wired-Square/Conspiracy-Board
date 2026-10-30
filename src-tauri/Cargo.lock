@@ -391,6 +391,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "ureq",
+ "wslib-file-atomic",
  "zip",
 ]
 
@@ -4962,6 +4963,16 @@ dependencies = [
  "windows-core 0.61.2",
  "windows-version",
  "x11-dl",
+]
+
+[[package]]
+name = "wslib-file-atomic"
+version = "0.1.8"
+source = "sparse+https://forge.wiredsquare.com/api/packages/wired-square/cargo/"
+checksum = "df7cfd680bf02c921f8738a2b302e5d01f4a048563f00cc3527844aa3f9a5a55"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

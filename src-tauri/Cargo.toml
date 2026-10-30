@@ -22,9 +22,8 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.3", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
-# The native save panel for exporting a bundle, so the user chooses where the .zip
-# goes. The one Tauri plugin we take: unlike the file picker and the download (which
-# the webview does itself), a save *location* is something a webview cannot ask for.
+# The native open and save panels for a bundle, so the shell can read and write the
+# .zip by path rather than shipping it across IPC. The one Tauri plugin we take.
 tauri-plugin-dialog = "2"
 # Media is content-addressed: its filename is the sha-256 of its bytes. base64
 # carries those bytes across the webview↔shell boundary (a Tauri command is
@@ -53,6 +52,7 @@ imagesize = "0.13"
 # dependency, and it enables FTS5 for the library-wide search index (library.sqlite). The
 # schema stays TypeScript's: Rust reads and writes id/json rows and never parses a card.
 rusqlite = { version = "0.32", features = ["bundled"] }
+wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pinned to exactly what tauri/wry already resolve to. A different minor here

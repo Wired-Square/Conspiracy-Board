@@ -4,7 +4,7 @@ import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { useBoardStore } from '../../store/boardStore';
 import { useImageEditorStore } from '../../store/imageEditorStore';
 import { storage } from '../../storage';
-import { downloadImage, extForFetched, extOf, mediaSrc } from '../../storage/media';
+import { extOf, mediaSrc } from '../../storage/media';
 import { clamp, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
 
@@ -157,10 +157,11 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     setError(null);
     setBusy('Fetching…');
     try {
-      const { bytes, mime } = await storage.fetchImage(url);
-      const blob = new Blob([bytes], mime ? { type: mime } : undefined);
-      const img = await loadImage(swapObjectUrl(blob));
-      show(img, { blob, ext: extForFetched(url, mime) }, null);
+      // Stored on fetch: if the dialog is cancelled the file is an orphan the media
+      // sweep reclaims, as with a declined bundle import.
+      const file = await storage.downloadImage(url);
+      const img = await loadImage(mediaSrc(file));
+      show(img, { existingFile: file }, null);
     } catch {
       setError("Couldn't fetch that image. Check the URL and that you're online.");
     } finally {
@@ -224,7 +225,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     try {
       let imageFile = persist.existingFile ?? null;
       if (!imageFile && persist.blob) imageFile = await storage.saveMedia(await persist.blob.arrayBuffer(), persist.ext ?? 'bin');
-      else if (!imageFile && persist.remoteUrl) imageFile = await downloadImage(persist.remoteUrl);
+      else if (!imageFile && persist.remoteUrl) imageFile = await storage.downloadImage(persist.remoteUrl);
       if (!imageFile) throw new Error('There is no image to save.');
       updateCard(card.id, { imageFile, imageUrl: null, imageCrop: crop });
       close();

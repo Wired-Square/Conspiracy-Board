@@ -88,34 +88,3 @@ export function extOf(name?: string, mime?: string): string {
 export function saveFile(file: File): Promise<string> {
   return file.arrayBuffer().then((bytes) => storage.saveMedia(bytes, extOf(file.name, file.type)));
 }
-
-/** The last path segment of a URL, for naming a download's extension; '' if the
- *  URL won't parse. A host that omits Content-Type still often has it in the path. */
-function urlBasename(url: string): string {
-  try {
-    const path = new URL(url).pathname;
-    return path.slice(path.lastIndexOf('/') + 1);
-  } catch {
-    return '';
-  }
-}
-
-/**
- * The extension to store a fetched image under: the server's media type is the
- * authority; the URL path is only a fallback for a host that declared none
- * (`fetch_image` having accepted it regardless). Shared by `downloadImage` and the
- * image dialog's URL path so the rule is spelled once.
- */
-export function extForFetched(url: string, mime?: string): string {
-  return mime ? extOf(undefined, mime) : extOf(urlBasename(url));
-}
-
-/**
- * Download a remote image URL into the media library, returning its content-hash
- * name to link from a card — the URL counterpart to `saveFile`. The fetch happens
- * in the shell (`storage.fetchImage`).
- */
-export async function downloadImage(url: string): Promise<string> {
-  const { bytes, mime } = await storage.fetchImage(url);
-  return storage.saveMedia(bytes, extForFetched(url, mime));
-}
