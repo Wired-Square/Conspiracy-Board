@@ -4,7 +4,7 @@ import { useBoardStore } from '../../store/boardStore';
 import { storage } from '../../storage';
 import type { MediaMeta } from '../../storage/StorageAdapter';
 import { saveFile } from '../../storage/media';
-import { documentMime } from '../../lib/import/files';
+import { documentMime } from '../../lib/fileTypes';
 import { pickDocumentMeta } from '../../lib/import/meta';
 import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';

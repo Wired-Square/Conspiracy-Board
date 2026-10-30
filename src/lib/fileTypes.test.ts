@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentMime, isDocumentFile, isImageFile, isMediaFile } from './files';
+import { documentMime, isDocumentFile, isImageFile, isMediaFile } from './fileTypes';
 
 describe('isImageFile', () => {
   it('matches common photo extensions, case-insensitively', () => {

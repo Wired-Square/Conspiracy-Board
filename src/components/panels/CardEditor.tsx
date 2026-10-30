@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBoardStore } from '../../store/boardStore';
-import { useImageEditorStore } from '../../store/imageEditorStore';
+import { openDialog } from '../../store/dialogStore';
 import { touches } from '../../lib/connections';
 import { MarkdownView } from '../ui/MarkdownView';
 import { Modal } from '../ui/Modal';
@@ -23,7 +23,8 @@ import {
   payloadPatchFor,
   viewFor,
 } from '../../lib/kinds';
-import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { cardImageSrc } from '../../storage/media';
+import { cardImageStyle } from '../../lib/imageCrop';
 import { asPrimary, primaryClusterId, withMembership, withoutMembership } from '../../lib/clusters';
 import { eventFor } from '../../lib/events';
 import { formatOccurredAt } from '../../lib/dates';
@@ -67,7 +68,6 @@ function CardEditorForm({ card }: { card: Card }) {
   const clusters = useBoardStore((s) => s.clusters);
   const updateCard = useBoardStore((s) => s.updateCard);
   const setView = useBoardStore((s) => s.setView);
-  const openImageEditor = useImageEditorStore((s) => s.openFor);
 
   // Title and notes are the fields that are *typed* into, and each keystroke
   // used to write through to the store — which rebuilds the card's node and
@@ -244,7 +244,7 @@ function CardEditorForm({ card }: { card: Card }) {
             library — all in the dialog, so this stays one link (see
             ImageEditorModal). */}
         <div className="field__row">
-          <button className="link-button" onClick={() => openImageEditor(card.id)}>
+          <button className="link-button" onClick={() => openDialog({ imageEditorCardId: card.id })}>
             {hasImage ? 'Adjust image…' : 'Add image…'}
           </button>
           {hasImage && (

@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  BUNDLE_FORMAT,
-  BUNDLE_FORMAT_VERSION,
-  buildManifest,
-  parseManifest,
-} from './bundle';
+import { buildManifest, parseManifest } from './bundle';
 import type { Board } from '../types/board';
 
 function board(title: string): Board {
@@ -23,8 +18,8 @@ describe('bundle manifest', () => {
       { id: 'brd_aaa', board: board('First') },
       { id: 'brd_bbb', board: board('Second') },
     ]);
-    expect(m.format).toBe(BUNDLE_FORMAT);
-    expect(m.formatVersion).toBe(BUNDLE_FORMAT_VERSION);
+    expect(m.format).toBe('conspiracy-bundle');
+    expect(m.formatVersion).toBe(1);
     expect(m.boards).toEqual([
       { id: 'brd_aaa', title: 'First', file: 'boards/brd_aaa.json' },
       { id: 'brd_bbb', title: 'Second', file: 'boards/brd_bbb.json' },

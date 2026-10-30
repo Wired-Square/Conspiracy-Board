@@ -1,6 +1,5 @@
 import { b64ToBytes } from '../lib/base64';
-import { isEmailFile } from '../lib/email/files';
-import { isMediaFile } from '../lib/import/files';
+import { isEmailFile, isMediaFile } from '../lib/fileTypes';
 import { useBoardStore } from '../store/boardStore';
 import { NEW_CLUSTER, useEmailImportStore } from '../store/emailImportStore';
 import { useTauriListen } from './useTauriListen';

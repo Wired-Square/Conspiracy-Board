@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { useBoardStore } from '../../store/boardStore';
-import { useBundleExportStore } from '../../store/bundleExportStore';
+import { closeDialog } from '../../store/dialogStore';
 import { plural } from '../../lib/format';
 import type { BoardSummary } from '../../data/boardIndex';
 
@@ -13,7 +13,7 @@ import type { BoardSummary } from '../../data/boardIndex';
  * each time.
  */
 export function BundleExportModal() {
-  const close = useBundleExportStore((s) => s.close);
+  const close = () => closeDialog('bundleExport');
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   // The current board's live title can lead the index by an autosave, so prefer it.
   const currentTitle = useBoardStore((s) => s.meta.title);

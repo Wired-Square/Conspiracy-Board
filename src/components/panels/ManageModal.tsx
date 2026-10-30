@@ -1,8 +1,9 @@
 import { Modal } from '../ui/Modal';
 import { useBoardStore } from '../../store/boardStore';
-import { useManageStore } from '../../store/manageStore';
+import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { prompt, confirm } from '../../store/promptStore';
+import { errorMessage } from '../../lib/errors';
 
 // Managing the open board — rename it, reveal its file, or delete it — gathered
 // into one dialog rather than three separate File-menu items. The rename and
@@ -14,7 +15,7 @@ export function ManageModal() {
   const setTitle = useBoardStore((s) => s.setTitle);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const setError = useBoardStore((s) => s.setError);
-  const close = () => useManageStore.getState().setOpen(false);
+  const close = () => closeDialog('manage');
 
   const rename = async () => {
     const name = await prompt({
@@ -31,7 +32,7 @@ export function ManageModal() {
     try {
       await storage.revealBoard(currentBoardId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   };
 

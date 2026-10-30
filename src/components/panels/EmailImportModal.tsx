@@ -5,7 +5,7 @@ import { useBoardStore } from '../../store/boardStore';
 import { useJobQueueStore } from '../../store/jobQueueStore';
 import { NEW_CLUSTER, useEmailImportStore } from '../../store/emailImportStore';
 import { useRoster } from '../../hooks/useRoster';
-import { EMAIL_FILE_ACCEPT } from '../../lib/email/files';
+import { EMAIL_FILE_ACCEPT } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta, matchDraft } from '../../lib/email/meta';
 import { shortAddress } from '../../lib/email/addresses';
 import { unseenDomains, unseenParticipants } from '../../lib/roster';

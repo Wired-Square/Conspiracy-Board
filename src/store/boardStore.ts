@@ -18,23 +18,19 @@ import { DEFAULT_KIND, isBoardKind, isRecordKind, viewFor } from '../lib/kinds';
 import { gridPositions } from '../lib/layout';
 import type { View } from '../types/view';
 import { emailCardsByMessageId, matchDraft } from '../lib/email/meta';
-import { documentMime, isDocumentFile, isImageFile } from '../lib/import/files';
+import { documentMime, extOf, isDocumentFile, isImageFile } from '../lib/fileTypes';
 import { pickDocumentMeta, pickImageMeta } from '../lib/import/meta';
 import { ocrTitle, usableOcr } from '../lib/import/ocr';
 import { emptyBoard } from '../data/emptyBoard';
 import { buildManifest } from '../data/bundle';
 import { slugify } from '../lib/slug';
+import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
-import { extOf } from '../storage/media';
-import { useBundleImportStore } from './bundleImportStore';
+import { openDialog } from './dialogStore';
 import { useJobQueueStore } from './jobQueueStore';
 import type { MediaMeta, PickedFile } from '../storage/StorageAdapter';
-import {
-  boardMediaRefs,
-  cardMediaEntries,
-  migrateBoardMedia,
-  recoverCardAttachments,
-} from './boardMigration';
+import { boardMediaRefs, cardMediaEntries } from '../lib/media';
+import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
 
@@ -365,7 +361,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       if (dirty) contentDirty = true;
       // Autosave runs from a debounced timer with no caller to catch this, so
       // the error has to land in state or it is lost entirely.
-      set({ lastError: err instanceof Error ? err.message : String(err) });
+      set({ lastError: errorMessage(err) });
     }
   };
 
@@ -1163,7 +1159,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
           filename,
         });
       } catch (err) {
-        set({ lastError: err instanceof Error ? err.message : String(err) });
+        set({ lastError: errorMessage(err) });
         return false;
       }
     },
@@ -1183,9 +1179,9 @@ export const useBoardStore = create<BoardState>((set, get) => {
         }
         // The dialog picks which to bring in and renames them; a legacy .json
         // arrives as a one-board list, so it gets the same checkbox and rename.
-        useBundleImportStore.getState().openWith(boards);
+        openDialog({ bundleImportBoards: boards });
       } catch (err) {
-        set({ lastError: err instanceof Error ? err.message : String(err) });
+        set({ lastError: errorMessage(err) });
       } finally {
         set({ importStatus: null });
       }

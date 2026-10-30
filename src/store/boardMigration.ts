@@ -1,47 +1,12 @@
 import type { Board, Card } from '../types/board';
 import { storage } from '../storage';
-import { extOf } from '../storage/media';
+import { extOf } from '../lib/fileTypes';
 import { b64ToBytes } from '../lib/base64';
 import { parseEmailFile } from '../lib/email/parseEmails';
 import { persistDraftMedia } from '../lib/email/persistMedia';
 
-// Two board-media chores that need the parsed board: collecting every file a
-// board still points at (for the GC keep-set), and moving a legacy board's
-// inline base64 pictures out into the media library. Both live here rather than
-// in the store so the store stays about board state, not storage shape.
-
-/** A card's media, tagged with what kind it is — each is reprocessed a different
- *  way (see boardStore.reprocessCard) and shown with its own row in maintenance. */
-export type CardMediaKind = 'image' | 'eml' | 'attachment' | 'document';
-export type CardMediaEntry = { file: string; kind: CardMediaKind };
-
-/**
- * Every media file a card points at, tagged: its picture, the original .eml, an
- * attachment, a document. This is the *only* enumeration of the media-bearing
- * fields, and (through `cardMediaRefs`) the keep-set for a destructive sweep
- * (`gcMedia` → `gc_media`): a media field added to the model but left out here
- * would have its files quietly deleted the next time GC runs. Add the field to the
- * model (`types/board.ts`) and to this list together — the field comments there
- * point back here to say so.
- */
-export function cardMediaEntries(card: Card): CardMediaEntry[] {
-  const out: CardMediaEntry[] = [];
-  if (card.imageFile) out.push({ file: card.imageFile, kind: 'image' });
-  if (card.email?.emlFile) out.push({ file: card.email.emlFile, kind: 'eml' });
-  for (const a of card.email?.attachments ?? []) if (a.file) out.push({ file: a.file, kind: 'attachment' });
-  if (card.document?.file) out.push({ file: card.document.file, kind: 'document' });
-  return out;
-}
-
-/** Just the filenames a card points at — the keep-set for a GC sweep. */
-export function cardMediaRefs(card: Card): string[] {
-  return cardMediaEntries(card).map((e) => e.file);
-}
-
-/** Every media file a board references — the keep-set for a GC sweep. */
-export function boardMediaRefs(board: Board): string[] {
-  return board.cards.flatMap(cardMediaRefs);
-}
+// Board-media chores that need storage: moving a legacy board's inline pictures
+// into the media library, and recovering an email card's attachments from its .eml.
 
 /**
  * Decode a data: URL to bytes without `fetch` — the app's connect-src CSP does

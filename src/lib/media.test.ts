@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Board, Card } from '../types/board';
-import { boardMediaRefs, cardMediaRefs } from './boardMigration';
+import { boardMediaRefs, cardMediaEntries } from './media';
 
 const card = (over: Partial<Card> = {}): Card => ({
   id: 'c1',
@@ -18,9 +18,9 @@ const card = (over: Partial<Card> = {}): Card => ({
   ...over,
 });
 
-describe('cardMediaRefs', () => {
+describe('cardMediaEntries', () => {
   it('is empty for a card with no media', () => {
-    expect(cardMediaRefs(card())).toEqual([]);
+    expect(cardMediaEntries(card())).toEqual([]);
   });
 
   it('collects the picture, the .eml, kept attachments and a document', () => {
@@ -38,7 +38,12 @@ describe('cardMediaRefs', () => {
       document: { file: 'doc.pdf', name: 'doc.pdf' },
     });
     // The name-only attachment (no file) contributes nothing — it has no bytes.
-    expect(cardMediaRefs(c).sort()).toEqual(['a.pdf', 'doc.pdf', 'img.png', 'msg.eml']);
+    expect(cardMediaEntries(c)).toEqual([
+      { file: 'img.png', kind: 'image' },
+      { file: 'msg.eml', kind: 'eml' },
+      { file: 'a.pdf', kind: 'attachment' },
+      { file: 'doc.pdf', kind: 'document' },
+    ]);
   });
 });
 

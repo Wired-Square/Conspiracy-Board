@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { byRecency, dedupeEntries, emptyBoardIndex, safeParseBoardIndex } from './boardIndex';
+import { byRecency, emptyBoardIndex, parseBoardIndexJson } from './boardIndex';
+
+const parse = (input: unknown) => parseBoardIndexJson(JSON.stringify(input));
 
 const index = {
   version: 1,
@@ -10,44 +12,42 @@ const index = {
   ],
 };
 
-describe('safeParseBoardIndex', () => {
+describe('parseBoardIndexJson', () => {
   it('round-trips a valid index', () => {
-    expect(safeParseBoardIndex(JSON.parse(JSON.stringify(index)))).toEqual(index);
+    expect(parse(index)).toEqual(index);
   });
 
   it('defaults a bare index', () => {
-    expect(safeParseBoardIndex({ version: 1 })).toEqual(emptyBoardIndex());
+    expect(parse({ version: 1 })).toEqual(emptyBoardIndex());
   });
 
   it('rejects garbage, which is what triggers a rebuild', () => {
-    expect(safeParseBoardIndex(null)).toBeNull();
-    expect(safeParseBoardIndex({})).toBeNull();
-    expect(safeParseBoardIndex({ version: 2, entries: [] })).toBeNull();
-    expect(safeParseBoardIndex({ version: 1, entries: [{ id: 'x' }] })).toBeNull();
+    expect(parse(null)).toBeNull();
+    expect(parse({})).toBeNull();
+    expect(parse({ version: 2, entries: [] })).toBeNull();
+    expect(parse({ version: 1, entries: [{ id: 'x' }] })).toBeNull();
   });
 });
 
-describe('dedupeEntries', () => {
+describe('parseBoardIndexJson dedupe', () => {
   it('collapses a repeated id to the freshest summary', () => {
     const entries = [
       { id: 'brd_a', title: 'A (old)', updatedAt: '2025-01-01T00:00:00.000Z' },
       { id: 'brd_b', title: 'B', updatedAt: '2025-01-01T00:00:00.000Z' },
       { id: 'brd_a', title: 'A (new)', updatedAt: '2025-01-03T00:00:00.000Z' },
     ];
-    const out = dedupeEntries(entries);
+    const out = parse({ version: 1, entries })!.entries;
     expect(out).toHaveLength(2);
     expect(out.find((e) => e.id === 'brd_a')?.title).toBe('A (new)');
     expect(out.map((e) => e.id)).toEqual(['brd_a', 'brd_b']);
   });
 
   it('leaves a unique index untouched', () => {
-    expect(dedupeEntries(index.entries)).toEqual(index.entries);
+    expect(parse(index)!.entries).toEqual(index.entries);
   });
-});
 
-describe('safeParseBoardIndex dedupe', () => {
   it('drops a duplicate entry a legacy library carried on disk', () => {
-    const parsed = safeParseBoardIndex({
+    const parsed = parse({
       ...index,
       entries: [...index.entries, { id: 'brd_a', title: 'A dup', updatedAt: '2020-01-01T00:00:00.000Z' }],
     });

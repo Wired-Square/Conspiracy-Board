@@ -1,5 +1,5 @@
 import type { CardKind } from '../types/board';
-import type { CardMediaKind } from '../store/boardMigration';
+import type { CardMediaKind } from './media';
 import type { MediaEntry } from '../storage/StorageAdapter';
 
 // The integrity read of the media library, done as one pure function so it can be
@@ -72,7 +72,7 @@ export const STATUS_LABEL: Record<MediaStatus, string> = {
  * lib/search's `cardMatches`: `q` is already through `normaliseQuery`, and an empty
  * query matches every row so an idle search box leaves the list whole.
  */
-export function mediaRowMatches(row: MediaRow, q: string): boolean {
+function mediaRowMatches(row: MediaRow, q: string): boolean {
   if (!q) return true;
   const hit = (s?: string | null) => !!s && s.toLowerCase().includes(q);
   return (

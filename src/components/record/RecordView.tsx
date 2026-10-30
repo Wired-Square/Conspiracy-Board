@@ -16,7 +16,8 @@ import {
 } from '../../lib/roster';
 import { formatOccurredAt, newestFirst } from '../../lib/dates';
 import { shortAddress } from '../../lib/email/addresses';
-import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { cardImageSrc } from '../../storage/media';
+import { cardImageStyle } from '../../lib/imageCrop';
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox
 // would bury the argument under two hundred cards of post — so it is here, in

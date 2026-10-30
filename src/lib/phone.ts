@@ -18,11 +18,6 @@ export function setLocalCallingCode(code: string): void {
   localCallingCode = digits ? `+${digits}` : '+61';
 }
 
-/** The configured calling code (e.g. `+61`). */
-export function getLocalCallingCode(): string {
-  return localCallingCode;
-}
-
 /**
  * The number as an identity key: canonical international form. A leading `+` is kept;
  * `00…` (international access) becomes `+…`; a leading national-trunk `0` becomes the

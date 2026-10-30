@@ -12,8 +12,8 @@ import type { Board } from '../types/board';
 // directly. The shell (src-tauri/src/board_store/bundle.rs) treats the manifest as opaque
 // bytes — it authors nothing and validates nothing here.
 
-export const BUNDLE_FORMAT = 'conspiracy-bundle';
-export const BUNDLE_FORMAT_VERSION = 1;
+const BUNDLE_FORMAT = 'conspiracy-bundle';
+const BUNDLE_FORMAT_VERSION = 1;
 
 export type BundleManifestBoard = { id: string; title: string; file: string };
 

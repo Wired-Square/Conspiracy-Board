@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { useBoardStore } from './boardStore';
 import { storage } from '../storage';
-import { boardMediaRefs, cardMediaEntries } from './boardMigration';
+import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { auditMedia, type CurrentRef, type MediaRow } from '../lib/maintenance';
+import { errorMessage } from '../lib/errors';
 
 // The media library reconciled against the boards, for the Objects view — lifted out
 // of the view into a store so the toolbar's Objects badge can read the file count and
@@ -68,7 +69,7 @@ export const useMediaAuditStore = create<MediaAuditState>((set) => ({
 
       set({ rows: auditMedia(await diskP, currentRefs, allRefs), incomplete: !complete });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) });
+      set({ error: errorMessage(e) });
     } finally {
       set({ loading: false });
     }

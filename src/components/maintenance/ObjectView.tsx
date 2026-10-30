@@ -5,7 +5,7 @@ import { jobsPending, useJobQueueStore } from '../../store/jobQueueStore';
 import { useMediaAuditStore } from '../../store/mediaAuditStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
-import { isDocumentFile, isImageFile } from '../../lib/import/files';
+import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
 import { formatBytes, plural } from '../../lib/format';
 import { useDocHits } from '../../hooks/useDocHits';
 import { countIssues, isIssue, mediaRowMatchesWithDocs, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';

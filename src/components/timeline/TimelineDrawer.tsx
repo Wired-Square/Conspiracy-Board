@@ -7,13 +7,10 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { dayKey, daysBetween, daysBetweenCards, formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
 import { CARD_KINDS } from '../../lib/kinds';
+import { CARD_H, CARD_W } from '../../lib/layout';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
-
-// Card face dimensions, used only until React Flow has measured a node.
-const CARD_W = 210;
-const CARD_H = 140;
 
 /**
  * A chronological strip under the board.
@@ -108,21 +105,25 @@ export function TimelineDrawer() {
   );
 
   // Bring a chip into view in the horizontal strip, so a selection made elsewhere
-  // (the milestone controls) isn't left off-screen.
+  // (the milestone controls) isn't left off-screen. Two frames: the strip may be
+  // opening from collapsed, so let it mount and settle before scrolling.
   const scrollChipIntoView = useCallback((id: string) => {
-    stripRef.current
-      ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        stripRef.current
+          ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }),
+      ),
+    );
   }, []);
 
   // Searching opens the drawer and jumps to the first (earliest) match — the way
-  // goToEvent does for milestones. On the settled query; two frames let the strip
-  // mount before the scroll.
+  // goToEvent does for milestones. On the settled query.
   useEffect(() => {
     if (!tlQuery) return;
     setOpen(true);
     const first = dated[0];
-    if (first) requestAnimationFrame(() => requestAnimationFrame(() => scrollChipIntoView(first.id)));
+    if (first) scrollChipIntoView(first.id);
   }, [tlQuery, dated, scrollChipIntoView]);
 
   // The anchor's other half: after a filter change re-renders the strip, put
@@ -218,11 +219,7 @@ export function TimelineDrawer() {
         : Math.min(events.length - 1, cursor + 1);
       setEventCursor(idx);
       setOpen(true);
-      // Two frames: the strip may be opening from collapsed, so let it mount and
-      // settle before scrolling the chip to the centre.
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => scrollChipIntoView(events[idx].id)),
-      );
+      scrollChipIntoView(events[idx].id);
     },
     [events, cursor, scrollChipIntoView],
   );

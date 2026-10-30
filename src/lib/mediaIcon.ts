@@ -1,7 +1,7 @@
 import type { CardKind } from '../types/board';
-import type { CardMediaKind } from '../store/boardMigration';
+import type { CardMediaKind } from './media';
 import { KIND_META } from './kinds';
-import { isAudioFile, isImageFile, isVideoFile } from './import/files';
+import { isAudioFile, isImageFile, isVideoFile } from './fileTypes';
 
 // Which icon a file or a card gets, decided once here rather than in the
 // component that draws it — the same reason auditMedia is a pure function: logic

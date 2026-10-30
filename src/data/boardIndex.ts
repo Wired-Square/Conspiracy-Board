@@ -30,14 +30,14 @@ const boardSummarySchema = z.object({
   updatedAt: z.string(),
 });
 
-export const boardIndexSchema = z.object({
+const boardIndexSchema = z.object({
   version: z.literal(1),
   currentId: z.string().nullable().default(null),
   entries: z.array(boardSummarySchema).default([]),
 });
 
 /** Non-throwing parse; null on anything unusable, which triggers a rebuild. */
-export function safeParseBoardIndex(input: unknown): BoardIndex | null {
+function safeParseBoardIndex(input: unknown): BoardIndex | null {
   const result = boardIndexSchema.safeParse(input);
   if (!result.success) return null;
   const data = result.data as BoardIndex;
@@ -80,7 +80,7 @@ export function byRecency(entries: BoardSummary[]): BoardSummary[] {
  * (see `safeParseBoardIndex`) heals every consumer, and the next save writes the
  * collapsed index back to disk.
  */
-export function dedupeEntries(entries: BoardSummary[]): BoardSummary[] {
+function dedupeEntries(entries: BoardSummary[]): BoardSummary[] {
   const best = new Map<string, BoardSummary>();
   for (const e of entries) {
     const prev = best.get(e.id);

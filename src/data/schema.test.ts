@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseBoard, safeParseBoard } from './schema';
+import { parseBoard, safeParseBoardJson } from './schema';
+
+const safeParseBoard = (input: unknown) => safeParseBoardJson(JSON.stringify(input));
 
 const v1Board = {
   version: 1,

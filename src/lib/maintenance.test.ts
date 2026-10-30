@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   auditMedia,
   isIssue,
-  mediaRowMatches,
   mediaRowMatchesWithDocs,
   type CurrentRef,
   type MediaRow,
 } from './maintenance';
 import type { MediaEntry } from '../storage/StorageAdapter';
+
+const mediaRowMatches = (row: MediaRow, q: string) => mediaRowMatchesWithDocs(row, q, new Set());
 
 const disk = (name: string, size = 10): MediaEntry => ({ name, size });
 

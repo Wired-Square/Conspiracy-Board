@@ -6,7 +6,8 @@ import { formatOccurredAt } from '../../lib/dates';
 import { KIND_META, isEntityKind, isGradedKind } from '../../lib/kinds';
 import { GRADE_META, gradeTint } from '../../lib/grades';
 import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
-import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { cardImageSrc } from '../../storage/media';
+import { cardImageStyle } from '../../lib/imageCrop';
 
 // A short plain-text preview of the markdown notes for the card face.
 function notesPreview(notes: string): string {

@@ -25,11 +25,7 @@ import { useUndoShortcut } from './hooks/useUndoShortcut';
 import { useBoardMenu } from './platform/boardMenu';
 import { useImportProgress } from './platform/importProgress';
 import { useQuitGuard } from './platform/quitGuard';
-import { usePropertiesStore } from './store/propertiesStore';
-import { useImageEditorStore } from './store/imageEditorStore';
-import { useBundleExportStore } from './store/bundleExportStore';
-import { useBundleImportStore } from './store/bundleImportStore';
-import { useManageStore } from './store/manageStore';
+import { closeDialog, useDialogStore } from './store/dialogStore';
 
 // Subscribes to importStatus on its own, so a per-media progress event re-renders
 // this leaf rather than App and the whole canvas beneath it.
@@ -42,11 +38,11 @@ export default function App() {
   const init = useBoardStore((s) => s.init);
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   const emailImportOpen = useEmailImportStore((s) => s.open);
-  const propertiesOpen = usePropertiesStore((s) => s.open);
-  const imageEditorCardId = useImageEditorStore((s) => s.cardId);
-  const bundleExportOpen = useBundleExportStore((s) => s.open);
-  const bundleImportOpen = useBundleImportStore((s) => s.open);
-  const manageOpen = useManageStore((s) => s.open);
+  const propertiesOpen = useDialogStore((s) => s.properties);
+  const imageEditorCardId = useDialogStore((s) => s.imageEditorCardId);
+  const bundleExportOpen = useDialogStore((s) => s.bundleExport);
+  const bundleImportBoards = useDialogStore((s) => s.bundleImportBoards);
+  const manageOpen = useDialogStore((s) => s.manage);
   const view = useBoardStore((s) => s.view);
   const firstRun = useBoardStore((s) => s.firstRun);
   const [ready, setReady] = useState(false);
@@ -79,7 +75,7 @@ export default function App() {
     return (
       <>
         <FirstRunModal />
-        {bundleImportOpen && <BundleImportModal />}
+        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         <ImportOverlay />
       </>
     );
@@ -128,12 +124,10 @@ export default function App() {
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
         {emailImportOpen && <EmailImportModal />}
-        {propertiesOpen && (
-          <BoardPropertiesModal onClose={() => usePropertiesStore.getState().setOpen(false)} />
-        )}
+        {propertiesOpen && <BoardPropertiesModal onClose={() => closeDialog('properties')} />}
         {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
         {bundleExportOpen && <BundleExportModal />}
-        {bundleImportOpen && <BundleImportModal />}
+        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         {manageOpen && <ManageModal />}
         <ImportOverlay />
         <BackgroundTaskIndicator />

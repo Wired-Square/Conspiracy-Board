@@ -226,15 +226,14 @@ const boardBase = z.object({
  * is async and effectful, so it cannot happen in a pure transform; it runs in
  * the store's load path (`migrateBoardMedia`) instead.
  */
-export const boardSchema = boardBase.transform((b) => ({ ...b, version: 4 as const }));
+const boardSchema = boardBase.transform((b) => ({ ...b, version: 4 as const }));
 
 /** Parse and validate unknown input into a Board, throwing on invalid data. */
 export function parseBoard(input: unknown): Board {
   return boardSchema.parse(input) as Board;
 }
 
-/** Non-throwing variant; returns null on invalid input. */
-export function safeParseBoard(input: unknown): Board | null {
+function safeParseBoard(input: unknown): Board | null {
   const result = boardSchema.safeParse(input);
   return result.success ? (result.data as Board) : null;
 }

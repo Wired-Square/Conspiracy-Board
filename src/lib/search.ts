@@ -1,7 +1,7 @@
 import type { Card } from '../types/board';
 import { participantAddresses } from './roster';
 import { communicationParties } from './comms';
-import { cardMediaEntries } from '../store/boardMigration';
+import { cardMediaEntries } from './media';
 
 // Free-text search over a card. One matcher, so every surface agrees on what a
 // query matches: the board dims by it, the record filters by it, the timeline

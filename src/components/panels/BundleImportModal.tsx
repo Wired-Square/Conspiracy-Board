@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { useBoardStore } from '../../store/boardStore';
-import { useBundleImportStore } from '../../store/bundleImportStore';
+import { closeDialog } from '../../store/dialogStore';
 import { plural } from '../../lib/format';
+import type { Board } from '../../types/board';
 
 /**
  * Choose which boards from a picked bundle to bring in, and what to call each. A
@@ -11,9 +12,8 @@ import { plural } from '../../lib/format';
  * not an overwrite. The bundle's media is already in the library by the time this
  * opens (read_bundle stored it); this only decides which boards to keep.
  */
-export function BundleImportModal() {
-  const boards = useBundleImportStore((s) => s.boards);
-  const close = useBundleImportStore((s) => s.close);
+export function BundleImportModal({ boards }: { boards: Board[] }) {
+  const close = () => closeDialog('bundleImportBoards');
   const adoptBundle = useBoardStore((s) => s.adoptBundle);
 
   const [rows, setRows] = useState(() =>

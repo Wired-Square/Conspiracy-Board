@@ -1,9 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect } from 'react';
 import { useBoardStore } from '../store/boardStore';
-import { usePropertiesStore } from '../store/propertiesStore';
-import { useBundleExportStore } from '../store/bundleExportStore';
-import { useManageStore } from '../store/manageStore';
+import { openDialog } from '../store/dialogStore';
 import { storage } from '../storage';
 import { prompt } from '../store/promptStore';
 import type { View } from '../types/view';
@@ -49,16 +47,16 @@ async function handle(event: BoardMenuEvent) {
       break;
     case 'manage':
       // Rename, Delete and Show in Finder live inside this dialog now.
-      useManageStore.getState().setOpen(true);
+      openDialog({ manage: true });
       break;
     case 'import':
       await store.importBoard();
       break;
     case 'export':
-      useBundleExportStore.getState().openDialog();
+      openDialog({ bundleExport: true });
       break;
     case 'properties':
-      usePropertiesStore.getState().setOpen(true);
+      openDialog({ properties: true });
       break;
   }
 }

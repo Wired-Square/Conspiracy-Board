@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { useBoardStore } from '../../store/boardStore';
-import { useImageEditorStore } from '../../store/imageEditorStore';
+import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
-import { extOf, mediaSrc } from '../../storage/media';
+import { mediaSrc } from '../../storage/media';
+import { extOf } from '../../lib/fileTypes';
 import { clamp, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
 
@@ -64,7 +65,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
   const card = useBoardStore((s) => s.cards.find((c) => c.id === cardId));
   const cards = useBoardStore((s) => s.cards);
   const updateCard = useBoardStore((s) => s.updateCard);
-  const close = useImageEditorStore((s) => s.close);
+  const close = () => closeDialog('imageEditorCardId');
 
   // Pictures already on the board, one tile per file — the name is content-addressed,
   // so cards sharing an image share the one file (a group photo lands on everyone in

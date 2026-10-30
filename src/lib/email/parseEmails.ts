@@ -1,7 +1,8 @@
 import type { Card, EmailAddress } from '../../types/board';
 import { htmlToPlainText } from './htmlToText';
 import { looksLikeMbox, splitMbox } from './mbox';
-import { extOf } from '../../storage/media';
+import { extOf } from '../fileTypes';
+import { errorMessage } from '../errors';
 
 /**
  * Transient bytes a parsed message carries until it is committed. Never stored
@@ -196,7 +197,7 @@ async function parseMany(
       drafts.push(await parseOne(raw));
     } catch (err) {
       errors.push(
-        `${label}: message ${i + 1} — ${err instanceof Error ? err.message : String(err)}`,
+        `${label}: message ${i + 1} — ${errorMessage(err)}`,
       );
     }
     onProgress?.(i + 1, raws.length);
@@ -231,7 +232,7 @@ export async function parseEmailFile(
   } catch (err) {
     return {
       drafts: [],
-      errors: [`${name} — ${err instanceof Error ? err.message : String(err)}`],
+      errors: [`${name} — ${errorMessage(err)}`],
     };
   }
 }

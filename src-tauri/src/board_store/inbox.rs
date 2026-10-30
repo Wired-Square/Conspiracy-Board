@@ -36,7 +36,7 @@ struct InboxBatch {
 
 /// The files the Inbox imports: email that opens the import preview, plus the
 /// images and documents the board's own drop target already turns into cards
-/// (see `isMediaFile` in `src/lib/import/files.ts`, the canonical extension
+/// (see `isMediaFile` in `src/lib/fileTypes.ts`, the canonical extension
 /// list this mirrors). Anything else — a stray note — is left in the folder
 /// rather than mis-imported.
 fn is_inbox_file(name: &str) -> bool {

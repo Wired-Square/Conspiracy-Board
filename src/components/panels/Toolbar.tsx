@@ -7,7 +7,7 @@ import { useMediaAuditStore } from '../../store/mediaAuditStore';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
 import { plural } from '../../lib/format';
-import { DOCUMENT_FILE_ACCEPT, IMAGE_FILE_ACCEPT } from '../../lib/import/files';
+import { DOCUMENT_FILE_ACCEPT, IMAGE_FILE_ACCEPT } from '../../lib/fileTypes';
 import { arrangedPositions, type LayoutNode } from '../../lib/autoLayout';
 import { primaryClusterId } from '../../lib/clusters';
 import { CARD_H, CARD_W } from '../../lib/layout';

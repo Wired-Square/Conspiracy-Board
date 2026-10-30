@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { ImageCrop } from '../types/board';
 
 // The maths behind the image cropper, kept pure and away from the component so it
@@ -45,5 +46,34 @@ export function viewToCrop(scale: number, tx: number, ty: number, { fw, fh, natW
     y: clamp(-ty / scale / natH, 0, 1),
     w: clamp(fw / scale / natW, 0, 1),
     h: clamp(fh / scale / natH, 0, 1),
+  };
+}
+
+// A stable identity for the no-crop case, so an uncropped <img> is handed the same
+// object every render rather than a fresh {} each time.
+const NO_CROP: CSSProperties = {};
+
+/**
+ * The picture's crop as an inline style for its `<img>`, or `NO_CROP` for the
+ * default centre cover. The render site must give the image a clip box —
+ * `position: relative; overflow: hidden` with a definite height — because a crop
+ * positions the image absolutely inside it. The saved region is 4:3: in a 4:3 box
+ * (the polaroid, the editor preview) it lands exactly; in a box of another shape
+ * (the 34px record thumb) it fills the width and is clipped in height. No pixel
+ * size is needed at render — the image is sized so the crop's width fills the box
+ * and shifted by its offset, both as percentages of the box. The one place the crop
+ * becomes CSS, so every render site is a single spread and none re-derives it.
+ */
+export function cardImageStyle(card: { imageCrop: ImageCrop | null }): CSSProperties {
+  const c = card.imageCrop;
+  if (!c) return NO_CROP;
+  return {
+    position: 'absolute',
+    left: `calc(${-c.x} / ${c.w} * 100%)`,
+    top: `calc(${-c.y} / ${c.h} * 100%)`,
+    width: `calc(100% / ${c.w})`,
+    height: 'auto',
+    maxWidth: 'none',
+    maxHeight: 'none',
   };
 }
