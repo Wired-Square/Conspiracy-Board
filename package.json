@@ -19,7 +19,7 @@
     "release:rebuild": "node scripts/release.js rebuild"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@xyflow/react": "^12.11.0",
     "d3-force": "^3.0.0",
@@ -32,7 +32,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/d3-force": "^3.0.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

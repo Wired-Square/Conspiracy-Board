@@ -12,6 +12,8 @@ use tauri::menu::{
   CheckMenuItem, Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{AppHandle, Emitter, Wry};
+#[cfg(target_os = "macos")]
+use wslib_tauri::quit_guard::QUIT_MENU_ID;
 
 /// A board as the menu needs it — enough to list it and to open it. Sent by the
 /// webview, which is the one that knows the library.
@@ -119,7 +121,24 @@ fn build_menu(
   }
   menu.insert(&file_submenu(app, boards, current)?, 1)?;
   menu.insert(&view_submenu(app, view)?, 3)?;
+  #[cfg(target_os = "macos")]
+  replace_quit(app, &menu)?;
   Ok(menu)
+}
+
+/// The predefined Quit terminates without an exit the quit guard can hold, so the
+/// app submenu's last item becomes `QUIT_MENU_ID` (see `wslib_tauri::quit_guard`).
+#[cfg(target_os = "macos")]
+fn replace_quit(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
+  let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else {
+    return Ok(());
+  };
+  if let Some(MenuItemKind::Predefined(quit)) = app_menu.items()?.pop() {
+    app_menu.remove(&quit)?;
+    let label = format!("Quit {}", app.package_info().name);
+    app_menu.append(&MenuItem::with_id(app, QUIT_MENU_ID, label, true, Some("CmdOrCtrl+Q"))?)?;
+  }
+  Ok(())
 }
 
 /// Install the initial menu at startup, before the webview has mounted to send a
@@ -146,7 +165,8 @@ pub fn set_board_menu(
 }
 
 /// Turn a menu click into a `menu:board` event for the webview. Predefined items
-/// (Quit, Copy, …) and the empty-list placeholder fall through to nothing.
+/// (Copy, …), Quit (the quit guard's) and the empty-list placeholder fall through
+/// to nothing.
 pub fn on_event(app: &AppHandle, event: MenuEvent) {
   let id = event.id().as_ref();
   // The Inbox reveal needs nothing from the webview — the folder is a fixed path —

@@ -193,6 +193,8 @@ type BoardState = {
    * `import:progress` events refine it to "media x of y" (see useImportProgress).
    */
   importStatus: string | null;
+  /** An autosave is pending or a save is in flight; the shell holds a quit on it. */
+  savePending: boolean;
 
   // Lifecycle.
   init: () => Promise<void>;
@@ -287,6 +289,8 @@ type BoardState = {
    */
   toBoard: (restamp?: boolean) => Board;
   save: () => Promise<void>;
+  /** Save any pending edit now and wait for every queued save to land. */
+  flushSaves: () => Promise<void>;
   /** Bundle the given library boards (by id) and save to a chosen file; false if cancelled. */
   exportBundle: (ids: string[]) => Promise<boolean>;
   /** Pick a bundle (or legacy board file) and open the select/rename import dialog. */
@@ -303,6 +307,7 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 // back out of order). The chain serialises them; each save snapshots the board
 // when its turn comes, so the later save writes the later state.
 let saveChain: Promise<void> = Promise.resolve();
+let savesInFlight = 0;
 
 // Whether anything *content* has changed since the last save. setViewport
 // schedules a save without setting it, so a pan/zoom persists the camera
@@ -317,6 +322,11 @@ let contentDirty = false;
 let initPromise: Promise<void> | undefined;
 
 export const useBoardStore = create<BoardState>((set, get) => {
+  const syncSavePending = () => {
+    const pending = autosaveTimer !== undefined || savesInFlight > 0;
+    if (get().savePending !== pending) set({ savePending: pending });
+  };
+
   const scheduleSave = () => {
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
@@ -325,6 +335,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       autosaveTimer = undefined;
       void get().save();
     }, AUTOSAVE_MS);
+    syncSavePending();
   };
 
   /** A content edit: mark the board dirty, then debounce a save. */
@@ -501,6 +512,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
     lastError: null,
     firstRun: false,
     importStatus: null,
+    savePending: false,
 
     setView(view) {
       set({ view });
@@ -1108,8 +1120,18 @@ export const useBoardStore = create<BoardState>((set, get) => {
     save() {
       // Chained, never raced — see saveChain above. doSave never throws, so a
       // failed save cannot wedge the chain.
-      saveChain = saveChain.then(doSave);
+      savesInFlight++;
+      syncSavePending();
+      saveChain = saveChain.then(doSave).finally(() => {
+        savesInFlight--;
+        syncSavePending();
+      });
       return saveChain;
+    },
+
+    async flushSaves() {
+      await flushAutosave();
+      await saveChain;
     },
 
     async exportBundle(ids) {

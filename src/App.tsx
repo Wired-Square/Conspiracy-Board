@@ -24,6 +24,7 @@ import { useInbox } from './platform/inbox';
 import { useUndoShortcut } from './hooks/useUndoShortcut';
 import { useBoardMenu } from './platform/boardMenu';
 import { useImportProgress } from './platform/importProgress';
+import { useQuitGuard } from './platform/quitGuard';
 import { usePropertiesStore } from './store/propertiesStore';
 import { useImageEditorStore } from './store/imageEditorStore';
 import { useBundleExportStore } from './store/bundleExportStore';
@@ -63,6 +64,8 @@ export default function App() {
   useBoardMenu();
   // Refines the import busy-overlay text as the shell stores a bundle's media.
   useImportProgress();
+  // Holds Cmd+Q until a pending autosave has landed.
+  useQuitGuard();
 
   if (!ready) {
     return <div className="loading">Pinning the board…</div>;

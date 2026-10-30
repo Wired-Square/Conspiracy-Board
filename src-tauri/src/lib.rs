@@ -2,6 +2,7 @@ mod board_store;
 mod extract;
 mod library_index;
 mod menu;
+mod quit;
 
 #[cfg(target_os = "macos")]
 mod ocr;
@@ -12,6 +13,8 @@ pub fn run() {
     // The native open and save panels for a bundle, which the shell reads and
     // writes by path so a large `.zip` never crosses IPC.
     .plugin(tauri_plugin_dialog::init())
+    .manage(quit::Busy::default())
+    .plugin(wslib_tauri::quit_guard::init(quit::is_busy))
     .invoke_handler(tauri::generate_handler![
       board_store::init_storage,
       board_store::load_index,
@@ -42,6 +45,7 @@ pub fn run() {
       library_index::rebuild_index,
       library_index::index_statuses,
       menu::set_board_menu,
+      quit::set_busy,
     ])
     .on_menu_event(menu::on_event)
     .setup(|app| {
