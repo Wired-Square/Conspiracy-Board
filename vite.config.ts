@@ -1,12 +1,15 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import solid from 'vite-plugin-solid';
+
+const solidSources = /\/src\/solid\//;
 
 // base: './' keeps the static build path-relative so a future Tauri wrapper can
 // load it from the filesystem without rework.
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react({ exclude: [/\/node_modules\//, solidSources] }), solid({ include: solidSources })],
   build: { outDir: 'dist' },
   // Tauri spawns this dev server and points the webview at a fixed URL, so the
   // port cannot float: strictPort makes a clash fail loudly rather than serve
