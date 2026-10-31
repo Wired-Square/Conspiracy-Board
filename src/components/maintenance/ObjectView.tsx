@@ -9,7 +9,8 @@ import { normaliseQuery } from '../../lib/search';
 import { mediaIconFor } from '../../lib/mediaIcon';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
-import { MediaDetailsDialog } from './MediaDetailsDialog';
+import { MediaDetailsDialog } from '../../solid/maintenance/MediaDetailsDialog';
+import { SolidIsland } from '../SolidIsland';
 import { CanvasPanel } from '../canvas/Canvas';
 import { useBoardStore, useJobsStore, useMediaAuditStore } from '../../hooks/useStores';
 
@@ -211,7 +212,8 @@ export function ObjectView() {
       )}
 
       {detailsRow && (
-        <MediaDetailsDialog
+        <SolidIsland
+          component={MediaDetailsDialog}
           row={detailsRow}
           indexState={indexStatus[detailsRow.file]}
           onClose={() => setDetailsRow(null)}

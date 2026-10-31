@@ -7,7 +7,6 @@ import { CardEditor } from './components/panels/CardEditor';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
-import { ImageEditorModal } from './components/panels/ImageEditorModal';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
 import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
@@ -17,6 +16,7 @@ import { ManageModal } from './solid/panels/ManageModal';
 import { BundleExportModal } from './solid/panels/BundleExportModal';
 import { BundleImportModal } from './solid/panels/BundleImportModal';
 import { EmailImportModal } from './solid/panels/EmailImportModal';
+import { ImageEditorModal } from './solid/panels/ImageEditorModal';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -131,7 +131,7 @@ export default function App() {
             pending delete confirm) doesn't outlive the dialog. */}
         {emailImportOpen && <EmailImportIsland />}
         {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
-        {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
+        {imageEditorCardId && <SolidIsland key={imageEditorCardId} component={ImageEditorModal} cardId={imageEditorCardId} />}
         {bundleExportOpen && <SolidIsland component={BundleExportModal} />}
         {bundleImportBoards && <SolidIsland component={BundleImportModal} boards={bundleImportBoards} />}
         {manageOpen && <SolidIsland component={ManageModal} />}
