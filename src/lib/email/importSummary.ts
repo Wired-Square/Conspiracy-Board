@@ -1,5 +1,5 @@
 import type { Card } from '../../types/board';
-import { formatBytes, plural } from '../format';
+import { size, count } from '@wired-square/kit/core';
 import { matchDraft, type DraftMatch } from './meta';
 import type { EmailDraft } from './parseEmails';
 
@@ -102,15 +102,15 @@ export type BatchCounts = {
 export function addLabel({ newCount, newPeople, newOrgs, patchCount, reclusterCount }: BatchCounts): string {
   // "3 people, 1 organisation" — what the offer is about to mint.
   const entityBits = [
-    newPeople > 0 && plural(newPeople, 'person', 'people'),
-    newOrgs > 0 && plural(newOrgs, 'organisation'),
+    newPeople > 0 && count(newPeople, 'person', 'people'),
+    newOrgs > 0 && count(newOrgs, 'organisation'),
   ]
     .filter(Boolean)
     .join(', ');
-  const addBits = [newCount > 0 && plural(newCount, 'card'), entityBits].filter(Boolean).join(' + ');
+  const addBits = [newCount > 0 && count(newCount, 'card'), entityBits].filter(Boolean).join(' + ');
   if (addBits) return `Add ${addBits}`;
-  if (patchCount) return `Update ${plural(patchCount, 'card')}`;
-  if (reclusterCount) return `Add ${plural(reclusterCount, 'card')} to cluster`;
+  if (patchCount) return `Update ${count(patchCount, 'card')}`;
+  if (reclusterCount) return `Add ${count(reclusterCount, 'card')} to cluster`;
   return 'Add 0 cards';
 }
 
@@ -125,8 +125,8 @@ export function batchStatus(
     `${newCount} to add`,
     completesCount && `${completesCount} fills in a dragged message`,
     dupeCount && (willCluster ? `${dupeCount} added to cluster` : `${dupeCount} already on board`),
-    patchCount && `${plural(patchCount, 'existing card')} updated`,
-    `~${formatBytes(addedBytes)}`,
+    patchCount && `${count(patchCount, 'existing card')} updated`,
+    `~${size(addedBytes)}`,
   ]
     .filter(Boolean)
     .join(' · ');

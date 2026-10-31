@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { closeDialog } from '../../store/dialogStore';
-import { plural } from '../../lib/format';
+import { count } from '@wired-square/kit/core';
 import type { Board } from '../../types/board';
 import { useBoardStore } from '../../hooks/useStores';
 
@@ -51,7 +51,7 @@ export function BundleImportModal({ boards }: { boards: Board[] }) {
       footer={
         <>
           <span className="modal__status">
-            {selectedCount} of {plural(rows.length, 'board')} selected
+            {selectedCount} of {count(rows.length, 'board')} selected
           </span>
           <button className="link-button" onClick={close}>
             Cancel

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { storage } from '../../storage';
 import type { MediaMeta } from '../../storage/StorageAdapter';
-import { formatBytes } from '../../lib/format';
+import { size } from '@wired-square/kit/core';
 import { formatOccurredAt } from '../../lib/dates';
 import { STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { Modal } from '../ui/Modal';
@@ -59,7 +59,7 @@ export function MediaDetailsDialog({
   indexState?: string;
   onClose: () => void;
 }) {
-  const { file, owner, status, size, onDisk } = row;
+  const { file, owner, status, size: bytes, onDisk } = row;
   const selectCard = useBoardStore((s) => s.selectCard);
 
   // The embedded properties are a live re-parse of the file, so only for on-disk files
@@ -82,7 +82,7 @@ export function MediaDetailsDialog({
 
   const identity: [string, string][] = [
     ['File', file],
-    ['Size', size != null ? formatBytes(size) : '—'],
+    ['Size', size(bytes)],
     ['On disk', onDisk ? 'yes' : 'no'],
     ['Status', STATUS_LABEL[status]],
     ['Search index', indexState ? INDEX_LABEL[indexState] ?? indexState : 'pending'],

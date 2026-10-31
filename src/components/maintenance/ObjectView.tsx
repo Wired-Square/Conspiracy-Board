@@ -3,7 +3,7 @@ import { Panel } from '@xyflow/react';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
-import { formatBytes, plural } from '../../lib/format';
+import { size, count } from '@wired-square/kit/core';
 import { useDocHits } from '../../hooks/useDocHits';
 import { countIssues, isIssue, mediaRowMatchesWithDocs, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { normaliseQuery } from '../../lib/search';
@@ -130,7 +130,7 @@ export function ObjectView() {
     () =>
       void run('Reprocessing all…', async () => {
         const { done } = await reprocessAll();
-        return `Reprocessed ${plural(done, 'card')}.`;
+        return `Reprocessed ${count(done, 'card')}.`;
       }),
     [run, reprocessAll],
   );
@@ -275,7 +275,7 @@ function MediaFileRowImpl({
             'no card'
           )}
           {' · '}
-          {formatBytes(row.size)}
+          {size(row.size)}
         </span>
       </span>
 

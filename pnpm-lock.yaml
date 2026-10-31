@@ -15,8 +15,8 @@ importers:
         specifier: ^2.0.0
         version: 2.7.1
       '@wired-square/kit':
-        specifier: 0.3.3
-        version: 0.3.3(solid-js@1.9.18)(vitest@4.1.10(vite@7.3.5))
+        specifier: 0.3.4
+        version: 0.3.4(solid-js@1.9.18)(vitest@4.1.10(vite@7.3.5))
       '@xyflow/react':
         specifier: ^12.11.0
         version: 12.11.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -668,8 +668,8 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
-  '@wired-square/kit@0.3.3':
-    resolution: {integrity: sha512-oThuv52PlFpVIejLiNdelY3WADJKEFcvpgEkElTYyQOwjIA6p3N5xYQmbE1ejbIp+wxjjiZ6aEQqe65AC0Rkfg==}
+  '@wired-square/kit@0.3.4':
+    resolution: {integrity: sha512-2v86O/dNLtN91jM7M23kE7uJlFyuEgKK5BpqrCjcwqGmy4yY88cfgcVZBDRhFBWRotN9G6gxoZijx3z5k6NiqQ==}
     peerDependencies:
       solid-js: ^1.9.11
       vitest: ^4.0.0 || ^5.0.0
@@ -1821,7 +1821,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@wired-square/kit@0.3.3(solid-js@1.9.18)(vitest@4.1.10(vite@7.3.5))':
+  '@wired-square/kit@0.3.4(solid-js@1.9.18)(vitest@4.1.10(vite@7.3.5))':
     dependencies:
       solid-js: 1.9.18
     optionalDependencies:

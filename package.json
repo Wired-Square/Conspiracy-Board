@@ -21,7 +21,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.0.0",
-    "@wired-square/kit": "0.3.3",
+    "@wired-square/kit": "0.3.4",
     "@xyflow/react": "^12.11.0",
     "d3-force": "^3.0.0",
     "postal-mime": "^2.7.5",

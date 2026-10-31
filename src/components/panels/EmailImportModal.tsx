@@ -11,7 +11,7 @@ import { unseenDomains, unseenParticipants } from '../../lib/roster';
 import { entitiesOfKind } from '../../lib/kinds';
 import { NEW_CARD, choiceFor, planOffer, type Choice } from '../../lib/importOffer';
 import { formatOccurredAt } from '../../lib/dates';
-import { plural } from '../../lib/format';
+import { count } from '@wired-square/kit/core';
 import { storage } from '../../storage';
 import type { Card } from '../../types/board';
 import { useBoardStore, useEmailImportStore } from '../../hooks/useStores';
@@ -236,7 +236,7 @@ export function EmailImportModal() {
               <OfferRow
                 key={p.address}
                 label={p.name ?? p.address}
-                meta={[p.name && p.address, plural(p.count, 'message')]
+                meta={[p.name && p.address, count(p.count, 'message')]
                   .filter(Boolean)
                   .join(' · ')}
                 choice={choiceFor(choices, p.address)}
@@ -267,7 +267,7 @@ export function EmailImportModal() {
               <OfferRow
                 key={d.domain}
                 label={d.domain}
-                meta={`${plural(d.count, 'message')} · ${plural(d.addressCount, 'address', 'addresses')}`}
+                meta={`${count(d.count, 'message')} · ${count(d.addressCount, 'address', 'addresses')}`}
                 choice={choiceFor(choices, d.domain)}
                 newLabel="New organisation"
                 groups={[{ label: 'Add to existing organisation', cards: orgs }]}

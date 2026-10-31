@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { closeDialog } from '../../store/dialogStore';
-import { plural } from '../../lib/format';
+import { count } from '@wired-square/kit/core';
 import type { BoardSummary } from '../../storage/StorageAdapter';
 import { useBoardStore } from '../../hooks/useStores';
 
@@ -67,7 +67,7 @@ export function BundleExportModal() {
       footer={
         <>
           <span className="modal__status">
-            {selected.size} of {plural(rows.length, 'board')} selected
+            {selected.size} of {count(rows.length, 'board')} selected
           </span>
           <button className="link-button" onClick={close}>
             Cancel
@@ -94,7 +94,7 @@ export function BundleExportModal() {
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
             <span className="import-offer__text">
               <span className="import-offer__label">Entire library</span>
-              <span className="import-offer__meta">All {plural(rows.length, 'board')}</span>
+              <span className="import-offer__meta">All {count(rows.length, 'board')}</span>
             </span>
           </label>
           <ul className="import-offer">

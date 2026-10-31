@@ -3,7 +3,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
-import { plural } from '../../lib/format';
+import { count } from '@wired-square/kit/core';
 import { DOCUMENT_FILE_ACCEPT, IMAGE_FILE_ACCEPT } from '../../lib/fileTypes';
 import { arrangedPositions, type LayoutNode } from '../../lib/autoLayout';
 import { primaryClusterId } from '../../lib/clusters';
@@ -162,10 +162,10 @@ function ObjectsBadge() {
   const loading = useMediaAuditStore((s) => s.loading);
   const status = useMediaAuditStore((s) => s.status);
   const issueCount = countIssues(rows);
-  const count = `${plural(rows.length, 'file')}${issueCount ? ` · ${issueCount} to look at` : ''}`;
+  const label = `${count(rows.length, 'file')}${issueCount ? ` · ${issueCount} to look at` : ''}`;
   return (
     <span className="objects-badge">
-      {VIEW_META.object.label} · {loading ? 'reading the library…' : count}
+      {VIEW_META.object.label} · {loading ? 'reading the library…' : label}
       {status && ` · ${status}`}
     </span>
   );
