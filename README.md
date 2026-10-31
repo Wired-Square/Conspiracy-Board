@@ -543,11 +543,13 @@ Four ways in, none of which touch the network:
 However it arrives, a message lands in [the record](#the-record), not on the
 board.
 
-Parsing is `postal-mime`, dynamically imported so it stays out of the main
-bundle. It handles the things that actually break naive parsers: folded headers,
-RFC 2047 encoded-words, quoted-printable, and non-UTF-8 charsets. Files are read
-as **bytes, not text** — a message can only be decoded with its declared charset
-while the original bytes survive.
+Parsing is the shell's (`src-tauri/src/mail.rs`, on `mail-parser`). It handles
+the things that actually break naive parsers: folded headers, RFC 2047
+encoded-words, quoted-printable, and non-UTF-8 charsets. Files are read as
+**bytes, not text**, and an mbox is split on bytes too — a message can only be
+decoded with its declared charset while its original bytes survive. Each
+message's .eml, picture and attachments are kept as it is parsed, so a preview
+you cancel leaves orphans for the media sweep.
 
 Imports dedupe on `Message-ID`. A message with no Message-ID never dedupes (two
 hand-pasted messages would otherwise collide on `null`).
@@ -740,10 +742,11 @@ get their own column in the drawer.
 ## Tests
 
 Vitest, `environment: 'node'`, no jsdom. Deliberately narrow: the pure logic
-where clicking around lies to you — date/timezone handling, mbox splitting, the
-email parsing, Message-ID matching, address identity and
-the roster, the import offer, the grade palette, slugs. Components, the store and
-the shell are verified by driving the real app instead.
+where clicking around lies to you — date/timezone handling, Message-ID matching,
+address identity and the roster, the import offer, the grade palette, slugs. The
+board schema, email parsing and mbox splitting are the shell's, tested with
+`cargo test` against fixtures in `src-tauri/tests/fixtures/`. Components, the store
+and the shell's commands are verified by driving the real app instead.
 
 That rule cuts both ways: **logic inside a component is logic nobody checks**, so
 anything that decides something belongs in `lib/` — which is why `planOffer`,

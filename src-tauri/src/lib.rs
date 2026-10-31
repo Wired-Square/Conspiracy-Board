@@ -2,8 +2,10 @@
 mod bindings;
 mod board_store;
 mod extract;
+mod file_types;
 mod jobs;
 mod library_index;
+mod mail;
 #[cfg(feature = "mcp")]
 mod mcp;
 mod menu;
@@ -51,6 +53,9 @@ pub fn run() {
       board_store::media::open_media_dir,
       board_store::bundle::write_bundle,
       board_store::bundle::read_bundle,
+      mail::parse_email_files,
+      mail::parse_email_text,
+      mail::recover_email_attachments,
       library_index::search_documents,
       library_index::reindex_media,
       library_index::reindex_all,

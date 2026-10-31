@@ -2,8 +2,6 @@ import type { Board, Card } from '../types/board';
 import { storage } from '../storage';
 import { extOf } from '../lib/fileTypes';
 import { b64ToBytes } from '../lib/base64';
-import { parseEmailFile } from '../lib/email/parseEmails';
-import { persistDraftMedia } from '../lib/email/persistMedia';
 
 // Board-media chores that need storage: moving a legacy board's inline pictures
 // into the media library, and recovering an email card's attachments from its .eml.
@@ -64,34 +62,18 @@ export async function migrateBoardMedia(
 
 /**
  * Re-read one email card's original .eml and return the fields to patch so its
- * attachments match what the parser now finds — or null if there is nothing to
- * read or the message would not parse.
- *
- * The bug this repairs: older imports dropped every `Content-Disposition: inline`
- * part as layout, but Apple Mail marks genuine attachments — a PDF, a Word document
- * — inline so they preview in the message, so those files never reached the card.
- * The whole message was kept as its .eml, so re-parsing it with the corrected rule
- * (see isInlinePart in parseEmails) gets them back.
- *
- * Additive and idempotent: only the attachment list is rebuilt (and a *missing*
- * picture filled — a chosen one is never clobbered), the file bytes are content-
- * addressed so re-saving is free, and the .eml is already stored so it is not
- * written again. Run on demand from the maintenance view's Reprocess.
+ * attachments match what the parser now finds (older imports dropped Apple Mail's
+ * inline-disposition documents) — or null if there is nothing to read or the
+ * message would not parse. Only the attachment list is rebuilt, and a *missing*
+ * picture filled. Run on demand from the maintenance view's Reprocess.
  */
 export async function recoverCardAttachments(card: Card): Promise<Partial<Card> | null> {
   const eml = card.email?.emlFile;
   if (!eml) return null;
-  const bytes = await storage.readMedia(eml);
-  const { drafts } = await parseEmailFile(`${card.title || 'message'}.eml`, bytes);
-  const draft = drafts[0];
-  if (!draft) return null;
-  draft.email.emlFile = eml; // already on disk — don't rewrite it
-  // The card keeps the picture it has; don't re-hash and re-save the message's
-  // image only to discard it below.
-  if (card.imageFile) draft.media.image = undefined;
-  const persisted = await persistDraftMedia(draft);
+  const found = await storage.recoverEmailAttachments(eml, card.imageFile !== null);
+  if (!found) return null;
   return {
-    ...(persisted.imageFile ? { imageFile: persisted.imageFile } : {}),
-    email: { ...card.email!, attachments: persisted.email?.attachments ?? [] },
+    ...(found.imageFile ? { imageFile: found.imageFile } : {}),
+    email: { ...card.email!, attachments: found.attachments },
   };
 }

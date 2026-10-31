@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../../types/board';
 import { emptyEmailMeta } from './meta';
-import type { EmailDraft } from './parseEmails';
+import type { EmailDraft } from '../../bindings/EmailDraft';
 import { addLabel, batchStatus, cap, clusterLabelFor, hidden, matchBatch } from './importSummary';
 
 const draft = (title: string, messageId: string | null = null, notes = ''): EmailDraft => ({
@@ -11,7 +11,8 @@ const draft = (title: string, messageId: string | null = null, notes = ''): Emai
   occurredAt: null,
   occurredAtPrecision: 'minute',
   email: { ...emptyEmailMeta(), messageId },
-  media: { attachments: [{ name: 'a.pdf', ext: 'pdf', bytes: new ArrayBuffer(10) }], eml: new ArrayBuffer(100) },
+  imageFile: null,
+  bytes: notes.length + 10 + 100,
 });
 
 const onBoard = { id: 'c1', kind: 'email', email: { ...emptyEmailMeta(), messageId: '<dup@x>' } } as Card;

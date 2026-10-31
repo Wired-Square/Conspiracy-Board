@@ -1,0 +1,16 @@
+From dutch@x.example Thu Nov 14 17:32:11 2024
+From: dutch@x.example
+Subject: First message
+Date: Thu, 14 Nov 2024 17:32:11 -0800
+Message-ID: <m1@x.example>
+
+Body of the first.
+>From the top, this line was escaped.
+
+From jane@x.example Fri Nov 15 08:00:00 2024
+From: jane@x.example
+Subject: Second message
+Date: Fri, 15 Nov 2024 08:00:00 +0000
+Message-ID: <m2@x.example>
+
+From what I heard, this must not split the message.

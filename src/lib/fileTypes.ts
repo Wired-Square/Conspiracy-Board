@@ -7,7 +7,7 @@
 // The parser and the extractor sniff the real bytes, so these extensions are a UI
 // filter, not the authority on format.
 
-export const EMAIL_FILE_ACCEPT = '.eml,.mbox,.txt,message/rfc822,application/mbox';
+export const EMAIL_FILE_FILTER = { name: 'Email', extensions: ['eml', 'mbox', 'txt'] };
 
 export const IMAGE_FILE_ACCEPT =
   'image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.tiff,.tif,.bmp,.avif,.svg';
@@ -15,17 +15,12 @@ export const IMAGE_FILE_ACCEPT =
 export const DOCUMENT_FILE_ACCEPT =
   '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf';
 
-const EMAIL_EXT = /\.(eml|mbox|txt)$/i;
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp|avif|svg)$/i;
 const DOCUMENT_EXT = /\.(pdf|docx?|xlsx?|pptx?)$/i;
 // Video and audio aren't importable as their own cards — they arrive as email
 // attachments — but the Objects view still picks their icon by type.
 const VIDEO_EXT = /\.(mp4|m4v|mov|avi|mkv|webm|wmv|flv|mpe?g|3gp)$/i;
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|aiff?|flac|ogg|oga|opus|wma)$/i;
-
-export function isEmailFile(name: string): boolean {
-  return EMAIL_EXT.test(name);
-}
 
 export function isImageFile(name: string): boolean {
   return IMAGE_EXT.test(name);

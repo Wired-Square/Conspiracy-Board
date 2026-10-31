@@ -1,13 +1,13 @@
 import type { Card } from '../../types/board';
 import { size, count } from '@wired-square/kit/core';
 import { matchDraft, type DraftMatch } from './meta';
-import type { EmailDraft } from './parseEmails';
+import type { EmailDraft } from '../../bindings/EmailDraft';
 
 // What the email import modal says before it commits: the counts, the button's
 // label and the status line, and the name of the cluster a thread makes.
 
-/** Parsing is on the main thread; a few hundred messages is ~1-2s, which the
- *  progress count covers. A worker would be right at thousands, not hundreds. */
+/** How many messages one import adds; the preview and the offer are built for a thread
+ *  or a folder, not a whole mailbox. */
 export const MAX_MESSAGES = 200;
 
 /**
@@ -33,12 +33,6 @@ export function hidden(c: Capped<unknown>): number {
 // budget. Boards are files now (see src/storage), so there is no budget to fill
 // and nothing to refuse. The size is still worth showing — it is the user's disk
 // — but it is information, not a limit.
-function draftSize(d: EmailDraft): number {
-  const m = d.media;
-  const attachments = m.attachments.reduce((n, a) => n + (a.bytes?.byteLength ?? 0), 0);
-  return d.notes.length + (m.image?.bytes.byteLength ?? 0) + attachments + (m.eml?.byteLength ?? 0);
-}
-
 export type BatchMatches = {
   matches: DraftMatch[];
   dupeCount: number;
@@ -56,7 +50,7 @@ export function matchBatch(drafts: EmailDraft[], byMessageId: Map<string, Card>)
     if (m.kind === 'duplicate') dupeCount++;
     else {
       if (m.kind === 'completes') completesCount++;
-      addedBytes += draftSize(drafts[i]);
+      addedBytes += drafts[i].bytes;
     }
   });
   return { matches, dupeCount, completesCount, addedBytes };

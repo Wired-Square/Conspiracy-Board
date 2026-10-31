@@ -1,0 +1,10 @@
+From: News <news@x.example>
+Subject: The weekly
+Message-ID: <html1@x.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head><title>Weekly</title><style>p { color: red; }</style></head>
+<body><h1>Top   story</h1><p>Read <a href="https://x.example/a?b=1&amp;c=2">the piece</a> now.</p>
+<ul><li>One</li><li>Two &amp; three</li></ul><script>var x = "<p>no</p>";</script>
+<p>Write to <a href="mailto:ed@x.example">the editor</a> or see https://x.example.</p></body></html>

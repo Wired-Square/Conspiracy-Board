@@ -2,10 +2,15 @@ import type { Board } from '../types/board';
 import type { BoardSummary } from '../bindings/BoardSummary';
 import type { DocHit } from '../bindings/DocHit';
 import type { DocStatus } from '../bindings/DocStatus';
+import type { EmailParse } from '../bindings/EmailParse';
 import type { MediaEntry } from '../bindings/MediaEntry';
 import type { MediaMeta } from '../bindings/MediaMeta';
+import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 
 export type { BoardSummary, DocHit, DocStatus, MediaEntry, MediaMeta };
+
+/** A native open panel's filter: a label and the extensions it shows. */
+export type FileFilter = { name: string; extensions: string[] };
 
 /** A file chosen by the user, as raw bytes. */
 export type PickedFile = { name: string; bytes: ArrayBuffer };
@@ -182,4 +187,17 @@ export interface StorageAdapter {
    * only possible while the original bytes survive.
    */
   pickFiles(accept: string, multiple?: boolean): Promise<PickedFile[]>;
+  /** The native open panel, for files the shell then reads itself; empty if cancelled. */
+  pickPaths(filter: FileFilter, multiple?: boolean): Promise<string[]>;
+
+  /**
+   * Parse picked email files (.eml, mbox, or a .txt that is either) or pasted text into
+   * card drafts. The shell keeps each message's .eml, picture and attachments as it
+   * parses, so a message previewed but never added leaves orphans for the media sweep.
+   * Progress arrives as `email:progress` events.
+   */
+  parseEmailFiles(paths: string[]): Promise<EmailParse>;
+  parseEmailText(text: string): Promise<EmailParse>;
+  /** Re-read a kept .eml for its attachments, and its picture unless `keepPicture`. */
+  recoverEmailAttachments(eml: string, keepPicture: boolean): Promise<RecoveredEmail | null>;
 }

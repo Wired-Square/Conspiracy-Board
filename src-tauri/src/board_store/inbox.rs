@@ -2,9 +2,10 @@
 //!
 //! A watched drop-folder, the way in for imports a webview drop can't take (a whole
 //! Mail conversation, chiefly, but also screenshots and files dropped into Finder).
-//! The shell watches it, hands any settled email/image/document files to the web
-//! side (`src/platform/inbox.ts`, which routes email to the import preview and media
-//! straight to cards), and moves them aside so nothing imports twice. Each file is
+//! The shell watches it, parses settled email itself and hands the drafts, with any
+//! images and documents, to the web side (`src/platform/inbox.ts`, which opens the
+//! import preview and turns media into cards), and moves the files aside so nothing
+//! imports twice. Each file is
 //! content-addressed into the library on import, so the moved-aside copy is only a
 //! record of what arrived.
 
@@ -17,6 +18,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 
 use super::{inbox_dir, run_open};
+use crate::mail::{self, EmailParse};
 
 /// How often the folder is swept. Slow enough to cost nothing, quick enough that a
 /// dropped thread shows up while the user is still looking at the window.
@@ -24,14 +26,26 @@ const INBOX_POLL: Duration = Duration::from_millis(1500);
 
 /// One file waiting in the Inbox, on its way to the importer.
 #[derive(Clone, serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 struct InboxFile {
   name: String,
   b64: String,
 }
 
+/// What one sweep found: the images and documents, and the email already parsed, its
+/// media kept, with how many files it came from (a thread of several is grouped).
 #[derive(Clone, serde::Serialize)]
-struct InboxBatch {
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct InboxBatch {
   files: Vec<InboxFile>,
+  emails: EmailParse,
+  email_files: usize,
+}
+
+fn is_email_file(name: &str) -> bool {
+  let n = name.to_ascii_lowercase();
+  n.ends_with(".eml") || n.ends_with(".mbox")
 }
 
 /// The files the Inbox imports: email that opens the import preview, plus the
@@ -84,7 +98,7 @@ pub fn start_inbox_watcher(app: AppHandle) {
       };
 
       let mut seen: HashMap<PathBuf, u64> = HashMap::new();
-      let mut batch: Vec<InboxFile> = Vec::new();
+      let mut batch = InboxBatch { files: Vec::new(), emails: EmailParse::default(), email_files: 0 };
       for entry in entries.flatten() {
         let Ok(meta) = entry.metadata() else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -96,7 +110,14 @@ pub fn start_inbox_watcher(app: AppHandle) {
         if len > 0 && last.get(&path) == Some(&len) {
           match std::fs::read(&path) {
             Ok(bytes) => {
-              batch.push(InboxFile { name: name.clone(), b64: STANDARD.encode(bytes) });
+              if is_email_file(&name) {
+                let parsed = mail::parse_file(&name, &bytes, &mut mail::media_store(&app), &mut |_, _| {});
+                batch.emails.drafts.extend(parsed.drafts);
+                batch.emails.errors.extend(parsed.errors);
+                batch.email_files += 1;
+              } else {
+                batch.files.push(InboxFile { name: name.clone(), b64: STANDARD.encode(bytes) });
+              }
               // Move it out of the way so it is not offered again. Best-effort:
               // if the move fails, deleting still stops a re-import, and the
               // library kept the .eml on import regardless.
@@ -112,9 +133,9 @@ pub fn start_inbox_watcher(app: AppHandle) {
       }
       last = seen;
 
-      if !batch.is_empty() {
-        log::info!("Inbox: importing {} file(s)", batch.len());
-        let _ = app.emit("inbox-files", InboxBatch { files: batch });
+      if !batch.files.is_empty() || batch.email_files > 0 {
+        log::info!("Inbox: importing {} file(s)", batch.files.len() + batch.email_files);
+        let _ = app.emit("inbox-files", batch);
       }
     }
   });

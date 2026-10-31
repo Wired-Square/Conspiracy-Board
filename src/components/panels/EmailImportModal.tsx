@@ -3,7 +3,7 @@ import { useReactFlow } from '@xyflow/react';
 import { Modal } from '../ui/Modal';
 import { NEW_CLUSTER } from '../../store/emailImportStore';
 import { useRoster } from '../../hooks/useRoster';
-import { EMAIL_FILE_ACCEPT } from '../../lib/fileTypes';
+import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta } from '../../lib/email/meta';
 import { MAX_MESSAGES, addLabel, batchStatus, cap, hidden, matchBatch } from '../../lib/email/importSummary';
 import { shortAddress } from '../../lib/email/addresses';
@@ -82,7 +82,7 @@ export function EmailImportModal() {
   const label = addLabel({ newCount, newPeople, newOrgs, patchCount: patches.length, reclusterCount });
 
   const onPickFiles = async () => {
-    await parseFiles(await storage.pickFiles(EMAIL_FILE_ACCEPT, true));
+    await parseFiles(await storage.pickPaths(EMAIL_FILE_FILTER, true));
   };
 
   const onAdd = async () => {

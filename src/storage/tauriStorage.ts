@@ -4,6 +4,8 @@ import type { Board } from '../types/board';
 import type { BoardSummary } from '../bindings/BoardSummary';
 import type { DocHit } from '../bindings/DocHit';
 import type { DocStatus } from '../bindings/DocStatus';
+import type { EmailParse } from '../bindings/EmailParse';
+import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 import type { GcOutcome } from '../bindings/GcOutcome';
 import type { LibraryRefs } from '../bindings/LibraryRefs';
 import type { LoadedBoard } from '../bindings/LoadedBoard';
@@ -255,6 +257,23 @@ export const tauriStorage: StorageAdapter = {
     // The shell reads the file, stores a bundle's media, and hands back the boards
     // that parse, in the manifest's order. A legacy .json arrives as a one-board bundle.
     return invoke<Board[]>('read_bundle', { path });
+  },
+
+  async pickPaths(filter, multiple = false) {
+    const picked = await open({ multiple, filters: [filter] });
+    return picked === null ? [] : Array.isArray(picked) ? picked : [picked];
+  },
+
+  parseEmailFiles(paths) {
+    return invoke<EmailParse>('parse_email_files', { paths });
+  },
+
+  parseEmailText(text) {
+    return invoke<EmailParse>('parse_email_text', { text });
+  },
+
+  recoverEmailAttachments(eml, keepPicture) {
+    return invoke<RecoveredEmail | null>('recover_email_attachments', { eml, keepPicture });
   },
 
   pickFiles(accept, multiple = false) {
