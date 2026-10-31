@@ -767,15 +767,15 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     arrangeCards(positions) {
-      if (!positions.size) return;
-      set({
-        cards: get().cards.map((card) => {
-          const p = positions.get(card.id);
-          return p && (p.x !== card.position.x || p.y !== card.position.y)
-            ? { ...card, position: p }
-            : card;
-        }),
+      let moved = false;
+      const cards = get().cards.map((card) => {
+        const p = positions.get(card.id);
+        if (!p || (p.x === card.position.x && p.y === card.position.y)) return card;
+        moved = true;
+        return { ...card, position: p };
       });
+      if (!moved) return;
+      set({ cards });
       scheduleAutosave();
     },
 
@@ -785,6 +785,8 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // This is the most-called mutator, so one indexed scan, not three.
       const i = get().cards.findIndex((c) => c.id === id);
       if (i === -1) return;
+      const current = get().cards[i];
+      if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
       const cards = [...get().cards];
       cards[i] = { ...cards[i], ...patch };
       set({ cards });
