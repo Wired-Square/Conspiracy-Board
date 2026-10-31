@@ -1,7 +1,5 @@
-import { useMemo, useRef } from 'react';
-import { touches } from '../lib/connections';
-import { isEntityKind } from '../lib/kinds';
-import { actorScale } from '../lib/layout';
+import { useMemo, useState } from 'react';
+import { highlight, linkDegrees, tieScaleInterner } from '../lib/highlight';
 import type { CardNode, CardNodeData, StringEdge } from '../types/reactflow';
 
 /**
@@ -45,86 +43,13 @@ export function useHighlightConnections(
   selectedId: string | null,
   matchIds: Set<string> | null,
 ): { nodes: CardNode[]; edges: StringEdge[] } {
-  const degrees = useMemo(() => {
-    const d = new Map<string, number>();
-    for (const e of edges) {
-      d.set(e.source, (d.get(e.source) ?? 0) + 1);
-      d.set(e.target, (d.get(e.target) ?? 0) + 1);
-    }
-    return d;
-  }, [edges]);
-
-  // Interned augmented data, per (store data, scale) pair. The nodes handed in
-  // are always store-derived and never carry tieScale, so writing it with a
-  // bare spread would mint a fresh `data` object on every pass and defeat
-  // memo(EvidenceCardNode) for every actor on every hover and drag frame.
-  // Interning makes the same store data + the same scale yield the *same*
-  // object, so the memoised card bails exactly as it did before actors scaled.
-  // WeakMap-keyed on the store data, so replaced cards collect with it.
-  const dataCache = useRef(new WeakMap<CardNodeData, Map<number, CardNodeData>>());
-
-  return useMemo(() => {
-    const searching = matchIds !== null;
-    const connectedEdgeIds = new Set<string>();
-    const neighbourIds = new Set<string>();
-    if (focusId) {
-      neighbourIds.add(focusId);
-      for (const e of edges) {
-        if (touches(e, focusId)) {
-          connectedEdgeIds.add(e.id);
-          neighbourIds.add(e.source);
-          neighbourIds.add(e.target);
-        }
-      }
-    }
-
-    // The one precedence rule, for nodes and edges alike: hl wins over dim; while
-    // searching, `matched` owns the base dim (non-matches fade), otherwise focus
-    // does (non-neighbours fade). `connected` is touching the focus; `matched` is
-    // matching the search (both ends, for an edge).
-    const classify = (connected: boolean, matched: boolean): string | undefined => {
-      if (focusId && connected) return 'hl';
-      const dim = searching ? !matched : !!focusId && !connected;
-      return dim ? 'dim' : undefined;
-    };
-
-    // A paper face never scales, so its data passes through untouched; an
-    // actor's data is the interned augmentation (see dataCache above).
-    const dataFor = (data: CardNodeData, tieScale: number | undefined): CardNodeData => {
-      if (tieScale === undefined) return data;
-      let byScale = dataCache.current.get(data);
-      if (!byScale) dataCache.current.set(data, (byScale = new Map()));
-      let augmented = byScale.get(tieScale);
-      if (!augmented) byScale.set(tieScale, (augmented = { ...data, tieScale }));
-      return augmented;
-    };
-
-    // Preserve object identity when nothing about a node's presentation changed,
-    // so memoised cards don't all re-render on every selection change or drag
-    // frame. Cheap at 8 cards; not at the couple of hundred an mbox can add.
-    const decoratedNodes = nodes.map((n) => {
-      const className = classify(
-        neighbourIds.has(n.id),
-        matchIds !== null && matchIds.has(n.id),
-      );
-      const selected = n.id === selectedId;
-      // Only the actors grow; the argument's paper stays one size.
-      const data = dataFor(
-        n.data,
-        isEntityKind(n.data.card.kind) ? actorScale(degrees.get(n.id) ?? 0) : undefined,
-      );
-      return n.className === className && (n.selected ?? false) === selected && n.data === data
-        ? n
-        : { ...n, className, selected, data };
-    });
-    const decoratedEdges = edges.map((e) => {
-      const className = classify(
-        connectedEdgeIds.has(e.id),
-        matchIds !== null && matchIds.has(e.source) && matchIds.has(e.target),
-      );
-      return e.className === className ? e : { ...e, className };
-    });
-
-    return { nodes: decoratedNodes, edges: decoratedEdges };
-  }, [nodes, edges, degrees, focusId, selectedId, matchIds]);
+  const degrees = useMemo(() => linkDegrees(edges), [edges]);
+  // The nodes handed in are always store-derived and never carry tieScale, so
+  // writing it with a bare spread would mint a fresh `data` object on every pass
+  // and defeat memo(EvidenceCardNode) for every actor on every hover and drag frame.
+  const [dataFor] = useState(() => tieScaleInterner<CardNodeData>());
+  return useMemo(
+    () => highlight(nodes, edges, { focusId, selectedId, matchIds, degrees }, dataFor),
+    [nodes, edges, degrees, focusId, selectedId, matchIds, dataFor],
+  );
 }

@@ -1,0 +1,17 @@
+From a@x.example Mon Jan  1 00:00:00 2024
+From: a@x.example
+Subject: First
+Message-ID: <utf@x.example>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Un cafÃ© en UTF-8.
+
+From b@x.example Tue Jan  2 00:00:00 2024
+From: b@x.example
+Subject: =?iso-8859-1?q?R=E9sum=E9?=
+Message-ID: <latin@x.example>
+Content-Type: text/plain; charset=iso-8859-1
+Content-Transfer-Encoding: 8bit
+
+Un café en Latin-1, déjà vu.

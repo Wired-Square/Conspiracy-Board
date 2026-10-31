@@ -6,8 +6,9 @@
 //! on-device and offline, so the card can carry the conversation as text:
 //! searchable, quotable, editable. Best-effort throughout — anything unreadable
 //! just yields an empty string, and the image is still imported as the picture it
-//! is. Runs off the main thread (a Tauri command does), which Vision is happy with.
+//! is. Runs off the main thread (the commands are `async`), which Vision is happy with.
 
+use objc2::rc::autoreleasepool;
 use objc2::AllocAnyThread;
 use objc2_foundation::{NSArray, NSData, NSDictionary};
 use objc2_vision::{
@@ -19,6 +20,12 @@ use objc2_vision::{
 /// Vision finds, joined in reading order. Empty when there is nothing to read or
 /// Vision cannot decode the bytes.
 pub fn recognise_text(bytes: &[u8]) -> String {
+  // A runtime worker thread has no pool of its own and lives for the whole run, so
+  // without this every autoreleased Vision object would be kept until quit.
+  autoreleasepool(|_| recognise_in_pool(bytes))
+}
+
+fn recognise_in_pool(bytes: &[u8]) -> String {
   let data = NSData::with_bytes(bytes);
   // No decode hints; Vision sniffs the format itself.
   let options = NSDictionary::new();

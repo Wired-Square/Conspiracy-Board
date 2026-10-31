@@ -47,3 +47,74 @@ export function viewToCrop(scale: number, tx: number, ty: number, { fw, fh, natW
     h: clamp(fh / scale / natH, 0, 1),
   };
 }
+
+// The crop is authored in a 4:3 frame, matching how a card shows its picture. The
+// minimum scale is cover-fit, so the frame is never left showing bare film. The
+// ceiling is the larger of two limits (see zoomCeiling), so a small image keeps its
+// headroom while a big one can still be cropped in tight to a single face.
+const MAX_ZOOM = 5; // …× the cover-fit scale
+const MAX_UPSCALE = 3; // …× the image's own pixels
+
+// The most the frame may zoom in. `min` is the cover-fit scale, which for a large
+// image is tiny — so `min * MAX_ZOOM` alone can sit well below the image's natural
+// size, leaving a group shot un-croppable to one face. Allowing up to MAX_UPSCALE×
+// the natural pixels regardless lifts that: whichever limit is higher wins, so no
+// image loses reach and a big one gains it.
+export const zoomCeiling = (min: number) => Math.max(min * MAX_ZOOM, MAX_UPSCALE);
+
+// What the frame is currently showing: the image's on-screen size (`scale` px per
+// natural px) and where its top-left sits relative to the frame's, plus the
+// smallest scale that still covers the frame (the zoom floor).
+export type CropView = { scale: number; tx: number; ty: number; min: number };
+
+/** A view with its offset clamped so the image keeps covering the frame. */
+export function clampView(scale: number, tx: number, ty: number, min: number, geom: Geom): CropView {
+  return { scale, min, ...clampOffset(scale, tx, ty, geom) };
+}
+
+/** The view to open on: a stored crop restored, else cover-fit and centred. */
+export function initialView(geom: Geom, crop: ImageCrop | null): CropView {
+  const min = coverScale(geom);
+  if (crop) {
+    const { scale, tx, ty } = cropToView(crop, geom);
+    return clampView(scale, tx, ty, min, geom);
+  }
+  return clampView(min, (geom.fw - geom.natW * min) / 2, (geom.fh - geom.natH * min) / 2, min, geom);
+}
+
+/** Zoom about the frame's centre, keeping whatever is under it fixed, then re-clamp. */
+export function zoomAbout(view: CropView, scale: number, geom: Geom): CropView {
+  const next = clamp(scale, view.min, zoomCeiling(view.min));
+  const ix = (geom.fw / 2 - view.tx) / view.scale;
+  const iy = (geom.fh / 2 - view.ty) / view.scale;
+  return clampView(next, geom.fw / 2 - ix * next, geom.fh / 2 - iy * next, view.min, geom);
+}
+
+// A stable identity for the no-crop case, so an uncropped <img> is handed the same
+// object every render rather than a fresh {} each time.
+const NO_CROP: Record<string, string> = {};
+
+/**
+ * The picture's crop as an inline style for its `<img>`, or `NO_CROP` for the
+ * default centre cover. The render site must give the image a clip box —
+ * `position: relative; overflow: hidden` with a definite height — because a crop
+ * positions the image absolutely inside it. The saved region is 4:3: in a 4:3 box
+ * (the polaroid, the editor preview) it lands exactly; in a box of another shape
+ * (the 34px record thumb) it fills the width and is clipped in height. No pixel
+ * size is needed at render — the image is sized so the crop's width fills the box
+ * and shifted by its offset, both as percentages of the box. The one place the crop
+ * becomes CSS, so every render site is a single spread and none re-derives it.
+ */
+export function cardImageStyle(card: { imageCrop: ImageCrop | null }): Record<string, string> {
+  const c = card.imageCrop;
+  if (!c) return NO_CROP;
+  return {
+    position: 'absolute',
+    left: `calc(${-c.x} / ${c.w} * 100%)`,
+    top: `calc(${-c.y} / ${c.h} * 100%)`,
+    width: `calc(100% / ${c.w})`,
+    height: 'auto',
+    'max-width': 'none',
+    'max-height': 'none',
+  };
+}

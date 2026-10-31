@@ -1,14 +1,5 @@
-import { create } from 'zustand';
-import {
-  applyNodeChanges,
-  applyEdgeChanges,
-  type NodeChange,
-  type EdgeChange,
-  type Connection as RFConnection,
-} from '@xyflow/react';
+import { createStore } from 'zustand/vanilla';
 import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/board';
-import type { CardNode, StringEdge } from '../types/reactflow';
-import { boardToFlow, cardToNode, connectionToEdge } from '../data/mappers';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
 import { withoutMembership } from '../lib/clusters';
 import { touches } from '../lib/connections';
@@ -18,23 +9,15 @@ import { DEFAULT_KIND, isBoardKind, isRecordKind, viewFor } from '../lib/kinds';
 import { gridPositions } from '../lib/layout';
 import type { View } from '../types/view';
 import { emailCardsByMessageId, matchDraft } from '../lib/email/meta';
-import { documentMime, isDocumentFile, isImageFile } from '../lib/import/files';
-import { pickDocumentMeta, pickImageMeta } from '../lib/import/meta';
-import { ocrTitle, usableOcr } from '../lib/import/ocr';
 import { emptyBoard } from '../data/emptyBoard';
 import { buildManifest } from '../data/bundle';
 import { slugify } from '../lib/slug';
+import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
-import { extOf } from '../storage/media';
-import { useBundleImportStore } from './bundleImportStore';
-import { useJobQueueStore } from './jobQueueStore';
-import type { MediaMeta, PickedFile } from '../storage/StorageAdapter';
-import {
-  boardMediaRefs,
-  cardMediaEntries,
-  migrateBoardMedia,
-  recoverCardAttachments,
-} from './boardMigration';
+import { openDialog } from './dialogStore';
+import type { MediaDraft } from '../storage/StorageAdapter';
+import { boardMediaRefs, cardMediaEntries } from '../lib/media';
+import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
 
@@ -60,61 +43,6 @@ const CLUSTER_PALETTE = [
   '#3bd1c4', '#e2673b', '#6b6be0', '#9bd13b', '#d13bb0', '#d9cf3b', // teal, orange, indigo, lime, magenta, gold
 ];
 
-/** A filename without its directory or extension, for a card's title. */
-function baseName(name: string): string {
-  const cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  const base = cut >= 0 ? name.slice(cut + 1) : name;
-  const dot = base.lastIndexOf('.');
-  return dot > 0 ? base.slice(0, dot) : base;
-}
-
-/**
- * Turn one imported file into the card to make from it: an image becomes an evidence
- * card whose picture it is; a document becomes a document card. The file is stored
- * (content-addressed) and its metadata read in the shell; both a date (taken/created)
- * and a title flow onto the card. Best-effort — a file that will not even store is
- * dropped (returns null), and extraction that fails just leaves the extra fields off.
- */
-async function buildMediaDraft(file: PickedFile): Promise<CardDraft | null> {
-  const image = isImageFile(file.name);
-  if (!image && !isDocumentFile(file.name)) return null;
-
-  let mediaFile: string;
-  try {
-    mediaFile = await storage.saveMedia(file.bytes, extOf(file.name));
-  } catch {
-    return null;
-  }
-
-  // Metadata for either kind; started before the image branch so it reads
-  // alongside OCR there rather than after it.
-  const metaP = storage.extractMediaMeta(mediaFile).catch(() => ({}) as MediaMeta);
-
-  if (image) {
-    // A text-message screenshot's words become the card's notes, and its first
-    // line the title — recognised while the metadata is still being read.
-    const [meta, ocr] = await Promise.all([metaP, storage.ocrImage(mediaFile).catch(() => '')]);
-    const text = usableOcr(ocr) ? ocr : '';
-    return {
-      kind: 'evidence',
-      title: text ? ocrTitle(text) : baseName(file.name),
-      notes: text,
-      imageFile: mediaFile,
-      imageCrop: null,
-      imageMeta: pickImageMeta(meta),
-      occurredAt: meta.takenAt ?? null,
-    };
-  }
-
-  const meta = await metaP;
-  return {
-    kind: 'document',
-    title: meta.title?.trim() || baseName(file.name),
-    occurredAt: meta.created ?? null,
-    document: { file: mediaFile, name: file.name, mime: documentMime(file.name), ...pickDocumentMeta(meta) },
-  };
-}
-
 /**
  * A card with every field at its default, overridden by `over` — which must at least
  * carry a position (the schema requires one). The single blank-Card literal, so adding
@@ -137,16 +65,13 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
   };
 }
 
-type BoardState = {
-  // Canonical content (authoritative for everything except live node positions).
+export type BoardState = {
+  // Canonical content (authoritative for everything except a drag in flight;
+  // see the canvas's flowAdapter).
   meta: Board['meta'];
   clusters: Cluster[];
   cards: Card[];
   connections: Connection[];
-
-  // Derived React Flow view.
-  nodes: CardNode[];
-  edges: StringEdge[];
   viewport: Viewport | undefined;
 
   /** The board currently open. Mirrors the adapter's persisted pointer. */
@@ -190,9 +115,11 @@ type BoardState = {
   /**
    * A message while a bundle import is working, or null when idle — drives the
    * busy overlay. Set when reading begins and cleared when it's done; the shell's
-   * `import:progress` events refine it to "media x of y" (see useImportProgress).
+   * `import:progress` events refine it to "media x of y" (see startImportProgress).
    */
   importStatus: string | null;
+  /** An autosave is pending or a save is in flight; the shell holds a quit on it. */
+  savePending: boolean;
 
   // Lifecycle.
   init: () => Promise<void>;
@@ -208,10 +135,6 @@ type BoardState = {
    *  normalising phone numbers. Kept on meta and pushed to lib/phone live. */
   setCountryCode: (code: string) => void;
 
-  // React Flow change handlers.
-  onNodesChange: (changes: NodeChange<CardNode>[]) => void;
-  onEdgesChange: (changes: EdgeChange<StringEdge>[]) => void;
-  onConnect: (conn: RFConnection) => void;
   setViewport: (vp: Viewport) => void;
 
   // Selection.
@@ -222,11 +145,10 @@ type BoardState = {
   /** Bulk append (email import). Returns the ids actually added. */
   addCards: (drafts: CardDraft[], opts?: { clusterId?: string | null }) => string[];
   /**
-   * Import dropped or picked files: images become evidence cards with the picture,
-   * documents become document cards, each with metadata read from the file. Saves
-   * the bytes and extracts in the shell; non-media files are ignored.
+   * Place the cards the shell made from imported pictures and documents, and go to
+   * them: one is opened, several show where they landed.
    */
-  addImportedMedia: (files: PickedFile[]) => Promise<void>;
+  addImportedMedia: (drafts: MediaDraft[]) => void;
   /**
    * Re-run a card's media processing against its already-stored file — re-scan an
    * email's .eml for attachments, re-read a photo's EXIF and OCR, re-read a
@@ -245,9 +167,10 @@ type BoardState = {
    */
   adoptOrphan: (file: string) => Promise<void>;
   /**
-   * Reposition many cards in one pass (the Tidy control). One set and one autosave
-   * for the whole board, where looping updateCard would re-map the nodes and
-   * re-schedule a save per card.
+   * Reposition many cards in one pass (Tidy, or a settled drag). One set and one
+   * autosave for the whole board, where looping updateCard would re-schedule a
+   * save per card. Only a moved card gets a new identity, so unmoved chips and
+   * rows keep theirs.
    */
   arrangeCards: (positions: Map<string, Vec2>) => void;
   updateCard: (id: string, patch: Partial<Omit<Card, 'id'>>) => void;
@@ -264,7 +187,7 @@ type BoardState = {
   deleteCard: (id: string) => void;
   /**
    * The last deletion, restorable until the next delete or a board switch.
-   * The toast offers it and Cmd+Z takes it (see useUndoShortcut); hiding the
+   * The toast offers it and Cmd+Z takes it (see startUndoShortcut); hiding the
    * toast does not clear it.
    */
   lastDelete: DeleteSnapshot | null;
@@ -287,6 +210,8 @@ type BoardState = {
    */
   toBoard: (restamp?: boolean) => Board;
   save: () => Promise<void>;
+  /** Save any pending edit now and wait for every queued save to land. */
+  flushSaves: () => Promise<void>;
   /** Bundle the given library boards (by id) and save to a chosen file; false if cancelled. */
   exportBundle: (ids: string[]) => Promise<boolean>;
   /** Pick a bundle (or legacy board file) and open the select/rename import dialog. */
@@ -303,6 +228,7 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 // back out of order). The chain serialises them; each save snapshots the board
 // when its turn comes, so the later save writes the later state.
 let saveChain: Promise<void> = Promise.resolve();
+let savesInFlight = 0;
 
 // Whether anything *content* has changed since the last save. setViewport
 // schedules a save without setting it, so a pan/zoom persists the camera
@@ -316,7 +242,12 @@ let contentDirty = false;
 // await the first instead of racing it.
 let initPromise: Promise<void> | undefined;
 
-export const useBoardStore = create<BoardState>((set, get) => {
+export const boardStore = createStore<BoardState>()((set, get) => {
+  const syncSavePending = () => {
+    const pending = autosaveTimer !== undefined || savesInFlight > 0;
+    if (get().savePending !== pending) set({ savePending: pending });
+  };
+
   const scheduleSave = () => {
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
@@ -325,6 +256,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       autosaveTimer = undefined;
       void get().save();
     }, AUTOSAVE_MS);
+    syncSavePending();
   };
 
   /** A content edit: mark the board dirty, then debounce a save. */
@@ -345,6 +277,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
     // A viewport-only save keeps the stored updatedAt, so the adapter can see
     // the summary is unchanged and skip rewriting the index.
     const board = get().toBoard(dirty);
+    if (dirty) set({ meta: board.meta });
 
     try {
       await storage.saveBoard(id, board);
@@ -354,7 +287,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       if (dirty) contentDirty = true;
       // Autosave runs from a debounced timer with no caller to catch this, so
       // the error has to land in state or it is lost entirely.
-      set({ lastError: err instanceof Error ? err.message : String(err) });
+      set({ lastError: errorMessage(err) });
     }
   };
 
@@ -366,26 +299,15 @@ export const useBoardStore = create<BoardState>((set, get) => {
     await get().save();
   };
 
-  // Rebuild all derived nodes from canonical cards. Needed after cluster
-  // colour/assignment changes, since each node caches its cluster colour.
-  // Safe because card positions are kept current by onNodesChange, and because
-  // selection is derived at render (see useHighlightConnections) rather than
-  // stored on the node.
-  const refreshNodes = () =>
-    set({ nodes: get().cards.map((c) => cardToNode(c, get().clusters)) });
-
   const hydrate = (board: Board) => {
     // Phone normalisation reads a module-level locale (lib/phone); a board carries
     // its own, so set it before any card's numbers are matched or shown.
     setLocalCallingCode(board.meta.countryCode ?? '+61');
-    const { nodes, edges } = boardToFlow(board);
     set({
       meta: board.meta,
       clusters: board.clusters,
       cards: board.cards,
       connections: board.connections,
-      nodes,
-      edges,
       viewport: board.viewport,
       selectedCardId: null,
       // A snapshot from one board must not be restorable into another.
@@ -434,31 +356,16 @@ export const useBoardStore = create<BoardState>((set, get) => {
   };
 
   /**
-   * Sweep media no board references any more. Content-addressed files can be
-   * shared, so a file cannot be deleted the moment one card lets go of it — the
-   * keep-set is only whole once every board has been read. Runs in the background
-   * off startup and after a board is deleted; it aborts rather than sweeping if
-   * any board fails to load, so an unreadable board never costs its media.
+   * Sweep media no board references any more, in the background off startup and
+   * after a board is deleted. The shell builds the keep-set and sweeps nothing while
+   * any board's refs are unknown, so an unreadable board never costs its media.
    */
   const gcMedia = async () => {
-    // Flush first, so the open board's just-added media is on disk and in the
-    // keep-set. Only the current board can have unsaved edits; the rest are as
-    // they are on disk. (The shell also spares very fresh files, as a backstop.)
+    // Flush first, so the open board's just-added media is in its recorded refs.
+    // (The shell also spares very fresh files, as a backstop.)
     await flushAutosave();
-    const entries = await storage.listBoards();
-    const boards = await Promise.all(entries.map((e) => storage.loadBoard(e.id)));
-    // A board that won't load means the keep-set is incomplete — don't sweep, or a
-    // temporarily unreadable board would lose its media. (The shell dedupes the
-    // list, so passing refs with repeats across boards is fine.)
-    if (boards.some((b) => !b)) return;
-    try {
-      await storage.gcMedia(boards.flatMap((b) => boardMediaRefs(b!)));
-      // Drop the search-index rows for any blob just swept, so the index tracks the
-      // media store. Board-agnostic, so it reconciles against what's left on disk.
-      await storage.pruneDocuments();
-    } catch {
-      // Housekeeping: a failed sweep just leaves orphans for next time.
-    }
+    // Housekeeping: a failed sweep just leaves orphans for next time.
+    await storage.gcMedia().catch(() => {});
   };
 
   /**
@@ -490,8 +397,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
   return {
     ...emptyBoard(),
-    nodes: [],
-    edges: [],
     viewport: undefined,
     currentBoardId: null,
     selectedCardId: null,
@@ -501,6 +406,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
     lastError: null,
     firstRun: false,
     importStatus: null,
+    savePending: false,
 
     setView(view) {
       set({ view });
@@ -549,12 +455,8 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
         await load();
         // The app is up; tidy media no board points at any more. Not awaited —
-        // it reads every board, and first paint must not wait on housekeeping.
+        // first paint must not wait on housekeeping.
         void gcMedia();
-        // Pick up indexing where a previous run left off: extract text for any media
-        // not yet in the search index (a crash mid-batch, or files from before the
-        // index existed). A background projection, so first paint doesn't wait on it.
-        void useJobQueueStore.getState().resume();
       })();
       return initPromise;
     },
@@ -567,10 +469,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
     },
 
     async installExampleBoard() {
-      // Dynamically imported so data/board.json stays out of the main chunk —
-      // it only ever loads if the user asks for the example.
-      const { defaultBoard } = await import('../data/defaultBoard');
-      await adoptBoard(defaultBoard);
+      await adoptBoard(await storage.seedBoard());
     },
 
     async openBoard(id) {
@@ -619,47 +518,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       scheduleAutosave();
     },
 
-    onNodesChange(changes) {
-      const nodes = applyNodeChanges(changes, get().nodes);
-      // Fold positions back into canonical cards only when the drag settles:
-      // React Flow fires a position change per pointermove with dragging: true
-      // and a final one with dragging: false on release (keyboard and
-      // programmatic moves carry no flag, so they commit at once). Committing
-      // per frame gave `cards` a new identity every pointermove, which re-ran
-      // everything derived from it — the roster's four passes, the participant
-      // edges' pair sweep, the timeline — on every frame of a drag. During the
-      // drag only `nodes` moves; `node.data.card.position` lags, harmlessly:
-      // nothing renders it (Tidy reads React Flow's own positions).
-      // Select/dimension churn is ignored as before. (Deletion is an M2
-      // feature; see deleteKeyCode.)
-      const settled = changes.some((c) => c.type === 'position' && !c.dragging);
-      if (settled) {
-        const positionById = new Map(nodes.map((n) => [n.id, n.position]));
-        set({
-          nodes,
-          // Only a moved card gets a new identity, so unmoved chips and rows
-          // keep theirs.
-          cards: get().cards.map((card) => {
-            const p = positionById.get(card.id);
-            return p && (p.x !== card.position.x || p.y !== card.position.y)
-              ? { ...card, position: p }
-              : card;
-          }),
-        });
-        scheduleAutosave();
-      } else {
-        set({ nodes });
-      }
-    },
-
-    onEdgesChange(changes) {
-      set({ edges: applyEdgeChanges(changes, get().edges) });
-    },
-
-    onConnect(conn) {
-      if (conn.source && conn.target) get().addConnection(conn.source, conn.target);
-    },
-
     setViewport(vp) {
       set({ viewport: vp });
       // Persist the camera, but don't mark content dirty: panning must not
@@ -688,7 +546,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       const card = blankCard(id, { clusterIds: first ? [first.id] : [], ...init, position });
       set({
         cards: [...get().cards, card],
-        nodes: [...get().nodes, cardToNode(card, get().clusters)],
         selectedCardId: id,
         // Go to wherever it went. + Add > Document and a message dropped from
         // Mail both make a card the board does not draw; without this they make
@@ -762,35 +619,21 @@ export const useBoardStore = create<BoardState>((set, get) => {
         }),
       );
 
-      set({
-        cards: [...get().cards, ...added],
-        nodes: [...get().nodes, ...added.map((c) => cardToNode(c, get().clusters))],
-      });
+      set({ cards: [...get().cards, ...added] });
       scheduleAutosave();
       return [...completedIds, ...added.map((c) => c.id)];
     },
 
-    async addImportedMedia(files) {
-      // Save + extract every file at once; a bad one drops out rather than sinking
-      // the batch. Order is preserved so the grid follows the drop/pick order.
-      const drafts = (await Promise.all(files.map(buildMediaDraft))).filter(
-        (d): d is CardDraft => d !== null,
-      );
+    addImportedMedia(drafts) {
       if (!drafts.length) return;
       const ids = get().addCards(drafts);
       if (!ids.length) return;
-      // Index the just-saved files' text in the background, so a search finds words
-      // inside them (not only the fields on the card). Idempotent, so re-imports and
-      // the startup resume() never double-work.
-      useJobQueueStore.getState().enqueue(
-        drafts.flatMap((d) => [d.imageFile, d.document?.file].filter((n): n is string => !!n)),
-      );
       // One file: open it, so its picture/metadata is right there. Several: just go
       // to where they landed — the board unless every one is a record card.
       if (ids.length === 1) {
         get().selectCard(ids[0]);
       } else {
-        set({ view: drafts.some((d) => isBoardKind(d.kind ?? DEFAULT_KIND)) ? 'board' : 'record' });
+        set({ view: drafts.some((d) => isBoardKind(d.kind)) ? 'board' : 'record' });
       }
     },
 
@@ -805,26 +648,25 @@ export const useBoardStore = create<BoardState>((set, get) => {
         return;
       }
 
-      // Image: re-read EXIF and re-OCR the stored file (mirrors buildMediaDraft's
-      // image branch). Only fills notes from OCR when there are none — a reprocess
-      // must not overwrite what the user has written, or their date.
+      // Image: re-read EXIF and re-OCR the stored file. Only fills notes from OCR when
+      // there are none — a reprocess must not overwrite what the user has written, or
+      // their date.
       if (card.imageFile) {
-        const [meta, ocr] = await Promise.all([
-          storage.extractMediaMeta(card.imageFile).catch(() => ({}) as MediaMeta),
-          storage.ocrImage(card.imageFile).catch(() => ''),
-        ]);
-        const patch: Partial<Card> = { imageMeta: pickImageMeta(meta) };
-        if (!card.notes.trim() && usableOcr(ocr)) patch.notes = ocr;
+        const draft = await storage.mediaCardDraft(card.imageFile);
+        if (!draft) return;
+        const patch: Partial<Card> = { imageMeta: draft.imageMeta ?? null };
+        if (!card.notes.trim() && draft.notes) patch.notes = draft.notes;
         get().updateCard(id, patch);
         return;
       }
 
-      // Document: re-read the file's properties into the document payload.
+      // Document: re-read the file's properties into the document payload, keeping
+      // what the card calls it.
       if (card.document?.file) {
-        const meta = await storage
-          .extractMediaMeta(card.document.file)
-          .catch(() => ({}) as MediaMeta);
-        get().updateCard(id, { document: { ...card.document, ...pickDocumentMeta(meta) } });
+        const read = (await storage.mediaCardDraft(card.document.file))?.document;
+        if (!read) return;
+        const { file: _file, name: _name, mime: _mime, ...props } = read;
+        get().updateCard(id, { document: { ...card.document, ...props } });
       }
     },
 
@@ -848,29 +690,23 @@ export const useBoardStore = create<BoardState>((set, get) => {
 
     async adoptOrphan(file) {
       // Turn an unreferenced media file into a card, where it already lives — no
-      // re-import dialog and no second copy (buildMediaDraft's saveMedia is
-      // idempotent by content hash). addCards, not addImportedMedia, so it lands
-      // without pulling the user out of the maintenance view onto the new card.
-      const bytes = await storage.readMedia(file);
-      const draft = await buildMediaDraft({ name: file, bytes });
+      // re-import dialog and no second copy (storing is idempotent by content hash).
+      // addCards, not addImportedMedia, so it lands without pulling the user out of
+      // the maintenance view onto the new card.
+      const draft = await storage.mediaCardDraft(file);
       if (draft) get().addCards([draft]);
     },
 
     arrangeCards(positions) {
-      if (!positions.size) return;
-      const cards = get().cards.map((c) => {
-        const p = positions.get(c.id);
-        return p ? { ...c, position: p } : c;
+      let moved = false;
+      const cards = get().cards.map((card) => {
+        const p = positions.get(card.id);
+        if (!p || (p.x === card.position.x && p.y === card.position.y)) return card;
+        moved = true;
+        return { ...card, position: p };
       });
-      set({
-        cards,
-        // Keep each moved node's measured size and cluster colour — only its
-        // position, and the card it mirrors, change.
-        nodes: get().nodes.map((n) => {
-          const p = positions.get(n.id);
-          return p ? { ...n, position: p, data: { ...n.data, card: { ...n.data.card, position: p } } } : n;
-        }),
-      });
+      if (!moved) return;
+      set({ cards });
       scheduleAutosave();
     },
 
@@ -880,16 +716,11 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // This is the most-called mutator, so one indexed scan, not three.
       const i = get().cards.findIndex((c) => c.id === id);
       if (i === -1) return;
-      const updated = { ...get().cards[i], ...patch };
+      const current = get().cards[i];
+      if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
       const cards = [...get().cards];
-      cards[i] = updated;
-      set({
-        cards,
-        // Keep the derived node in sync with the canonical card.
-        nodes: get().nodes.map((n) =>
-          n.id === id ? cardToNode(updated, get().clusters) : n,
-        ),
-      });
+      cards[i] = { ...cards[i], ...patch };
+      set({ cards });
       scheduleAutosave();
     },
 
@@ -913,10 +744,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
           occurredAtPrecision: source.occurredAtPrecision,
           event: { sourceCardId: cardId },
         });
-        set({
-          cards: [...get().cards, event],
-          nodes: [...get().nodes, cardToNode(event, get().clusters)],
-        });
+        set({ cards: [...get().cards, event] });
         scheduleAutosave();
         // The string from the source to the event it evidences.
         get().addConnection(cardId, id, 'evidences');
@@ -932,7 +760,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       // nothing in the schema would catch it, so it would persist and quietly
       // fail to draw. The editor counts these first (see touches) so the user is
       // told what they are about to lose rather than finding out later.
-      const { cards, nodes, connections, edges, selectedCardId } = get();
+      const { cards, connections, selectedCardId } = get();
       const card = cards.find((c) => c.id === id);
       if (!card) return;
       // One partition: what stays on the board, and what the undo snapshot takes.
@@ -941,9 +769,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
       for (const c of connections) (touches(c, id) ? taken : kept).push(c);
       set({
         cards: cards.filter((c) => c.id !== id),
-        nodes: nodes.filter((n) => n.id !== id),
         connections: kept,
-        edges: edges.filter((e) => !touches(e, id)),
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
@@ -972,9 +798,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
         );
         set({
           cards: [...get().cards, card],
-          nodes: [...get().nodes, cardToNode(card, get().clusters)],
           connections: [...get().connections, ...connections],
-          edges: [...get().edges, ...connections.map(connectionToEdge)],
           lastDelete: null,
         });
       } else {
@@ -990,7 +814,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
           }),
           lastDelete: null,
         });
-        refreshNodes();
       }
       scheduleAutosave();
     },
@@ -1021,8 +844,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
       set({
         clusters: get().clusters.map((c) => (c.id === id ? { ...c, ...patch } : c)),
       });
-      // Cached node colours need rebuilding when a cluster colour changes.
-      if (patch.color !== undefined) refreshNodes();
       scheduleAutosave();
     },
 
@@ -1045,7 +866,6 @@ export const useBoardStore = create<BoardState>((set, get) => {
         cards,
         lastDelete: { kind: 'cluster', cluster, index, memberships },
       });
-      refreshNodes();
       scheduleAutosave();
     },
 
@@ -1063,37 +883,23 @@ export const useBoardStore = create<BoardState>((set, get) => {
         kind: 'red-string',
         ...(trimmed ? { label: trimmed } : {}),
       };
-      set({
-        connections: [...get().connections, connection],
-        edges: [...get().edges, connectionToEdge(connection)],
-      });
+      set({ connections: [...get().connections, connection] });
       scheduleAutosave();
     },
 
     updateConnection(id, patch) {
-      const connections = get().connections.map((c) => (c.id === id ? { ...c, ...patch } : c));
-      const updated = connections.find((c) => c.id === id)!;
-      set({
-        connections,
-        // Keep the derived edge in sync with the canonical connection, exactly as
-        // updateCard does for its node. Rebuilding through connectionToEdge is
-        // what carries a new grade to the thing that draws the string.
-        edges: get().edges.map((e) => (e.id === id ? connectionToEdge(updated) : e)),
-      });
+      set({ connections: get().connections.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
       scheduleAutosave();
     },
 
     deleteConnection(id) {
-      set({
-        connections: get().connections.filter((c) => c.id !== id),
-        edges: get().edges.filter((e) => e.id !== id),
-      });
+      set({ connections: get().connections.filter((c) => c.id !== id) });
       scheduleAutosave();
     },
 
     toBoard(restamp = true) {
-      // Canonical state is kept current as the user edits (positions folded in
-      // onNodesChange), so the board can be assembled directly.
+      // Canonical state is kept current as the user edits (a drag's positions are
+      // folded in when it settles), so the board can be assembled directly.
       const { meta, clusters, cards, connections, viewport } = get();
       return {
         version: 4,
@@ -1108,8 +914,18 @@ export const useBoardStore = create<BoardState>((set, get) => {
     save() {
       // Chained, never raced — see saveChain above. doSave never throws, so a
       // failed save cannot wedge the chain.
-      saveChain = saveChain.then(doSave);
+      savesInFlight++;
+      syncSavePending();
+      saveChain = saveChain.then(doSave).finally(() => {
+        savesInFlight--;
+        syncSavePending();
+      });
       return saveChain;
+    },
+
+    async flushSaves() {
+      await flushAutosave();
+      await saveChain;
     },
 
     async exportBundle(ids) {
@@ -1141,7 +957,7 @@ export const useBoardStore = create<BoardState>((set, get) => {
           filename,
         });
       } catch (err) {
-        set({ lastError: err instanceof Error ? err.message : String(err) });
+        set({ lastError: errorMessage(err) });
         return false;
       }
     },
@@ -1161,9 +977,9 @@ export const useBoardStore = create<BoardState>((set, get) => {
         }
         // The dialog picks which to bring in and renames them; a legacy .json
         // arrives as a one-board list, so it gets the same checkbox and rename.
-        useBundleImportStore.getState().openWith(boards);
+        openDialog({ bundleImportBoards: boards });
       } catch (err) {
-        set({ lastError: err instanceof Error ? err.message : String(err) });
+        set({ lastError: errorMessage(err) });
       } finally {
         set({ importStatus: null });
       }

@@ -1,6 +1,6 @@
 //! Body text out of an imported file, for the search index.
 //!
-//! `extract_media_meta` (board_store) reads a file's *properties* — a PDF's page
+//! `meta` reads a file's *properties* — a PDF's page
 //! count, an Office file's title. This reads its *words*: the PDF's page text, the
 //! Word/PowerPoint/Excel body, a plain file or `.eml` as-is, or a screenshot's text
 //! through OCR. Dispatch is by leading bytes, like the metadata reader, so a file
@@ -11,9 +11,11 @@
 //! No database, no card schema, no Tauri: this is pure bytes-in, text-out, so it
 //! unit-tests without any of them.
 
-use quick_xml::events::Event;
+pub mod meta;
 
-use crate::board_store::read_zip_entry;
+use std::io::Read;
+
+use quick_xml::events::Event;
 
 /// What reading a file's text came to.
 pub enum ExtractOutcome {
@@ -164,6 +166,13 @@ fn ocr_text(bytes: &[u8]) -> ExtractOutcome {
 #[cfg(not(target_os = "macos"))]
 fn ocr_text(_bytes: &[u8]) -> ExtractOutcome {
   ExtractOutcome::Unsupported
+}
+
+fn read_zip_entry(zip: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Option<String> {
+  let mut f = zip.by_name(name).ok()?;
+  let mut s = String::new();
+  f.read_to_string(&mut s).ok()?;
+  Some(s)
 }
 
 #[cfg(test)]

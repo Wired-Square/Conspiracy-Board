@@ -6,7 +6,10 @@ import { formatOccurredAt } from '../../lib/dates';
 import { KIND_META, isEntityKind, isGradedKind } from '../../lib/kinds';
 import { GRADE_META, gradeTint } from '../../lib/grades';
 import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
-import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { cardImageSrc } from '../../storage/media';
+import { cardImageStyle } from '../../lib/imageCrop';
+import { reactStyle } from '../ui/reactStyle';
+import { cx } from '@wired-square/kit/core';
 
 // A short plain-text preview of the markdown notes for the card face.
 function notesPreview(notes: string): string {
@@ -50,7 +53,7 @@ function PolaroidFace({ card }: { card: Card }) {
           // inside React Flow's transformed pane — images deferred and often never
           // loaded. onlyRenderVisibleElements already keeps off-screen cards
           // imageless, so eager here costs nothing.
-          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
+          <img src={image} alt="" draggable={false} decoding="async" style={reactStyle(cardImageStyle(card))} />
         ) : (
           // Empty film, not a hole: a polaroid nobody has found a photograph
           // for yet still reads as one waiting.
@@ -85,9 +88,9 @@ function PaperFace({ card }: { card: Card }) {
     <>
       <div className="evidence-card__accent" />
       {image && (
-        <div className={`evidence-card__image${card.imageCrop ? ' is-cropped' : ''}`}>
+        <div className={cx('evidence-card__image', card.imageCrop && 'is-cropped')}>
           {/* Eager, like the polaroid above — see the note there. */}
-          <img src={image} alt="" draggable={false} decoding="async" style={cardImageStyle(card)} />
+          <img src={image} alt="" draggable={false} decoding="async" style={reactStyle(cardImageStyle(card))} />
         </div>
       )}
       <div className="evidence-card__body">
@@ -102,7 +105,7 @@ function PaperFace({ card }: { card: Card }) {
             good the claim is. Different questions, so both are allowed to
             answer at once. */}
         {grade && (
-          <span className="grade-chip" style={gradeTint(grade)}>
+          <span className="grade-chip" style={reactStyle(gradeTint(grade))}>
             {GRADE_META[grade].label}
           </span>
         )}
@@ -129,7 +132,7 @@ function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
       // Not per kind any more: the record is not drawn here at all, and the
       // argument keeps the default paper deliberately, so the face follows the
       // register and nothing else.
-      className={`evidence-card${actor ? ' evidence-card--polaroid' : ''}${selected ? ' is-selected' : ''}`}
+      className={cx('evidence-card', actor && 'evidence-card--polaroid', selected && 'is-selected')}
       // --card-scale grows an actor's polaroid with its connections. Set only
       // when the hook derived one (actors only), so paper faces carry no inert
       // style; the stylesheet's var(--card-scale, 1) owns the default.
@@ -149,7 +152,7 @@ function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
         </span>
       )}
       {/* Start a link from the hot corner; drop it anywhere on a card. */}
-      <Handle type="target" position={Position.Left} className={`card-target${connecting ? ' connecting' : ''}`} />
+      <Handle type="target" position={Position.Left} className={cx('card-target', connecting && 'connecting')} />
       <Handle type="source" position={Position.Right} className="card-source" />
     </div>
   );

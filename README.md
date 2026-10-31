@@ -39,6 +39,24 @@ the shell, so `invoke` throws, `init()` never resolves and the app sits on
 degrading, which is worth knowing before you spend ten minutes on why. `pnpm dev`
 is the way to run it.
 
+### Driving it from Claude Code
+
+`pnpm dev` also starts an MCP server on `127.0.0.1:8792`, loopback only, for a
+Claude session to read and drive the window (`query`, `click`, `type`,
+`board_summary`, `jobs_pending` and the rest). It needs a bearer token. Set a
+fixed one so that the registration survives a restart:
+
+```sh
+export CONSPIRACY_MCP_TOKEN=$(openssl rand -hex 24)   # in your shell profile
+claude mcp add --transport http conspiracy http://127.0.0.1:8792/mcp \
+  --header "Authorization: Bearer $CONSPIRACY_MCP_TOKEN"
+```
+
+Without the variable, each launch picks a fresh token and writes it to
+`src-tauri/target/mcp.json`. A release build has none of this: the shell's `mcp`
+feature refuses to compile without `debug_assertions`, and the page loads the
+bridge only under `import.meta.env.DEV`.
+
 ## What's on a board
 
 - **Cards** — the only entity. A card has a title, markdown notes, an optional
@@ -341,7 +359,7 @@ Three rules explain most of the code:
 ```
 src/
   types/board.ts        the domain model — start here
-  data/                 schema (zod), mappers, the board index, the seed board
+  data/                 the empty board and the bundle manifest (the schema is src-tauri/src/schema.rs)
   store/boardStore.ts   canonical state + the derived view + autosave
   storage/              the IO seam; boards as files, via the shell
   platform/             the shell seam; inbox.ts hands watched-folder files to the importer
@@ -391,7 +409,7 @@ references them by name. Same bytes, same name — so importing a file twice sto
 once, and the card carries a filename, not base64 that autosave would rewrite in
 full every 500ms. Because a name can be shared, a file is not deleted the moment one
 card lets go of it; a conservative sweep frees only media no board references any
-more. The shell owns all of it (`save_media`/`read_media`/`gc_media`/`open_media`,
+more. The shell owns all of it (`save_media`/`gc_media`/`open_media`,
 plus the read-only `list_media`/`verify_media` behind the Objects view below).
 
 The board **id lives in the index, not in the board**. That's deliberate: the
@@ -442,11 +460,11 @@ same spirit the schema reads an explicit `null` (a screenshot carries width and
 height but no EXIF `takenAt`/camera/GPS, which the shell returns as null) as
 *absent* rather than refusing the whole board over one such field.
 
-The shell owns the board's *envelope* — the five top-level keys, and which row
-belongs to which table — but never a card: each card is opaque JSON in its row,
-reassembled into the same `Board` on load. `src/data/schema.ts` stays the one
-definition of what a card is, and teaching Rust the shape as well would be a second
-one to keep in step, in exchange for nothing.
+The shell owns the board and its cards: `src-tauri/src/schema.rs` is the one
+definition of what a board is. Every row is validated on save and the board
+validated and migrated on load, and the webview's types are generated from the Rust
+ones (`src/bindings/`, by ts-rs; `cargo test` fails while they are stale, and
+`UPDATE_BINDINGS=1 cargo test bindings` rewrites them).
 
 **There is no quota.** localStorage was once the app's largest constraint — ~5MB,
 charged in UTF-16, with images inlined as base64 — and moving media out to files
@@ -525,11 +543,13 @@ Four ways in, none of which touch the network:
 However it arrives, a message lands in [the record](#the-record), not on the
 board.
 
-Parsing is `postal-mime`, dynamically imported so it stays out of the main
-bundle. It handles the things that actually break naive parsers: folded headers,
-RFC 2047 encoded-words, quoted-printable, and non-UTF-8 charsets. Files are read
-as **bytes, not text** — a message can only be decoded with its declared charset
-while the original bytes survive.
+Parsing is the shell's (`src-tauri/src/mail.rs`, on `mail-parser`). It handles
+the things that actually break naive parsers: folded headers, RFC 2047
+encoded-words, quoted-printable, and non-UTF-8 charsets. Files are read as
+**bytes, not text**, and an mbox is split on bytes too — a message can only be
+decoded with its declared charset while its original bytes survive. Each
+message's .eml, picture and attachments are kept as it is parsed, so a preview
+you cancel leaves orphans for the media sweep.
 
 Imports dedupe on `Message-ID`. A message with no Message-ID never dedupes (two
 hand-pasted messages would otherwise collide on `null`).
@@ -602,24 +622,28 @@ Folder** opens it — and the one automatic way in. Drag a Mail conversation to 
 in Finder and Finder writes one `.eml` per message; a screenshot or a PDF
 dropped there imports the same way.
 
-The shell (`start_inbox_watcher`, `board_store.rs`) sweeps the folder every 1.5s,
+The shell (`start_inbox_watcher`, `board_store/inbox.rs`) sweeps the folder every 1.5s,
 takes each file once its size settles so a half-written one is never read, and
-moves taken files into `Inbox/.imported` so nothing imports twice. Each batch is
-then routed by `src/platform/inbox.ts`: email opens the import preview — a
+moves taken files into `Inbox/.imported` so nothing imports twice. It parses the
+email and turns the images and documents into cards itself, and
+`src/platform/inbox.ts` takes it from there: email opens the import preview — a
 folder batch preselected into a **new cluster**, since a thread arrives
-together, which the preview lets you change — while images and documents import
-straight to cards. A stray note left in the folder is ignored rather than
-mis-imported.
+together, which the preview lets you change — while the cards are placed. A
+`.txt` counts as email, as it does in the picker, since an mbox is often saved
+as one; anything else not email, an image or a document is left in the folder
+rather than mis-imported.
 
 ## Images and OCR
 
 An image becomes an **evidence** card that *is* the picture — picked from
 `+ Add ▸ Image`, or [dropped in the Inbox](#the-inbox-folder).
-PDFs and Office files become document cards the same way, through the one path
-(`addImportedMedia` → `buildMediaDraft`). The bytes are stored in `media/` by
-content hash like any other file ([Storage](#storage)), the card holds the
-filename, and a photo's EXIF — date taken, camera, GPS — is read off it in the
-shell (`extract_media_meta`).
+PDFs and Office files become document cards the same way, through the one path in
+the shell (`src-tauri/src/import.rs`): the picker and the Inbox hand it files by
+path, it stores the bytes in `media/` by content hash like any other file
+([Storage](#storage)), reads a photo's EXIF — date taken, camera, GPS — or a
+document's properties, queues the file for the search index, and hands the webview
+a card to place. Which files are which is `src-tauri/src/file_types.rs`, the one
+list; the webview's pickers and icons use the copy generated from it.
 
 **A screenshot is the way a text-message thread comes in.** There is no clean
 iMessage or SMS export, so you photograph the conversation — and a screenshot is an
@@ -630,12 +654,10 @@ a sign — it becomes the card's notes and its first line the card's title. A
 landscape photo carries no text and gets none; a chat screenshot arrives as its own
 transcript, searchable and quotable like any other note.
 
-The gate that decides "is this text worth keeping?" is `usableOcr`
-(`src/lib/import/ocr.ts`), pure and tested, so a photo's incidental sign doesn't
-pollute a card's notes. The recognition itself is `ocr_image` (`src-tauri/src/ocr.rs`,
-`objc2-vision`) — macOS-only, with an empty stub elsewhere so the web side calls it
-the same everywhere; it runs alongside metadata extraction, not after it, so it adds
-no serial wait to an import.
+The gate that decides "is this text worth keeping?" is `usable_ocr`
+(`src-tauri/src/import.rs`), pure and tested, so a photo's incidental sign doesn't
+pollute a card's notes. The recognition itself is `src-tauri/src/ocr.rs`
+(`objc2-vision`) — macOS-only, with an empty stub elsewhere.
 
 That gate is only about the card's *notes*. The [search index](#search) is less
 fussy: it takes whatever text a file yields — a screenshot's OCR, and, for a
@@ -663,21 +685,20 @@ what a webview cannot do for itself, and nothing else:
 
 - **`board_store.rs`** reads and writes the boards and their media, because a
   webview has nowhere durable to put them (see [Storage](#storage)). It also
-  watches the [Inbox folder](#the-inbox-folder) (`start_inbox_watcher`) and hands
-  any email, image or document files left there to the importer — how a whole
-  thread, or a screenshot, comes in. And it reads what a stored file carries:
-  metadata (`extract_media_meta`) and, for an image, its text (`ocr.rs`).
+  watches the [Inbox folder](#the-inbox-folder) (`start_inbox_watcher`) — how a
+  whole thread, or a screenshot, comes in. `mail.rs` parses email, `import.rs`
+  turns a picture or document into its card — reading what the file carries
+  (`extract_media_meta`) and, for an image, its text (`ocr.rs`) — and
+  `schema.rs` is the board's one definition.
 - **`menu.rs`** builds the native File menu for board management and the View menu
   for switching surface — the webview lists the boards for it and turns its clicks
   into store calls. *Show Inbox Folder* is the exception: a fixed path the shell
   reveals itself, no round-trip.
 
 Everything reaching them goes through `src/platform/` and `src/storage/`. Nothing
-else in `src/` knows the shell is there. The two sides' payload types are mirrored
-by hand, so every value-returning command's answer is parsed against a zod schema
-on receipt (`src/storage/ipc.ts`, shapes composed from `src/data/schema.ts`'s own)
-— a field renamed on either side fails loudly at the boundary instead of
-somewhere far away at runtime.
+else in `src/` knows the shell is there. The payload types are generated from the
+shell's own (`src/bindings/`), so a field renamed in Rust fails the typecheck
+rather than somewhere far away at runtime.
 
 ### The icon
 
@@ -724,10 +745,11 @@ get their own column in the drawer.
 ## Tests
 
 Vitest, `environment: 'node'`, no jsdom. Deliberately narrow: the pure logic
-where clicking around lies to you — date/timezone handling, mbox splitting, the
-board index and schema, email parsing, Message-ID matching, address identity and
-the roster, the import offer, the grade palette, slugs. Components, the store and
-the shell are verified by driving the real app instead.
+where clicking around lies to you — date/timezone handling, Message-ID matching,
+address identity and the roster, the import offer, the grade palette, slugs. The
+board schema, email parsing and mbox splitting are the shell's, tested with
+`cargo test` against fixtures in `src-tauri/tests/fixtures/`. Components, the store
+and the shell's commands are verified by driving the real app instead.
 
 That rule cuts both ways: **logic inside a component is logic nobody checks**, so
 anything that decides something belongs in `lib/` — which is why `planOffer`,

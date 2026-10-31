@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import type { Card } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { useRoster } from '../../hooks/useRoster';
 import { relationsOf } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
+import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * What this card shares addresses with — derived, read-only, click to open.
@@ -37,7 +38,7 @@ export function ParticipantsSection({ cardId }: { cardId: string }) {
   return (
     // Dyed from the Inference grade, which is exactly what all of this is: a
     // reasoned read of the addresses, not a finding.
-    <div className="field participants" style={gradeTint('inference')}>
+    <div className="field participants" style={reactStyle(gradeTint('inference'))}>
       <span>Linked by address</span>
 
       {actors.length > 0 && (

@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { Grade } from '../types/board';
 
 // How good is this claim? Eight grades, a ladder rather than a "true/false"
@@ -129,10 +128,7 @@ export function readableInk(colour: string): string {
  * take their colour this way, so the custom properties are spelled once and a
  * stylesheet never has to know a hex.
  */
-export function gradeTint(grade: Grade): CSSProperties {
+export function gradeTint(grade: Grade): Record<string, string> {
   const { colour } = GRADE_META[grade];
-  return {
-    ['--grade' as string]: colour,
-    ['--grade-ink' as string]: readableInk(colour),
-  };
+  return { '--grade': colour, '--grade-ink': readableInk(colour) };
 }

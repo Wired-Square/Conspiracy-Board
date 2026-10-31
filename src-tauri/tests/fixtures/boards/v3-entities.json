@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "meta": { "title": "Entities", "updatedAt": "2025-03-01T12:00:00.000Z" },
+  "clusters": [{ "id": "cl_1", "label": "People", "color": "#e23b3b", "visible": false }],
+  "cards": [
+    {
+      "id": "card_jane",
+      "title": "Jane Doe",
+      "notes": "",
+      "imageUrl": null,
+      "clusterId": "cl_1",
+      "position": { "x": 0, "y": 0 },
+      "kind": "person",
+      "person": { "addresses": ["jane@acme.com", "jane@personal.example"] }
+    },
+    {
+      "id": "card_acme",
+      "title": "Acme",
+      "notes": "",
+      "imageUrl": null,
+      "clusterId": null,
+      "position": { "x": 300, "y": 0 },
+      "kind": "organisation",
+      "organisation": {}
+    },
+    {
+      "id": "card_shot",
+      "title": "Screenshot",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": "shot.png",
+      "imageMeta": {
+        "width": 1288,
+        "height": 672,
+        "takenAt": null,
+        "cameraMake": null,
+        "cameraModel": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "clusterId": null,
+      "position": { "x": 0, "y": 300 },
+      "kind": "document",
+      "document": { "file": "a.pdf", "title": "A", "author": null, "pages": null }
+    },
+    {
+      "id": "card_claim",
+      "title": "They met",
+      "notes": "",
+      "imageUrl": null,
+      "clusterId": null,
+      "position": { "x": 300, "y": 300 },
+      "kind": "event",
+      "grade": "adjudicated",
+      "occurredAt": "2024-11-14T00:00:00.000Z",
+      "occurredAtPrecision": "day"
+    }
+  ],
+  "connections": [
+    { "id": "edge_1", "source": "card_jane", "target": "card_acme", "kind": "plain", "grade": "inference" }
+  ]
+}

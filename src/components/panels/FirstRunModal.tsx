@@ -1,8 +1,8 @@
-import { useBoardStore } from '../../store/boardStore';
 // The app's own mark — the single source in src-tauri/icons, imported as a URL by
 // Vite rather than copied, so it can't drift from the icon everything else is
 // generated from.
 import logo from '../../../src-tauri/icons/icon.svg';
+import { useBoardStore } from '../../hooks/useStores';
 
 // The first-run choice, shown only when the library is genuinely empty (see
 // boardStore.firstRun). The app never seeds a board on its own — least of all the

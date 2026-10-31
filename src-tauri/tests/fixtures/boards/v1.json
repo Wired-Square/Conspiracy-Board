@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "meta": { "title": "Test", "updatedAt": "2024-01-01T00:00:00.000Z" },
+  "clusters": [{ "id": "cl_1", "label": "People", "color": "#e23b3b", "visible": true }],
+  "cards": [
+    {
+      "id": "card_1",
+      "title": "A card",
+      "notes": "notes",
+      "imageUrl": null,
+      "clusterId": "cl_1",
+      "position": { "x": 0, "y": 0 }
+    }
+  ],
+  "connections": [{ "id": "edge_1", "source": "card_1", "target": "card_1", "kind": "red-string" }]
+}

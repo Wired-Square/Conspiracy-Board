@@ -1,19 +1,26 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useBoardStore } from '../../store/boardStore';
 import { useTimelineCards } from '../../hooks/useTimelineCards';
 import { useDocHits } from '../../hooks/useDocHits';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { dayKey, daysBetween, daysBetweenCards, formatDayKey, formatOccurredAt } from '../../lib/dates';
+import { formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
-import { CARD_KINDS } from '../../lib/kinds';
+import {
+  dayGroups,
+  eventGaps,
+  kindTally,
+  measureBetween,
+  measureMarks,
+  nextPicks,
+  stepEvent,
+  type EventStep,
+} from '../../lib/timeline';
+import { CARD_H, CARD_W } from '../../lib/layout';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
-
-// Card face dimensions, used only until React Flow has measured a node.
-const CARD_W = 210;
-const CARD_H = 140;
+import { useBoardStore } from '../../hooks/useStores';
+import { cx } from '@wired-square/kit/core';
 
 /**
  * A chronological strip under the board.
@@ -91,13 +98,7 @@ export function TimelineDrawer() {
   // The kinds actually on the strip (from the raw, pre-filter sets so they're stable
   // as you toggle) and how many of each — the checklist rows and their counts. In
   // CARD_KINDS order; actors never reach here, so they never list.
-  const { presentKinds, kindCounts } = useMemo(() => {
-    const counts = new Map<CardKind, number>();
-    const tally = (c: { kind: CardKind }) => counts.set(c.kind, (counts.get(c.kind) ?? 0) + 1);
-    rawDated.forEach(tally);
-    rawUndated.forEach(tally);
-    return { presentKinds: CARD_KINDS.filter((k) => counts.has(k)), kindCounts: counts };
-  }, [rawDated, rawUndated]);
+  const { presentKinds, kindCounts } = useMemo(() => kindTally(rawDated, rawUndated), [rawDated, rawUndated]);
 
   const [open, setOpen] = useState(() => dated.length > 0);
   const [showUndated, setShowUndated] = useState(false);
@@ -108,21 +109,25 @@ export function TimelineDrawer() {
   );
 
   // Bring a chip into view in the horizontal strip, so a selection made elsewhere
-  // (the milestone controls) isn't left off-screen.
+  // (the milestone controls) isn't left off-screen. Two frames: the strip may be
+  // opening from collapsed, so let it mount and settle before scrolling.
   const scrollChipIntoView = useCallback((id: string) => {
-    stripRef.current
-      ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        stripRef.current
+          ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }),
+      ),
+    );
   }, []);
 
   // Searching opens the drawer and jumps to the first (earliest) match — the way
-  // goToEvent does for milestones. On the settled query; two frames let the strip
-  // mount before the scroll.
+  // goToEvent does for milestones. On the settled query.
   useEffect(() => {
     if (!tlQuery) return;
     setOpen(true);
     const first = dated[0];
-    if (first) requestAnimationFrame(() => requestAnimationFrame(() => scrollChipIntoView(first.id)));
+    if (first) scrollChipIntoView(first.id);
   }, [tlQuery, dated, scrollChipIntoView]);
 
   // The anchor's other half: after a filter change re-renders the strip, put
@@ -158,7 +163,7 @@ export function TimelineDrawer() {
   }, []);
 
   // onPick is handed to every memoized chip, so it must keep a stable identity: a
-  // card drag respreads `cards` each pointermove (see boardStore's onNodesChange),
+  // card drag respreads `cards` each pointermove (see flowAdapter's onNodesChange),
   // which rebuilds `datedById`, so depending on it directly would re-render the
   // whole strip every frame. The measure context is read through a ref instead.
   const measureRef = useRef({ measuring, datedById });
@@ -167,11 +172,11 @@ export function TimelineDrawer() {
   const onPick = useCallback(
     (id: string) => {
       const { measuring, datedById } = measureRef.current;
-      // Measuring picks endpoints instead of navigating: first pick, then second,
-      // then a third starts over. Undated chips can't be measured, so ignore them.
+      // Measuring picks endpoints instead of navigating. Undated chips can't be
+      // measured, so ignore them.
       if (measuring) {
         if (!datedById.has(id)) return;
-        setPicks((p) => (p.length >= 2 ? [id] : p.includes(id) ? p : [...p, id]));
+        setPicks((p) => nextPicks(p, id));
         return;
       }
       selectCard(id);
@@ -193,15 +198,8 @@ export function TimelineDrawer() {
   // move the timeline, they don't select the card or move the board.
   const events = useMemo(() => dated.filter((c) => c.kind === 'event'), [dated]);
 
-  // Elapsed days from one event to the next, keyed by the later event's id — the
-  // milestone-to-milestone reading, shown as a badge on each event chip.
-  const eventGap = useMemo(() => {
-    const gap = new Map<string, number>();
-    events.forEach((e, i) => {
-      if (i > 0) gap.set(e.id, daysBetweenCards(events[i - 1], e));
-    });
-    return gap;
-  }, [events]);
+  // The milestone-to-milestone reading, shown as a badge on each event chip.
+  const eventGap = useMemo(() => eventGaps(events), [events]);
 
   const [eventCursor, setEventCursor] = useState(0);
   const cursor = events.length ? Math.min(eventCursor, events.length - 1) : 0;
@@ -209,61 +207,24 @@ export function TimelineDrawer() {
   const atEnd = cursor === events.length - 1;
 
   const goToEvent = useCallback(
-    (where: 'start' | 'prev' | 'next' | 'end') => {
+    (where: EventStep) => {
       if (events.length === 0) return;
-      const idx =
-        where === 'start' ? 0
-        : where === 'end' ? events.length - 1
-        : where === 'prev' ? Math.max(0, cursor - 1)
-        : Math.min(events.length - 1, cursor + 1);
+      const idx = stepEvent(where, cursor, events.length);
       setEventCursor(idx);
       setOpen(true);
-      // Two frames: the strip may be opening from collapsed, so let it mount and
-      // settle before scrolling the chip to the centre.
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => scrollChipIntoView(events[idx].id)),
-      );
+      scrollChipIntoView(events[idx].id);
     },
     [events, cursor, scrollChipIntoView],
   );
 
-  // Group consecutive chips under a day heading, and note the elapsed gap
-  // between one day and the next.
-  const groups = useMemo(() => {
-    const out: { key: string; gapDays: number; cards: typeof dated }[] = [];
-    for (const card of dated) {
-      const key = dayKey(card.occurredAt!, card.occurredAtPrecision);
-      const last = out[out.length - 1];
-      if (last && last.key === key) last.cards.push(card);
-      else out.push({ key, gapDays: last ? daysBetween(last.key, key) : 0, cards: [card] });
-    }
-    return out;
-  }, [dated]);
+  // Consecutive chips under a day heading, with the elapsed gap between days.
+  const groups = useMemo(() => dayGroups(dated), [dated]);
 
-  // The measurement, ordered earliest→latest so the readout and the A/B badges
-  // read in time order however the two chips were clicked.
-  const measurement = useMemo(() => {
-    if (picks.length < 2) return null;
-    const a = datedById.get(picks[0]);
-    const b = datedById.get(picks[1]);
-    if (!a || !b) return null;
-    const [from, to] = a.occurredAt! <= b.occurredAt! ? [a, b] : [b, a];
-    return { from, to, days: daysBetweenCards(from, to) };
-  }, [picks, datedById]);
-
-  const measureMarks = useMemo(() => {
-    const marks = new Map<string, 'A' | 'B'>();
-    if (measurement) {
-      marks.set(measurement.from.id, 'A');
-      marks.set(measurement.to.id, 'B');
-    } else if (picks[0]) {
-      marks.set(picks[0], 'A');
-    }
-    return marks;
-  }, [measurement, picks]);
+  const measurement = useMemo(() => measureBetween(picks, datedById), [picks, datedById]);
+  const marks = useMemo(() => measureMarks(measurement, picks), [measurement, picks]);
 
   return (
-    <section className={`timeline${open ? ' is-open' : ''}`}>
+    <section className={cx('timeline', open && 'is-open')}>
       <header className="timeline__bar">
         <button
           className="timeline__toggle"
@@ -319,7 +280,7 @@ export function TimelineDrawer() {
         {dated.length >= 2 && (
           <div className="timeline__tools">
             <button
-              className={`timeline__measure-toggle${measuring ? ' is-active' : ''}`}
+              className={cx('timeline__measure-toggle', measuring && 'is-active')}
               aria-pressed={measuring}
               onClick={toggleMeasure}
               title="Measure the days between two cards"
@@ -407,7 +368,7 @@ export function TimelineDrawer() {
                           selected={card.id === selectedCardId}
                           onPick={onPick}
                           sincePrevEvent={eventGap.get(card.id)}
-                          measureMark={measureMarks.get(card.id) ?? null}
+                          measureMark={marks.get(card.id) ?? null}
                         />
                       ))}
                     </div>

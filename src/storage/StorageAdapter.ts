@@ -1,8 +1,17 @@
 import type { Board } from '../types/board';
-import type { BoardSummary } from '../data/boardIndex';
+import type { BoardSummary } from '../bindings/BoardSummary';
+import type { DocHit } from '../bindings/DocHit';
+import type { DocStatus } from '../bindings/DocStatus';
+import type { EmailParse } from '../bindings/EmailParse';
+import type { MediaDraft } from '../bindings/MediaDraft';
+import type { MediaEntry } from '../bindings/MediaEntry';
+import type { MediaMeta } from '../bindings/MediaMeta';
+import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 
-/** A file chosen by the user, as raw bytes. */
-export type PickedFile = { name: string; bytes: ArrayBuffer };
+export type { BoardSummary, DocHit, DocStatus, MediaDraft, MediaEntry, MediaMeta };
+
+/** A native open panel's filter: a label and the extensions it shows. */
+export type FileFilter = { name: string; extensions: string[] };
 
 /**
  * The parts of a bundle the caller hands the shell to package: each board's id and
@@ -16,55 +25,9 @@ export type BundleExport = {
   filename: string;
 };
 
-/** One media file on disk, as the maintenance view lists it. */
-export type MediaEntry = { name: string; size: number };
-
 /**
- * A full-text search hit from the library index: the media file that matched (its
- * content-addressed name, which the webview maps back to a card), a snippet with the
- * match marked, and its BM25 rank — smaller is a better match.
- */
-export type DocHit = { name: string; snippet: string; rank: number };
-
-/**
- * A media file's place in the search index: its name and terminal processing status —
- * `indexed`, `failed`, or `unsupported`. A file with no row yet is simply pending.
- */
-export type DocStatus = { name: string; status: string };
-
-/**
- * Metadata read out of an imported file by the shell (`extract_media_meta`). Every
- * field is optional — a format that doesn't carry one, or a file that wouldn't
- * parse, just omits it. Document fields (title…words) and image fields (width…
- * longitude) share the one shape; the caller takes whichever its kind uses. Dates
- * are ISO-8601 UTC, ready for a card's `occurredAt`.
- */
-export type MediaMeta = {
-  title?: string;
-  author?: string;
-  created?: string;
-  modified?: string;
-  pages?: number;
-  words?: number;
-  width?: number;
-  height?: number;
-  takenAt?: string;
-  cameraMake?: string;
-  cameraModel?: string;
-  latitude?: number;
-  longitude?: number;
-};
-
-/** Read DOM Files into the byte form the adapter and parsers trade in. */
-export function toPickedFiles(files: File[]): Promise<PickedFile[]> {
-  return Promise.all(
-    files.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })),
-  );
-}
-
-/**
- * The IO seam. `tauriStorage` is the only implementation — one JSON file per
- * board plus an index, written by the shell (src-tauri/src/board_store.rs).
+ * The IO seam. `tauriStorage` is the only implementation — one SQLite database
+ * per board plus the library's, written by the shell (src-tauri/src/board_store.rs).
  *
  * The interface remains because it is what keeps persistence out of the rest of
  * `src/`: the store and the panels ask for boards and are told nothing about
@@ -81,14 +44,16 @@ export interface StorageAdapter {
    */
   init(): Promise<void>;
 
-  /** Board summaries for the library. Never parses board bodies. */
+  /** Board summaries for the library, newest first. Never opens a board. */
   listBoards(): Promise<BoardSummary[]>;
-  /** The board's content, or null if it is missing or unreadable. */
+  /** The board's content, validated and migrated, or null if it is missing or unreadable. */
   loadBoard(id: string): Promise<Board | null>;
+  /** The bundled example board. */
+  seedBoard(): Promise<Board>;
   /**
-   * Persist a board and derive its index entry from `board.meta`. The summary is
-   * never supplied by the caller, so the index cannot drift from the board.
-   * Throws with a user-facing message if storage is full.
+   * Persist a board, with its library summary derived from `board.meta` in the same
+   * call, so the list cannot drift from the board. Throws with a user-facing message
+   * if storage is full.
    */
   saveBoard(id: string, board: Board): Promise<void>;
   /** Remove a board. Does not touch the current-board pointer; that is policy. */
@@ -103,17 +68,18 @@ export interface StorageAdapter {
    * content-addressed files beside the boards, referenced from the JSON by name.
    * The shell owns the filesystem: these hand bytes across and get names back.
    */
-  /** Store bytes, named by their content hash; returns the filename to link. */
-  saveMedia(bytes: ArrayBuffer, ext: string): Promise<string>;
   /**
-   * Download a remote image in the shell, returning its bytes and declared media
-   * type. The webview cannot do this itself — its CSP forbids fetching arbitrary
-   * hosts, and a cross-origin image drawn to a canvas to crop would taint it — so
-   * a pasted URL is fetched here and then stored like any other media.
+   * Store bytes, named by their content hash, with the extension the shell takes from
+   * the file's name or media type; returns the filename to link.
    */
-  fetchImage(url: string): Promise<{ bytes: ArrayBuffer; mime?: string }>;
-  /** Read a media file's bytes back (used to re-inline pictures on export). */
-  readMedia(name: string): Promise<ArrayBuffer>;
+  saveMedia(bytes: ArrayBuffer, from: { name?: string; mime?: string }): Promise<string>;
+  /**
+   * Bring a picture URL into the library, returning the filename to link: a remote
+   * one downloaded by the shell (the webview's CSP forbids fetching arbitrary hosts,
+   * and a cross-origin image drawn to a canvas to crop would taint it), a `data:`
+   * one decoded.
+   */
+  downloadImage(url: string): Promise<string>;
   /**
    * Read what metadata a stored file carries — a PDF's or Office file's properties,
    * a photo's dimensions and EXIF. Best-effort in the shell (the parsers have no
@@ -121,21 +87,26 @@ export interface StorageAdapter {
    */
   extractMediaMeta(name: string): Promise<MediaMeta>;
   /**
-   * Recognise the text in a stored image (a text-message screenshot, chiefly), so
-   * a picture of a conversation can be carried as searchable words. Best-effort in
-   * the shell (macOS Vision, on-device); empty when there is nothing to read or the
-   * platform has no OCR.
+   * The cards picked pictures and documents make: the shell stores each file, reads
+   * its metadata and a picture's text (macOS Vision), and queues it for the search
+   * index. A file that won't read or store drops out.
    */
-  ocrImage(name: string): Promise<string>;
+  importMediaFiles(paths: string[]): Promise<MediaDraft[]>;
+  /** The card a stored media file makes, read again (to adopt or reprocess it). */
+  mediaCardDraft(name: string): Promise<MediaDraft | null>;
+  /** Any picked file, stored as a document card's file, with what could be read of it. */
+  attachDocument(path: string): Promise<MediaDraft>;
   /** Open a media file in the OS default app — Preview for a PDF, and so on. */
   openMedia(name: string): Promise<void>;
   /**
-   * Sweep media no board references any more. `keep` must be the *complete* set
-   * of names still in use across every board — a partial set would delete live
-   * files. Content-addressed media can be shared between cards, so this replaces
-   * per-reference deletion. Returns how many files were removed.
+   * Sweep media no board references any more. The shell builds the keep-set from
+   * every board's recorded refs and sweeps nothing while any board's are unknown
+   * (unrecorded or unreadable). Returns how many files were removed.
    */
-  gcMedia(keep: string[]): Promise<number>;
+  gcMedia(): Promise<number>;
+  /** The media every board but `exceptId` references, or null when some board's
+   *  refs are unknown — the maintenance audit's "used elsewhere". */
+  mediaRefs(exceptId: string | null): Promise<Set<string> | null>;
   /** Every file in the media library — the maintenance view's "see all files" and
    *  the disk side of its integrity checks. Read-only; never deletes. */
   listMedia(): Promise<MediaEntry[]>;
@@ -148,32 +119,22 @@ export interface StorageAdapter {
   /**
    * The library-wide full-text search index over document bodies (library.sqlite in
    * the shell). A rebuildable projection of the media store — never a source of truth
-   * — populated in the background so a search can find a card by words inside the file
-   * it carries, not only the fields typed onto it. Keyed by media name, so extraction
-   * is deduped across boards; the webview maps a hit's name back to a card.
+   * — populated in the background as each file is stored, so a search can find a
+   * card by words inside the file it carries, not only the fields typed onto it. Keyed
+   * by media name, so extraction is deduped across boards; the webview maps a hit's
+   * name back to a card.
    */
-  /**
-   * Read and index a stored file's body text — PDF and Office bodies, plain text and
-   * `.eml`, or a screenshot's text via OCR. Idempotent by content hash; `force`
-   * re-reads a file already indexed (a manual reindex, or a newer extractor). Returns
-   * the terminal status; best-effort, so it records rather than throws on a bad file.
-   */
-  processMedia(name: string, force: boolean): Promise<DocStatus>;
   /**
    * Search indexed document bodies. Each hit carries the media name (to map back to a
    * card), a snippet with the match marked, and a rank. An empty query returns nothing.
    */
   searchDocuments(query: string, limit: number): Promise<DocHit[]>;
-  /**
-   * The media still needing extraction — never indexed, or indexed under an older
-   * extractor. The background queue asks for this at startup, so a crash mid-batch
-   * simply resumes where it left off.
-   */
-  pendingMedia(): Promise<string[]>;
-  /** Drop index rows for media no longer on disk; called after gcMedia sweeps blobs. */
-  pruneDocuments(): Promise<number>;
-  /** Empty the search index — the recovery path if it ever drifts; the queue rebuilds. */
-  rebuildIndex(): Promise<void>;
+  /** Read these files into the index again, even if already indexed. */
+  reindexMedia(names: string[]): Promise<void>;
+  /** Read every media file into the index again. */
+  reindexAll(): Promise<void>;
+  /** Files the shell's workers have queued or are reading; `jobs:progress` after. */
+  jobsPending(): Promise<number>;
   /** Every indexed file's name and status, for the Objects view to badge each file. */
   indexStatuses(): Promise<DocStatus[]>;
 
@@ -216,10 +177,17 @@ export interface StorageAdapter {
    * picker is open — so a caller can show progress only for the work, not the wait.
    */
   importFile(onReadStart?: () => void): Promise<Board[] | null>;
+  /** The native open panel, for files the shell then reads itself; empty if cancelled. */
+  pickPaths(filter?: FileFilter, multiple?: boolean): Promise<string[]>;
+
   /**
-   * Read user-chosen files as raw bytes; empty if cancelled. Bytes rather than
-   * text because email must be decoded with its own declared charset, which is
-   * only possible while the original bytes survive.
+   * Parse picked email files (.eml, mbox, or a .txt that is either) or pasted text into
+   * card drafts. The shell keeps each message's .eml, picture and attachments as it
+   * parses, so a message previewed but never added leaves orphans for the media sweep.
+   * Progress arrives as `email:progress` events.
    */
-  pickFiles(accept: string, multiple?: boolean): Promise<PickedFile[]>;
+  parseEmailFiles(paths: string[]): Promise<EmailParse>;
+  parseEmailText(text: string): Promise<EmailParse>;
+  /** Re-read a kept .eml for its attachments, and its picture unless `keepPicture`. */
+  recoverEmailAttachments(eml: string, keepPicture: boolean): Promise<RecoveredEmail | null>;
 }

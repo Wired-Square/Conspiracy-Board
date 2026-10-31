@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useBoardStore, type DeleteSnapshot } from '../../store/boardStore';
+import { type DeleteSnapshot } from '../../store/boardStore';
+import { useBoardStore } from '../../hooks/useStores';
 
 const SHOW_MS = 10_000;
 
@@ -13,7 +14,7 @@ function label(snap: DeleteSnapshot): string {
  * The way back from a delete: a pill beside BackgroundTaskIndicator offering
  * Undo for a few seconds after a card or cluster is deleted. Hiding is only
  * the toast giving up the space — the snapshot stays restorable (Cmd+Z, see
- * useUndoShortcut) until the next delete or a board switch clears it.
+ * startUndoShortcut) until the next delete or a board switch clears it.
  */
 export function UndoToast() {
   const snap = useBoardStore((s) => s.lastDelete);

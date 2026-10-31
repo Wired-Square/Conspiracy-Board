@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { Card, CardKind, EmailAddress } from '../../types/board';
-import { useBoardStore } from '../../store/boardStore';
 import { useRoster } from '../../hooks/useRoster';
 import type { AddressMatch, Roster } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { EntityPickerDialog, type PickerCreateOption } from './EntityPickerDialog';
+import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
 
 // The badge + "Link…" + unlink UI, shared by the email view (matched by address)
 // and the message/call view (matched by number). The whole of the address-vs-number
@@ -66,7 +67,7 @@ function EntityChip({
     <span className="email-addr__chip">
       <button
         className="link-button email-addr__entity"
-        style={inference ? gradeTint('inference') : undefined}
+        style={inference ? reactStyle(gradeTint('inference')) : undefined}
         onClick={onSelect}
       >
         <span className="email-addr__icon">{KIND_META[card.kind].icon}</span>

@@ -1,6 +1,15 @@
-import { create } from 'zustand';
-import { parseEmailFile, parseEmailText, type EmailDraft } from '../lib/email/parseEmails';
-import type { PickedFile } from '../storage/StorageAdapter';
+import { createStore } from 'zustand/vanilla';
+import type { EmailDraft } from '../bindings/EmailDraft';
+import type { EmailParse } from '../bindings/EmailParse';
+import { emailCardsByMessageId } from '../lib/email/meta';
+import { clusterLabelFor, matchBatch } from '../lib/email/importSummary';
+import { withMembership } from '../lib/clusters';
+import { errorMessage } from '../lib/errors';
+import { isBoardKind } from '../lib/kinds';
+import type { OfferPlan } from '../lib/importOffer';
+import { listenTauri } from '../platform/listen';
+import { storage } from '../storage';
+import { boardStore, type CardDraft } from './boardStore';
 
 // Staged drafts are not board content, so they don't belong in boardStore —
 // which is deliberately the canonical board plus one scalar of UI state. Keeping
@@ -30,17 +39,34 @@ type EmailImportState = {
   setTab: (tab: ImportTab) => void;
   setClusterId: (id: string | null) => void;
 
-  /** Parse picked or dropped files into staged drafts. */
-  parseFiles: (files: PickedFile[]) => Promise<void>;
+  /** Parse picked files into staged drafts. */
+  parseFiles: (paths: string[]) => Promise<void>;
   /** Parse a pasted raw message (or mbox) into staged drafts. */
   parsePaste: (raw: string) => Promise<void>;
+  /** Stage what the shell already parsed (an Inbox batch). */
+  stage: (parsed: EmailParse) => void;
+  /**
+   * Add the staged drafts and the offer's ticked rows to the board, and close.
+   * Returns every card added, and those of the added or patched cards the board
+   * draws (the rest live in the record).
+   */
+  commit: (offer: Pick<OfferPlan, 'entityDrafts' | 'patches'>) => Promise<{ addedIds: string[]; drawnIds: string[] }>;
 };
 
-export const useEmailImportStore = create<EmailImportState>((set) => {
+export const emailImportStore = createStore<EmailImportState>()((set, get) => {
   // Clears any previous result, so a re-parse in the same modal session doesn't
   // re-render the old preview on every progress tick.
-  const startParse = () => set({ busy: true, progress: null, drafts: [], errors: [] });
-  const onProgress = (done: number, total: number) => set({ progress: { done, total } });
+  const parse = async (run: () => Promise<EmailParse>) => {
+    set({ busy: true, progress: null, drafts: [], errors: [] });
+    const stop = listenTauri<{ done: number; total: number }>('email:progress', (e) => set({ progress: e.payload }));
+    try {
+      get().stage(await run());
+    } catch (err) {
+      set({ busy: false, progress: null, errors: [errorMessage(err)] });
+    } finally {
+      stop();
+    }
+  };
 
   return {
     open: false,
@@ -60,23 +86,65 @@ export const useEmailImportStore = create<EmailImportState>((set) => {
     setTab: (tab) => set({ tab }),
     setClusterId: (clusterId) => set({ clusterId }),
 
-    async parseFiles(files) {
-      if (!files.length) return;
-      startParse();
-      const drafts: EmailDraft[] = [];
-      const errors: string[] = [];
-      for (const f of files) {
-        const r = await parseEmailFile(f.name, f.bytes, onProgress);
-        drafts.push(...r.drafts);
-        errors.push(...r.errors);
-      }
-      set({ drafts, errors, busy: false, progress: null });
+    async parseFiles(paths) {
+      if (paths.length) await parse(() => storage.parseEmailFiles(paths));
     },
 
-    async parsePaste(raw) {
-      startParse();
-      const { drafts, errors } = await parseEmailText(raw, onProgress);
-      set({ drafts, errors, busy: false, progress: null });
+    parsePaste: (raw) => parse(() => storage.parseEmailText(raw)),
+
+    stage: ({ drafts, errors }) => set({ drafts, errors, busy: false, progress: null }),
+
+    async commit({ entityDrafts, patches }) {
+      const { drafts, clusterId } = get();
+      const board = boardStore.getState();
+      const byMessageId = emailCardsByMessageId(board.cards);
+      const { matches } = matchBatch(drafts, byMessageId);
+
+      // A board-duplicate is turned away; its media, kept at parse, is left to the sweep.
+      const emailDrafts = drafts
+        .filter((_, i) => matches[i].kind !== 'duplicate')
+        .map(({ bytes: _bytes, ...card }): CardDraft => card);
+
+      // Resolve the "new cluster" sentinel to a real cluster now, named after the
+      // batch, so the fresh messages and any already-imported ones share one group.
+      const cid = clusterId === NEW_CLUSTER ? board.addCluster(clusterLabelFor(drafts)) : clusterId;
+
+      // One call: the messages and the new entities land in one grid block, in the
+      // same cluster, and every id comes back. Nothing is strung together — who is
+      // on what is derived from the addresses themselves (see lib/roster.ts), and
+      // only the user draws a connection.
+      const addedIds = board.addCards([...emailDrafts, ...entityDrafts], { clusterId: cid });
+
+      // A message already on the board is part of this thread too. With a cluster
+      // chosen, add it in rather than leaving it outside the group the rest joined
+      // — appended, not moved: the user placed that card's primary, and this batch
+      // is an additional strand. A duplicate carries no card on its match, so it
+      // is found the same way the preview matched it — by Message-ID.
+      if (cid) {
+        matches.forEach((m, i) => {
+          if (m.kind !== 'duplicate') return;
+          const mid = drafts[i].email.messageId;
+          const existing = mid ? byMessageId.get(mid) : undefined;
+          if (existing && !existing.clusterIds.includes(cid)) {
+            board.updateCard(existing.id, { clusterIds: withMembership(existing.clusterIds, cid) });
+          }
+        });
+      }
+
+      for (const [id, patch] of patches) board.updateCard(id, patch);
+      get().close();
+
+      // Read the cards back from the store rather than slicing addedIds: addCards
+      // sorts the batch by date, so the ids do not come back in the order they
+      // went in.
+      const drawn = new Set(
+        boardStore
+          .getState()
+          .cards.filter((c) => isBoardKind(c.kind))
+          .map((c) => c.id),
+      );
+      const drawnIds = [...addedIds, ...patches.map(([id]) => id)].filter((id) => drawn.has(id));
+      return { addedIds, drawnIds };
     },
   };
 });

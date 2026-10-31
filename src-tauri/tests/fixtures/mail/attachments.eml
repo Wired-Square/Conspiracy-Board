@@ -1,0 +1,42 @@
+From: sender@x.example
+To: rcpt@x.example
+Subject: With attachments
+Date: Thu, 14 Nov 2024 17:32:11 -0800
+Message-ID: <mp1@x.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUND"
+
+--BOUND
+Content-Type: text/plain; charset=utf-8
+
+Hello body
+
+--BOUND
+Content-Type: application/pdf; name="contract.pdf"
+Content-Disposition: attachment; filename="contract.pdf"
+Content-Transfer-Encoding: base64
+
+cHJldGVuZC1wZGYtYnl0ZXM=
+
+--BOUND
+Content-Type: text/plain; charset=utf-8; name="notes.txt"
+Content-Disposition: attachment; filename="notes.txt"
+
+a plain text note
+
+--BOUND
+Content-Type: image/png
+Content-Disposition: inline
+Content-ID: <logo>
+Content-Transfer-Encoding: base64
+
+cHJldGVuZC1sb2dvLXBuZw==
+
+--BOUND
+Content-Type: image/png; name="photo.png"
+Content-Disposition: attachment; filename="photo.png"
+Content-Transfer-Encoding: base64
+
+cHJldGVuZC1waG90by1wbmc=
+
+--BOUND--

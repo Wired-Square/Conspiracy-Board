@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ReactFlowProvider, Panel } from '@xyflow/react';
-import { useBoardStore } from './store/boardStore';
-import { useEmailImportStore } from './store/emailImportStore';
 import { BoardCanvas } from './components/BoardCanvas';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
@@ -20,15 +18,15 @@ import { BusyOverlay } from './components/ui/BusyOverlay';
 import { BackgroundTaskIndicator } from './components/ui/BackgroundTaskIndicator';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
-import { useInbox } from './platform/inbox';
-import { useUndoShortcut } from './hooks/useUndoShortcut';
-import { useBoardMenu } from './platform/boardMenu';
-import { useImportProgress } from './platform/importProgress';
-import { usePropertiesStore } from './store/propertiesStore';
-import { useImageEditorStore } from './store/imageEditorStore';
-import { useBundleExportStore } from './store/bundleExportStore';
-import { useBundleImportStore } from './store/bundleImportStore';
-import { useManageStore } from './store/manageStore';
+import { useStart } from './hooks/useStart';
+import { startInbox } from './platform/inbox';
+import { startUndoShortcut } from './platform/undoShortcut';
+import { startBoardMenu } from './platform/boardMenu';
+import { startImportProgress } from './platform/importProgress';
+import { startJobProgress } from './platform/jobProgress';
+import { startQuitGuard } from './platform/quitGuard';
+import { closeDialog } from './store/dialogStore';
+import { useBoardStore, useDialogStore, useEmailImportStore } from './hooks/useStores';
 
 // Subscribes to importStatus on its own, so a per-media progress event re-renders
 // this leaf rather than App and the whole canvas beneath it.
@@ -41,11 +39,11 @@ export default function App() {
   const init = useBoardStore((s) => s.init);
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   const emailImportOpen = useEmailImportStore((s) => s.open);
-  const propertiesOpen = usePropertiesStore((s) => s.open);
-  const imageEditorCardId = useImageEditorStore((s) => s.cardId);
-  const bundleExportOpen = useBundleExportStore((s) => s.open);
-  const bundleImportOpen = useBundleImportStore((s) => s.open);
-  const manageOpen = useManageStore((s) => s.open);
+  const propertiesOpen = useDialogStore((s) => s.properties);
+  const imageEditorCardId = useDialogStore((s) => s.imageEditorCardId);
+  const bundleExportOpen = useDialogStore((s) => s.bundleExport);
+  const bundleImportBoards = useDialogStore((s) => s.bundleImportBoards);
+  const manageOpen = useDialogStore((s) => s.manage);
   const view = useBoardStore((s) => s.view);
   const firstRun = useBoardStore((s) => s.firstRun);
   const [ready, setReady] = useState(false);
@@ -56,13 +54,17 @@ export default function App() {
 
   // Files the shell sweeps out of the Inbox drop-folder — the one automatic way
   // in for email, images and documents (see src/platform/inbox.ts).
-  useInbox();
+  useStart(startInbox);
   // Cmd+Z restores the last delete, board-wide.
-  useUndoShortcut();
+  useStart(startUndoShortcut);
   // The native File menu (src-tauri/src/menu.rs) drives board management.
-  useBoardMenu();
+  useStart(startBoardMenu);
   // Refines the import busy-overlay text as the shell stores a bundle's media.
-  useImportProgress();
+  useStart(startImportProgress);
+  // Keeps the indexing badge on the shell's extraction queue.
+  useStart(startJobProgress);
+  // Holds Cmd+Q until a pending autosave has landed.
+  useStart(startQuitGuard);
 
   if (!ready) {
     return <div className="loading">Pinning the board…</div>;
@@ -76,7 +78,7 @@ export default function App() {
     return (
       <>
         <FirstRunModal />
-        {bundleImportOpen && <BundleImportModal />}
+        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         <ImportOverlay />
       </>
     );
@@ -99,8 +101,8 @@ export default function App() {
                 stays mounted and measured, so the camera and the timeline's
                 pan-to-card survive a view switch — they would not across an
                 unmount, and the viewport would snap back on every toggle. */}
-            {view === 'record' && <RecordView key={currentBoardId} />}
-            {view === 'object' && <ObjectView key={currentBoardId} />}
+            {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
+            {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
             <Panel position="top-left">
               <Toolbar />
             </Panel>
@@ -125,12 +127,10 @@ export default function App() {
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
         {emailImportOpen && <EmailImportModal />}
-        {propertiesOpen && (
-          <BoardPropertiesModal onClose={() => usePropertiesStore.getState().setOpen(false)} />
-        )}
+        {propertiesOpen && <BoardPropertiesModal onClose={() => closeDialog('properties')} />}
         {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
         {bundleExportOpen && <BundleExportModal />}
-        {bundleImportOpen && <BundleImportModal />}
+        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         {manageOpen && <ManageModal />}
         <ImportOverlay />
         <BackgroundTaskIndicator />

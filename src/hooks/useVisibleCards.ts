@@ -1,24 +1,12 @@
 import { useMemo } from 'react';
 import type { Card } from '../types/board';
-import { useBoardStore } from '../store/boardStore';
-import { hiddenClusterIds, isVisible } from '../lib/clusters';
-import { cardMatchesEntity, normaliseQuery } from '../lib/search';
+import { visibleCards } from '../lib/visibility';
+import { useBoardStore } from './useStores';
 
-/**
- * Canonical cards the record can currently see, per cluster visibility and the
- * toolbar's in-memory entity search — names, email addresses, phone numbers,
- * domains (see cardMatchesEntity). The board dims rather than drops, so it matches
- * the query itself (see BoardCanvas); the timeline has its own full-text search and
- * no longer reads through here.
- */
+/** The record's cards; see visibleCards. The timeline has its own search (useTimelineCards). */
 export function useVisibleCards(): Card[] {
   const cards = useBoardStore((s) => s.cards);
   const clusters = useBoardStore((s) => s.clusters);
   const searchQuery = useBoardStore((s) => s.searchQuery);
-
-  return useMemo(() => {
-    const hidden = hiddenClusterIds(clusters);
-    const q = normaliseQuery(searchQuery);
-    return cards.filter((c) => isVisible(c.clusterIds, hidden) && cardMatchesEntity(c, q));
-  }, [cards, clusters, searchQuery]);
+  return useMemo(() => visibleCards(cards, clusters, searchQuery), [cards, clusters, searchQuery]);
 }

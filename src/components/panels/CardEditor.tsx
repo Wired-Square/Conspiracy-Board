@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBoardStore } from '../../store/boardStore';
-import { useImageEditorStore } from '../../store/imageEditorStore';
-import { touches } from '../../lib/connections';
+import { openDialog } from '../../store/dialogStore';
+import { strungNote } from '../../lib/connections';
 import { MarkdownView } from '../ui/MarkdownView';
 import { Modal } from '../ui/Modal';
 import { ConnectionsSection } from './ConnectionsSection';
@@ -23,25 +22,16 @@ import {
   payloadPatchFor,
   viewFor,
 } from '../../lib/kinds';
-import { cardImageSrc, cardImageStyle } from '../../storage/media';
+import { cardImageSrc } from '../../storage/media';
+import { cardImageStyle } from '../../lib/imageCrop';
 import { asPrimary, primaryClusterId, withMembership, withoutMembership } from '../../lib/clusters';
 import { eventFor } from '../../lib/events';
-import { formatOccurredAt } from '../../lib/dates';
 import { MetaList } from '../ui/MetaList';
-import type { Card, CardKind, Connection, ImageMeta } from '../../types/board';
-
-/** A photo's EXIF as display rows: size, when, camera, where. */
-function imageFacts(m: ImageMeta): [string, string][] {
-  const facts: [string, string][] = [];
-  if (m.width && m.height) facts.push(['Size', `${m.width} × ${m.height}`]);
-  if (m.takenAt) facts.push(['Taken', formatOccurredAt(m.takenAt, 'day')]);
-  const camera = [m.cameraMake, m.cameraModel].filter(Boolean).join(' ').trim();
-  if (camera) facts.push(['Camera', camera]);
-  if (m.latitude != null && m.longitude != null) {
-    facts.push(['Location', `${m.latitude.toFixed(5)}, ${m.longitude.toFixed(5)}`]);
-  }
-  return facts;
-}
+import { imageFacts } from '../../lib/mediaFacts';
+import type { Card, CardKind } from '../../types/board';
+import { reactStyle } from '../ui/reactStyle';
+import { useBoardStore } from '../../hooks/useStores';
+import { cx } from '@wired-square/kit/core';
 
 export function CardEditor() {
   const selectedId = useBoardStore((s) => s.selectedCardId);
@@ -67,7 +57,6 @@ function CardEditorForm({ card }: { card: Card }) {
   const clusters = useBoardStore((s) => s.clusters);
   const updateCard = useBoardStore((s) => s.updateCard);
   const setView = useBoardStore((s) => s.setView);
-  const openImageEditor = useImageEditorStore((s) => s.openFor);
 
   // Title and notes are the fields that are *typed* into, and each keystroke
   // used to write through to the store — which rebuilds the card's node and
@@ -236,15 +225,15 @@ function CardEditorForm({ card }: { card: Card }) {
       <div className="field">
         <span>Picture</span>
         {imageSrc && (
-          <div className={`card-editor__preview${card.imageCrop ? ' is-cropped' : ''}`}>
-            <img src={imageSrc} alt="" style={cardImageStyle(card)} />
+          <div className={cx('card-editor__preview', card.imageCrop && 'is-cropped')}>
+            <img src={imageSrc} alt="" style={reactStyle(cardImageStyle(card))} />
           </div>
         )}
         {/* A file or a URL, framed by pan-and-zoom, then downloaded into the media
             library — all in the dialog, so this stays one link (see
             ImageEditorModal). */}
         <div className="field__row">
-          <button className="link-button" onClick={() => openImageEditor(card.id)}>
+          <button className="link-button" onClick={() => openDialog({ imageEditorCardId: card.id })}>
             {hasImage ? 'Adjust image…' : 'Add image…'}
           </button>
           {hasImage && (
@@ -354,10 +343,4 @@ function DeleteCard({ card }: { card: Card }) {
       )}
     </div>
   );
-}
-
-/** " (and 3 connections)", or nothing when the card is tied to none. */
-function strungNote(connections: readonly Connection[], cardId: string): string {
-  const n = connections.filter((c) => touches(c, cardId)).length;
-  return n ? ` (and ${n} connection${n === 1 ? '' : 's'})` : '';
 }

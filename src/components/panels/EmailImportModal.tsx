@@ -1,97 +1,30 @@
 import { useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Modal } from '../ui/Modal';
-import { useBoardStore } from '../../store/boardStore';
-import { useJobQueueStore } from '../../store/jobQueueStore';
-import { NEW_CLUSTER, useEmailImportStore } from '../../store/emailImportStore';
+import { NEW_CLUSTER } from '../../store/emailImportStore';
 import { useRoster } from '../../hooks/useRoster';
-import { EMAIL_FILE_ACCEPT } from '../../lib/email/files';
-import { emailCardsByMessageId, emptyEmailMeta, matchDraft } from '../../lib/email/meta';
+import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
+import { emailCardsByMessageId, emptyEmailMeta } from '../../lib/email/meta';
+import { MAX_MESSAGES, addLabel, batchStatus, cap, hidden, matchBatch } from '../../lib/email/importSummary';
 import { shortAddress } from '../../lib/email/addresses';
 import { unseenDomains, unseenParticipants } from '../../lib/roster';
-import { withMembership } from '../../lib/clusters';
-import { entitiesOfKind, isBoardKind } from '../../lib/kinds';
+import { entitiesOfKind } from '../../lib/kinds';
 import { NEW_CARD, choiceFor, planOffer, type Choice } from '../../lib/importOffer';
 import { formatOccurredAt } from '../../lib/dates';
-import { formatBytes, plural } from '../../lib/format';
+import { count } from '@wired-square/kit/core';
 import { storage } from '../../storage';
-import { persistDraftMedia } from '../../lib/email/persistMedia';
-import type { EmailDraft } from '../../lib/email/parseEmails';
-import type { CardDraft } from '../../store/boardStore';
 import type { Card } from '../../types/board';
-
-/** Parsing is on the main thread; a few hundred messages is ~1-2s, which the
- *  progress count covers. A worker would be right at thousands, not hundreds. */
-const MAX_MESSAGES = 200;
-
-/**
- * How many rows the offer shows before it stops, mirroring the errors list. A
- * 200-message mbox can carry 300 addresses, and the offer is for the handful the
- * user came for — one careless pass down a list that long would carpet the board
- * with newsletters, and there is no card deletion to take it back with.
- */
-const MAX_OFFERED = 50;
-
-// There was a 2MB cap here, to stop one import filling the ~5MB localStorage
-// budget. Boards are files now (see src/storage), so there is no budget to fill
-// and nothing to refuse. The size is still worth showing — it is the user's disk
-// — but it is information, not a limit.
-
-function draftSize(d: EmailDraft): number {
-  const m = d.media;
-  const attachments = m.attachments.reduce((n, a) => n + (a.bytes?.byteLength ?? 0), 0);
-  return d.notes.length + (m.image?.bytes.byteLength ?? 0) + attachments + (m.eml?.byteLength ?? 0);
-}
-
-// The offer, below: the addresses and domains this batch saw that no card claims
-// yet. It is the one active thing in this modal — everything else here describes
-// what is about to happen, where these rows decide it. What ticking one actually
-// *does* is lib/importOffer; this file only draws it and hands the answer on.
-
-/** A list the offer had to cut short, and the length it would have been. */
-type Capped<T> = { shown: T[]; total: number };
-
-function cap<T>(list: T[]): Capped<T> {
-  return { shown: list.slice(0, MAX_OFFERED), total: list.length };
-}
-
-function hidden(c: Capped<unknown>): number {
-  return c.total - c.shown.length;
-}
-
-/**
- * A name for the cluster a dragged thread makes: the subject the batch shares,
- * with any `Re:`/`Fwd:` chain stripped, or a plain fallback when they disagree.
- */
-function clusterLabelFor(drafts: EmailDraft[]): string {
-  // Strip a whole Re:/Fwd: chain in one pass — `\s*` eats the gaps, `+` the repeats.
-  const bareSubject = (raw: string): string =>
-    raw.trim().replace(/^(?:(?:re|fwd|fw)\s*:\s*)+/i, '').trim();
-  const counts = new Map<string, number>();
-  for (const d of drafts) {
-    const s = bareSubject(d.title);
-    if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
-  }
-  let best = '';
-  let top = 0;
-  for (const [s, n] of counts) {
-    if (n > top) [best, top] = [s, n];
-  }
-  return best || 'Email thread';
-}
+import { useBoardStore, useEmailImportStore } from '../../hooks/useStores';
 
 export function EmailImportModal() {
   // Mounted only while open (see App), so there is no self-hide guard here and
   // the paste box below starts empty every time.
-  const { tab, drafts, errors, clusterId, busy, progress, close, setTab, setClusterId, parseFiles, parsePaste } =
-    useEmailImportStore();
+  const { tab, drafts, errors, clusterId, busy, progress, close, setTab, setClusterId, parseFiles, parsePaste, commit } =
+    useEmailImportStore((s) => s);
 
   const clusters = useBoardStore((s) => s.clusters);
   const cards = useBoardStore((s) => s.cards);
-  const addCards = useBoardStore((s) => s.addCards);
   const addCard = useBoardStore((s) => s.addCard);
-  const updateCard = useBoardStore((s) => s.updateCard);
-  const addCluster = useBoardStore((s) => s.addCluster);
   const setView = useBoardStore((s) => s.setView);
   const roster = useRoster();
   const { fitView } = useReactFlow();
@@ -105,20 +38,8 @@ export function EmailImportModal() {
   // applies, so what's promised here is what lands.
   const byMessageId = useMemo(() => emailCardsByMessageId(cards), [cards]);
 
-  const { matches, dupeCount, completesCount, addedBytes } = useMemo(() => {
-    const matches = drafts.map((d) => matchDraft(d, byMessageId));
-    let dupeCount = 0;
-    let completesCount = 0;
-    let addedBytes = 0;
-    matches.forEach((m, i) => {
-      if (m.kind === 'duplicate') dupeCount++;
-      else {
-        if (m.kind === 'completes') completesCount++;
-        addedBytes += draftSize(drafts[i]);
-      }
-    });
-    return { matches, dupeCount, completesCount, addedBytes };
-  }, [drafts, byMessageId]);
+  const batch = useMemo(() => matchBatch(drafts, byMessageId), [drafts, byMessageId]);
+  const { matches, dupeCount } = batch;
 
   // Who the batch saw that no card claims yet. The roster is what "claims"
   // means — the same matcher the board itself is read through.
@@ -158,84 +79,14 @@ export function EmailImportModal() {
   const willCluster = clusterId !== null;
   const reclusterCount = willCluster ? dupeCount : 0;
 
-  // "3 people, 1 organisation" — what the offer is about to mint.
-  const entityBits = [
-    newPeople > 0 && plural(newPeople, 'person', 'people'),
-    newOrgs > 0 && plural(newOrgs, 'organisation'),
-  ]
-    .filter(Boolean)
-    .join(', ');
-  // What the button will do, said out loud. A row aimed at a card that already
-  // exists adds nothing, so when those are all there is, it stops saying Add
-  // rather than offering to add none.
-  const addBits = [newCount > 0 && plural(newCount, 'card'), entityBits]
-    .filter(Boolean)
-    .join(' + ');
-  const addLabel = addBits
-    ? `Add ${addBits}`
-    : patches.length
-      ? `Update ${plural(patches.length, 'card')}`
-      : reclusterCount
-        ? `Add ${plural(reclusterCount, 'card')} to cluster`
-        : 'Add 0 cards';
+  const label = addLabel({ newCount, newPeople, newOrgs, patchCount: patches.length, reclusterCount });
 
   const onPickFiles = async () => {
-    await parseFiles(await storage.pickFiles(EMAIL_FILE_ACCEPT, true));
+    await parseFiles(await storage.pickPaths(EMAIL_FILE_FILTER, true));
   };
 
   const onAdd = async () => {
-    // Write each message's media to the library first, turning the drafts into
-    // plain card drafts that reference the files. Only the ones that will land:
-    // a board-duplicate is turned away, so writing its files would just make
-    // orphans for the sweep. (Idempotent by content hash, so a within-batch
-    // repeat is written once regardless.)
-    const emailDrafts = (
-      await Promise.all(
-        drafts.map((d, i) =>
-          matches[i].kind === 'duplicate' ? Promise.resolve(null) : persistDraftMedia(d),
-        ),
-      )
-    ).filter((d): d is CardDraft => d !== null);
-
-    // Resolve the "new cluster" sentinel to a real cluster now, named after the
-    // batch, so the fresh messages and any already-imported ones share one group.
-    const cid = clusterId === NEW_CLUSTER ? addCluster(clusterLabelFor(drafts)) : clusterId;
-
-    // One call: the messages and the new entities land in one grid block, in the
-    // same cluster, and every id comes back for the fitView below. Nothing is
-    // strung together — who is on what is derived from the addresses themselves
-    // (see lib/roster.ts), and only the user draws a connection.
-    const addedIds = addCards([...emailDrafts, ...entityDrafts], { clusterId: cid });
-
-    // Index each message's .eml and attachments in the background, so a search finds
-    // words in the mail itself, not only the subject/addresses on the card.
-    useJobQueueStore.getState().enqueue(
-      emailDrafts.flatMap((d) =>
-        [d.email?.emlFile, ...(d.email?.attachments ?? []).map((a) => a.file)].filter(
-          (n): n is string => !!n,
-        ),
-      ),
-    );
-
-    // A message already on the board is part of this thread too. With a cluster
-    // chosen, add it in rather than leaving it outside the group the rest joined
-    // — appended, not moved: the user placed that card's primary, and this batch
-    // is an additional strand. A duplicate carries no card on its match, so it
-    // is found the same way the preview matched it — by Message-ID.
-    if (cid) {
-      matches.forEach((m, i) => {
-        if (m.kind !== 'duplicate') return;
-        const mid = drafts[i].email.messageId;
-        const existing = mid ? byMessageId.get(mid) : undefined;
-        if (existing && !existing.clusterIds.includes(cid)) {
-          updateCard(existing.id, { clusterIds: withMembership(existing.clusterIds, cid) });
-        }
-      });
-    }
-
-    for (const [id, patch] of patches) updateCard(id, patch);
-    close();
-
+    const { addedIds, drawnIds } = await commit({ entityDrafts, patches });
     // Show the user exactly what landed — including a card that only gained an
     // address, whose face does not change and which would otherwise be silent.
     //
@@ -243,21 +94,10 @@ export function EmailImportModal() {
     // node: it fits an empty bounds, which divides by a zero width, clamps the
     // resulting Infinity to maxZoom, and sails off to park the world origin in
     // the middle of the screen. An all-email import — the ordinary case — would
-    // do exactly that, since the record has no node. Read the cards back from
-    // the store rather than slicing addedIds: addCards sorts the batch by date,
-    // so the ids do not come back in the order they went in.
-    const drawn = new Set(
-      useBoardStore
-        .getState()
-        .cards.filter((c) => isBoardKind(c.kind))
-        .map((c) => c.id),
-    );
-    const touched = [...addedIds, ...patches.map(([id]) => id)].filter((id) =>
-      drawn.has(id),
-    );
-    if (touched.length) {
+    // do exactly that, since the record has no node.
+    if (drawnIds.length) {
       fitView({
-        nodes: touched.map((id) => ({ id })),
+        nodes: drawnIds.map((id) => ({ id })),
         duration: 500,
         padding: 0.4,
         maxZoom: 1,
@@ -287,17 +127,7 @@ export function EmailImportModal() {
               ? progress
                 ? `Parsing ${progress.done}/${progress.total}…`
                 : 'Parsing…'
-              : drafts.length > 0 &&
-                [
-                  `${newCount} to add`,
-                  completesCount && `${completesCount} fills in a dragged message`,
-                  dupeCount &&
-                    (willCluster ? `${dupeCount} added to cluster` : `${dupeCount} already on board`),
-                  patches.length && `${plural(patches.length, 'existing card')} updated`,
-                  `~${formatBytes(addedBytes)}`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+              : drafts.length > 0 && batchStatus(batch, newCount, patches.length, willCluster)}
           </span>
           <button className="link-button" onClick={close}>
             Cancel
@@ -310,7 +140,7 @@ export function EmailImportModal() {
             }
             onClick={() => void onAdd()}
           >
-            {addLabel}
+            {label}
           </button>
         </>
       }
@@ -406,7 +236,7 @@ export function EmailImportModal() {
               <OfferRow
                 key={p.address}
                 label={p.name ?? p.address}
-                meta={[p.name && p.address, plural(p.count, 'message')]
+                meta={[p.name && p.address, count(p.count, 'message')]
                   .filter(Boolean)
                   .join(' · ')}
                 choice={choiceFor(choices, p.address)}
@@ -437,7 +267,7 @@ export function EmailImportModal() {
               <OfferRow
                 key={d.domain}
                 label={d.domain}
-                meta={`${plural(d.count, 'message')} · ${plural(d.addressCount, 'address', 'addresses')}`}
+                meta={`${count(d.count, 'message')} · ${count(d.addressCount, 'address', 'addresses')}`}
                 choice={choiceFor(choices, d.domain)}
                 newLabel="New organisation"
                 groups={[{ label: 'Add to existing organisation', cards: orgs }]}

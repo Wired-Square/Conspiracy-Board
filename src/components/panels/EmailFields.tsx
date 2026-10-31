@@ -10,7 +10,6 @@ import {
 import { emptyEmailMeta } from '../../lib/email/meta';
 import { mailUrlFor } from '../../lib/email/mailDrag';
 import { withoutAddress } from '../../lib/entities';
-import { useBoardStore } from '../../store/boardStore';
 import { entitiesForAddress, FREEMAIL_DOMAINS } from '../../lib/roster';
 import { orgDraftForDomain, patchFor, personDraftFor } from '../../lib/importOffer';
 import { isImportedCard } from '../../lib/kinds';
@@ -22,6 +21,7 @@ import {
   useEntityLinkCommon,
   type LinkRowContext,
 } from './EntityLink';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * Headers for an email card. There is deliberately no Subject or Date field

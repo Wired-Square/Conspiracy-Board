@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Conspiracy board"
 authors = ["Alex"]
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.99"
 
 [lib]
 name = "conspiracy_lib"
@@ -14,17 +14,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-# raw_value lets the board reassembler pass each stored card/connection/cluster
-# fragment through verbatim (validated as JSON, never interpreted) when rebuilding a
-# board's envelope from its SQLite rows — the shell still never parses a card.
-serde_json = { version = "1.0", features = ["raw_value"] }
+serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = ["protocol-asset"] }
+tauri = { version = "2.12.1", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
-# The native save panel for exporting a bundle, so the user chooses where the .zip
-# goes. The one Tauri plugin we take: unlike the file picker and the download (which
-# the webview does itself), a save *location* is something a webview cannot ask for.
+# The native open and save panels for a bundle, so the shell can read and write the
+# .zip by path rather than shipping it across IPC. The one Tauri plugin we take.
 tauri-plugin-dialog = "2"
 # Media is content-addressed: its filename is the sha-256 of its bytes. base64
 # carries those bytes across the webview↔shell boundary (a Tauri command is
@@ -51,8 +47,26 @@ imagesize = "0.13"
 # save writes only the rows that changed rather than rewriting the whole board, and a
 # crash can't tear the file. "bundled" compiles SQLite from the amalgamation — no system
 # dependency, and it enables FTS5 for the library-wide search index (library.sqlite). The
-# schema stays TypeScript's: Rust reads and writes id/json rows and never parses a card.
+# schema is Rust's (src/schema.rs): each id/json row is validated on save and on load.
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Imported email is untrusted MIME in any charset; full_encoding adds the multi-byte
+# ones through encoding_rs, which lopdf already brings.
+mail-parser = { version = "1.0", features = ["full_encoding"] }
+wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
+wslib-tauri = { version = "0.1.1", registry = "wired-square" }
+# The dev-only MCP harness (src/mcp.rs): a loopback server that reads and drives the
+# window for a Claude session. getrandom is already in the tree through tauri.
+wslib-mcp = { version = "0.2.1", registry = "wired-square", features = ["http", "dom", "tauri-bridge"], optional = true }
+getrandom = { version = "0.3", optional = true }
+
+[features]
+# `pnpm dev` turns it on; a release build refuses it (lib.rs).
+mcp = ["dep:wslib-mcp", "dep:getrandom"]
+
+[dev-dependencies]
+# The webview's types are generated from the Rust ones by a test (src/bindings.rs), so
+# this never ships. 11, as wslib-appliance-types uses.
+ts-rs = "11.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pinned to exactly what tauri/wry already resolve to. A different minor here

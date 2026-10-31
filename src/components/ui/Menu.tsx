@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { cx } from '@wired-square/kit/core';
 
 export type MenuItem = {
   label: string;
@@ -135,7 +136,7 @@ export function Menu({ label, items, selectedLabel }: Props) {
               role={selectedLabel === undefined ? 'menuitem' : 'menuitemradio'}
               aria-checked={selectedLabel === undefined ? undefined : selectedLabel === item.label}
               tabIndex={-1}
-              className={`menu__item${selectedLabel === item.label ? ' is-selected' : ''}`}
+              className={cx('menu__item', selectedLabel === item.label && 'is-selected')}
               disabled={item.disabled}
               onClick={() => select(item)}
               onMouseEnter={() => !item.disabled && setActiveIndex(i)}

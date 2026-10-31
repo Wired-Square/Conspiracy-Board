@@ -1,55 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
-import { useBoardStore } from '../../store/boardStore';
-import { useImageEditorStore } from '../../store/imageEditorStore';
+import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
-import { downloadImage, extForFetched, extOf, mediaSrc } from '../../storage/media';
-import { clamp, clampOffset, coverScale, cropToView, viewToCrop, type Geom } from '../../lib/imageCrop';
+import { mediaSrc } from '../../storage/media';
+import {
+  clampView,
+  initialView,
+  viewToCrop,
+  zoomAbout,
+  zoomCeiling,
+  type CropView,
+  type Geom,
+} from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
-
-// The crop is authored in a 4:3 frame, matching how a card shows its picture. The
-// minimum scale is cover-fit, so the frame is never left showing bare film. The
-// ceiling is the larger of two limits (see zoomCeiling), so a small image keeps its
-// headroom while a big one can still be cropped in tight to a single face.
-const MAX_ZOOM = 5; // …× the cover-fit scale
-const MAX_UPSCALE = 3; // …× the image's own pixels
-
-// The most the frame may zoom in. `min` is the cover-fit scale, which for a large
-// image is tiny — so `min * MAX_ZOOM` alone can sit well below the image's natural
-// size, leaving a group shot un-croppable to one face. Allowing up to MAX_UPSCALE×
-// the natural pixels regardless lifts that: whichever limit is higher wins, so no
-// image loses reach and a big one gains it.
-const zoomCeiling = (min: number) => Math.max(min * MAX_ZOOM, MAX_UPSCALE);
-
-// What the frame is currently showing: the image's on-screen size (`scale` px per
-// natural px) and where its top-left sits relative to the frame's, plus the
-// smallest scale that still covers the frame (the zoom floor).
-type View = { scale: number; tx: number; ty: number; min: number };
+import { useBoardStore } from '../../hooks/useStores';
 
 // What Save will store as the media file. An existing library file is kept and
 // only re-cropped; a picked file or a fetched URL is written from the held Blob on
 // Save; a remote URL the migration hasn't localised yet is downloaded then.
-type Persist = { existingFile?: string; blob?: Blob; ext?: string; remoteUrl?: string };
+type Persist = { existingFile?: string; blob?: Blob; name?: string; remoteUrl?: string };
 
 // The loaded image and how Save will persist it — always set together, so one bit
 // of state rather than two kept in step.
 type Source = { url: string; natW: number; natH: number; persist: Persist };
-
-/** A view with its offset clamped so the image keeps covering the frame. */
-function clampView(scale: number, tx: number, ty: number, min: number, geom: Geom): View {
-  return { scale, min, ...clampOffset(scale, tx, ty, geom) };
-}
-
-/** The view to open on: a stored crop restored, else cover-fit and centred. */
-function initialView(geom: Geom, crop: ImageCrop | null): View {
-  const min = coverScale(geom);
-  if (crop) {
-    const { scale, tx, ty } = cropToView(crop, geom);
-    return clampView(scale, tx, ty, min, geom);
-  }
-  return clampView(min, (geom.fw - geom.natW * min) / 2, (geom.fh - geom.natH * min) / 2, min, geom);
-}
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -64,7 +38,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
   const card = useBoardStore((s) => s.cards.find((c) => c.id === cardId));
   const cards = useBoardStore((s) => s.cards);
   const updateCard = useBoardStore((s) => s.updateCard);
-  const close = useImageEditorStore((s) => s.close);
+  const close = () => closeDialog('imageEditorCardId');
 
   // Pictures already on the board, one tile per file — the name is content-addressed,
   // so cards sharing an image share the one file (a group photo lands on everyone in
@@ -87,7 +61,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
   const objectUrlRef = useRef<string | null>(null);
 
   const [source, setSource] = useState<Source | null>(null);
-  const [view, setView] = useState<View | null>(null);
+  const [view, setView] = useState<CropView | null>(null);
   const [urlInput, setUrlInput] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,7 +119,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     try {
       // A File is already a Blob: display and persist it directly, no byte copy.
       const img = await loadImage(swapObjectUrl(file));
-      show(img, { blob: file, ext: extOf(file.name, file.type) }, null);
+      show(img, { blob: file, name: file.name }, null);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
@@ -157,10 +131,11 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     setError(null);
     setBusy('Fetching…');
     try {
-      const { bytes, mime } = await storage.fetchImage(url);
-      const blob = new Blob([bytes], mime ? { type: mime } : undefined);
-      const img = await loadImage(swapObjectUrl(blob));
-      show(img, { blob, ext: extForFetched(url, mime) }, null);
+      // Stored on fetch: if the dialog is cancelled the file is an orphan the media
+      // sweep reclaims, as with a declined bundle import.
+      const file = await storage.downloadImage(url);
+      const img = await loadImage(mediaSrc(file));
+      show(img, { existingFile: file }, null);
     } catch {
       setError("Couldn't fetch that image. Check the URL and that you're online.");
     } finally {
@@ -181,14 +156,9 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     }
   }
 
-  // Zoom about the frame's centre, keeping whatever is under it fixed, then re-clamp.
   function zoomTo(scale: number) {
     if (!source || !view) return;
-    const geom = frameGeom(source.natW, source.natH);
-    const next = clamp(scale, view.min, zoomCeiling(view.min));
-    const ix = (geom.fw / 2 - view.tx) / view.scale;
-    const iy = (geom.fh / 2 - view.ty) / view.scale;
-    setView(clampView(next, geom.fw / 2 - ix * next, geom.fh / 2 - iy * next, view.min, geom));
+    setView(zoomAbout(view, scale, frameGeom(source.natW, source.natH)));
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -223,8 +193,12 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     setError(null);
     try {
       let imageFile = persist.existingFile ?? null;
-      if (!imageFile && persist.blob) imageFile = await storage.saveMedia(await persist.blob.arrayBuffer(), persist.ext ?? 'bin');
-      else if (!imageFile && persist.remoteUrl) imageFile = await downloadImage(persist.remoteUrl);
+      if (!imageFile && persist.blob) {
+        const { blob, name } = persist;
+        imageFile = await storage.saveMedia(await blob.arrayBuffer(), { name, mime: blob.type });
+      } else if (!imageFile && persist.remoteUrl) {
+        imageFile = await storage.downloadImage(persist.remoteUrl);
+      }
       if (!imageFile) throw new Error('There is no image to save.');
       updateCard(card.id, { imageFile, imageUrl: null, imageCrop: crop });
       close();

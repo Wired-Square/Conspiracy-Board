@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
-import { useBoardStore } from '../../store/boardStore';
-import { useBundleExportStore } from '../../store/bundleExportStore';
-import { plural } from '../../lib/format';
-import type { BoardSummary } from '../../data/boardIndex';
+import { closeDialog } from '../../store/dialogStore';
+import { count } from '@wired-square/kit/core';
+import type { BoardSummary } from '../../storage/StorageAdapter';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * Choose what to bundle: this board, some boards, or the whole library. The chosen
@@ -13,7 +13,7 @@ import type { BoardSummary } from '../../data/boardIndex';
  * each time.
  */
 export function BundleExportModal() {
-  const close = useBundleExportStore((s) => s.close);
+  const close = () => closeDialog('bundleExport');
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   // The current board's live title can lead the index by an autosave, so prefer it.
   const currentTitle = useBoardStore((s) => s.meta.title);
@@ -67,7 +67,7 @@ export function BundleExportModal() {
       footer={
         <>
           <span className="modal__status">
-            {selected.size} of {plural(rows.length, 'board')} selected
+            {selected.size} of {count(rows.length, 'board')} selected
           </span>
           <button className="link-button" onClick={close}>
             Cancel
@@ -94,7 +94,7 @@ export function BundleExportModal() {
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
             <span className="import-offer__text">
               <span className="import-offer__label">Entire library</span>
-              <span className="import-offer__meta">All {plural(rows.length, 'board')}</span>
+              <span className="import-offer__meta">All {count(rows.length, 'board')}</span>
             </span>
           </label>
           <ul className="import-offer">

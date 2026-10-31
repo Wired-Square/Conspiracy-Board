@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { normaliseNumber, formatNumber, setLocalCallingCode, getLocalCallingCode } from './phone';
+import { normaliseNumber, formatNumber, setLocalCallingCode } from './phone';
 
 describe('normaliseNumber', () => {
   beforeEach(() => setLocalCallingCode('+61'));
@@ -37,15 +37,15 @@ describe('normaliseNumber', () => {
     expect(normaliseNumber('07911 123456')).toBe('+447911123456');
   });
 
-  it('normalises the configured code itself (61 → +61)', () => {
-    setLocalCallingCode('61');
-    expect(getLocalCallingCode()).toBe('+61');
-    expect(normaliseNumber('0403123456')).toBe('+61403123456');
+  it('normalises the configured code itself (44 → +44)', () => {
+    setLocalCallingCode('44');
+    expect(normaliseNumber('07911 123456')).toBe('+447911123456');
   });
 
   it('falls back to +61 for an empty code', () => {
+    setLocalCallingCode('+44');
     setLocalCallingCode('');
-    expect(getLocalCallingCode()).toBe('+61');
+    expect(normaliseNumber('0403123456')).toBe('+61403123456');
   });
 });
 

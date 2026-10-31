@@ -1,5 +1,6 @@
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import type { Grade } from '../../types/board';
+import { reactStyle } from '../ui/reactStyle';
 
 /**
  * Pick a grade, with the help to pick one.
@@ -25,7 +26,7 @@ export function GradeField({
       <select
         className="grade-select"
         value={grade ?? ''}
-        style={grade ? gradeTint(grade) : undefined}
+        style={grade ? reactStyle(gradeTint(grade)) : undefined}
         onChange={(e) => onChange((e.target.value || undefined) as Grade | undefined)}
       >
         <option value="">— ungraded —</option>
@@ -61,7 +62,7 @@ export function GradeLegend() {
       <ul>
         {GRADES.map((g) => (
           <li key={g}>
-            <span className="grade-chip" style={gradeTint(g)}>
+            <span className="grade-chip" style={reactStyle(gradeTint(g))}>
               {GRADE_META[g].label}
             </span>
             <span>{GRADE_META[g].definition}</span>

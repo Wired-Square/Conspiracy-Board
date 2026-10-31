@@ -1,5 +1,5 @@
-import { useBoardStore } from '../store/boardStore';
-import { useTauriListen } from './useTauriListen';
+import { boardStore } from '../store/boardStore';
+import { listenTauri } from './listen';
 
 type ImportProgress = { done: number; total: number };
 
@@ -8,10 +8,10 @@ type ImportProgress = { done: number; total: number };
 // overlay's text to "media x of y". Guarded on an import actually being in flight
 // (importStatus set), so an event delivered after importBoard has cleared the
 // overlay can't revive it.
-export function useImportProgress() {
-  useTauriListen<ImportProgress>('import:progress', (e) => {
-    if (useBoardStore.getState().importStatus === null) return;
+export function startImportProgress(): () => void {
+  return listenTauri<ImportProgress>('import:progress', (e) => {
+    if (boardStore.getState().importStatus === null) return;
     const { done, total } = e.payload;
-    useBoardStore.setState({ importStatus: `Importing media ${done} of ${total}…` });
+    boardStore.setState({ importStatus: `Importing media ${done} of ${total}…` });
   });
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Card } from '../../types/board';
 import { emptyOrgMeta, emptyPersonMeta, withAddress, withDomain, withNumber } from '../../lib/entities';
 import { formatNumber } from '../../lib/phone';
-import { useBoardStore } from '../../store/boardStore';
+import { useBoardStore } from '../../hooks/useStores';
 
 /**
  * What a person or an organisation is matched on: addresses, and for an

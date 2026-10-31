@@ -1,8 +1,9 @@
-import { create } from 'zustand';
-import { useBoardStore } from './boardStore';
+import { createStore } from 'zustand/vanilla';
+import { boardStore } from './boardStore';
 import { storage } from '../storage';
-import { boardMediaRefs, cardMediaEntries } from './boardMigration';
+import { cardMediaEntries } from '../lib/media';
 import { auditMedia, type CurrentRef, type MediaRow } from '../lib/maintenance';
+import { errorMessage } from '../lib/errors';
 
 // The media library reconciled against the boards, for the Objects view — lifted out
 // of the view into a store so the toolbar's Objects badge can read the file count and
@@ -10,7 +11,7 @@ import { auditMedia, type CurrentRef, type MediaRow } from '../lib/maintenance';
 // the imperative actions; this store is just the shared read-model they write to.
 //
 // Reads once when the view mounts and on demand — deliberately NOT on every card edit:
-// it lists the disk and loads every other board, too much to redo per keystroke, and a
+// it lists the disk and every other board's refs, too much to redo per keystroke, and a
 // reprocess changes derived fields, not the file inventory. The view is keyed on the
 // board, so it re-audits when the board switches.
 
@@ -28,7 +29,7 @@ type MediaAuditState = {
   refresh: () => Promise<void>;
 };
 
-export const useMediaAuditStore = create<MediaAuditState>((set) => ({
+export const mediaAuditStore = createStore<MediaAuditState>()((set) => ({
   rows: [],
   loading: true,
   error: null,
@@ -41,7 +42,7 @@ export const useMediaAuditStore = create<MediaAuditState>((set) => ({
     try {
       // The open board's references come from memory — its live, possibly-unsaved
       // state — each tagged with its owner and media kind for the row's reprocess.
-      const { cards, currentBoardId } = useBoardStore.getState();
+      const { cards, currentBoardId } = boardStore.getState();
       const currentRefs: CurrentRef[] = cards.flatMap((c) =>
         cardMediaEntries(c).map((e) => ({
           file: e.file,
@@ -52,23 +53,18 @@ export const useMediaAuditStore = create<MediaAuditState>((set) => ({
         })),
       );
 
-      // The disk listing has no dependency on the board reads, so start it now and
-      // let it run alongside them rather than after.
+      // The disk listing has no dependency on the refs, so start it now and let it
+      // run alongside them rather than after.
       const diskP = storage.listMedia();
 
-      // Every *other* board's references, from disk, to tell an orphan (no board
-      // wants it) from a file another board owns. If one won't load the set is
-      // incomplete — withhold the orphan verdict, as gc_media does before deleting.
-      const entries = await storage.listBoards();
-      const others = await Promise.all(
-        entries.filter((e) => e.id !== currentBoardId).map((e) => storage.loadBoard(e.id)),
-      );
-      const complete = others.every((b) => b !== null);
-      const allRefs = complete ? new Set(others.flatMap((b) => boardMediaRefs(b!))) : null;
+      // Every *other* board's references, to tell an orphan (no board wants it) from a
+      // file another board owns. Null when some board's are unknown — withhold the
+      // orphan verdict, as gc_media does before deleting.
+      const allRefs = await storage.mediaRefs(currentBoardId);
 
-      set({ rows: auditMedia(await diskP, currentRefs, allRefs), incomplete: !complete });
+      set({ rows: auditMedia(await diskP, currentRefs, allRefs), incomplete: allRefs === null });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) });
+      set({ error: errorMessage(e) });
     } finally {
       set({ loading: false });
     }
