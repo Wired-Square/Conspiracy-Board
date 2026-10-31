@@ -157,6 +157,16 @@ fn set_state(conn: &Connection, key: &str, value: Option<&str>) -> Result<(), St
   done.map(|_| ()).map_err(|e| format!("Could not write the library state: {e}"))
 }
 
+const LIBRARY_MCP: &str = "library_mcp";
+
+pub(crate) fn library_mcp_enabled(conn: &Connection) -> Result<bool, String> {
+  Ok(state(conn, LIBRARY_MCP)?.as_deref() == Some("on"))
+}
+
+pub(crate) fn set_library_mcp_enabled(conn: &Connection, on: bool) -> Result<(), String> {
+  set_state(conn, LIBRARY_MCP, on.then_some("on"))
+}
+
 #[tauri::command(async)]
 pub fn list_boards(db: State<LibraryDb>) -> Result<Vec<BoardSummary>, String> {
   summaries(&*db.lock_db()?)
@@ -241,6 +251,20 @@ mod tests {
     set_state(&conn, "current_id", Some("brd_x")).unwrap();
     set_state(&conn, "current_id", None).unwrap();
     assert_eq!(state(&conn, "current_id").unwrap(), None);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn the_library_mcp_is_off_until_turned_on_and_stays_as_set() {
+    let dir = temp_dir_for("index-library-mcp");
+    let conn = open(&dir);
+    assert!(!library_mcp_enabled(&conn).unwrap());
+    set_library_mcp_enabled(&conn, true).unwrap();
+    drop(conn);
+    let conn = open(&dir);
+    assert!(library_mcp_enabled(&conn).unwrap());
+    set_library_mcp_enabled(&conn, false).unwrap();
+    assert!(!library_mcp_enabled(&conn).unwrap());
     let _ = std::fs::remove_dir_all(&dir);
   }
 }
