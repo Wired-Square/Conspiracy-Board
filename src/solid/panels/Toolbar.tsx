@@ -11,7 +11,7 @@ import { CARD_H, CARD_W } from '../../lib/layout';
 import { storage } from '../../storage';
 import type { CardKind } from '../../types/board';
 import { VIEW_META, type View } from '../../types/view';
-import type { Camera } from '../../components/canvas/Canvas';
+import { camera } from '../board/camera';
 import { boardStore } from '../../store/boardStore';
 import { emailImportStore } from '../../store/emailImportStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
@@ -21,7 +21,7 @@ import { Menu } from '../ui/Menu';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
 
-export function Toolbar(props: { camera: Camera | null }) {
+export function Toolbar() {
   const title = fromStore(boardStore, (s) => s.meta.title);
   const view = fromStore(boardStore, (s) => s.view);
   const currentBoardId = fromStore(boardStore, (s) => s.currentBoardId);
@@ -59,9 +59,9 @@ export function Toolbar(props: { camera: Camera | null }) {
   // exactly what the layout needs; fitView then frames the result — a frame later,
   // once the new positions have reached the canvas.
   const tidy = () => {
-    const camera = props.camera;
-    if (!camera) return;
-    const layoutNodes: LayoutNode[] = camera.getNodes().map((n) => ({
+    const cam = camera();
+    if (!cam) return;
+    const layoutNodes: LayoutNode[] = cam.getNodes().map((n) => ({
       id: n.id,
       position: { x: n.x, y: n.y },
       width: n.size?.width ?? CARD_W,
@@ -72,7 +72,7 @@ export function Toolbar(props: { camera: Camera | null }) {
     const positions = arrangedPositions(layoutNodes, boardStore.getState().connections);
     if (!positions.size) return;
     arrangeCards(positions);
-    requestAnimationFrame(() => void camera.fitView({ padding: 0.2, duration: 400 }));
+    requestAnimationFrame(() => void cam.fitView({ padding: 0.2, duration: 400 }));
   };
 
   return (

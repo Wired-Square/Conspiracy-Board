@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import type { Component } from 'solid-js';
-import { BoardCanvas } from './components/BoardCanvas';
-import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
+/** @jsxImportSource react */
+import { useEffect, useState, type ReactNode } from 'react';
+import { BoardCanvas } from './solid/board/BoardCanvas';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
 import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
@@ -36,9 +35,12 @@ function ImportOverlay() {
   return status ? <BusyOverlay status={status} /> : null;
 }
 
-// The camera is React context, which an island can't read, so it is handed in.
-function CameraIsland<P extends object>(props: { component: Component<P & { camera: Camera | null }> } & P) {
-  return <SolidIsland<P & { camera: Camera | null }> {...props} camera={useCamera()} />;
+function CanvasPanel({ position, children }: { position: string; children: ReactNode }) {
+  return (
+    <div className="app-canvas-panel nopan nowheel" data-position={position}>
+      {children}
+    </div>
+  );
 }
 
 export default function App() {
@@ -90,57 +92,54 @@ export default function App() {
 
   return (
     <div className="app">
-      <CameraProvider>
-        {/* The drawer spans the full width now that the editor is a dialog rather
-            than a column, and must sit inside the provider (it calls useCamera)
-            yet outside the canvas. */}
-        <div className="app__main">
-          <div className="app__canvas">
-            {/* Keyed on the board: the canvas's viewport and fit are
-                initialisation-only, so switching boards without a remount would
-                show the new cards under the old camera. The drawer's open state
-                is lazily initialised from the board's dates for the same reason. */}
-            <BoardCanvas key={currentBoardId} />
-            {/* The record covers the canvas rather than replacing it. The canvas
-                stays mounted and measured, so the camera and the timeline's
-                pan-to-card survive a view switch — they would not across an
-                unmount, and the viewport would snap back on every toggle. */}
-            {view === 'record' && <SolidIsland key={`record-${currentBoardId}`} component={RecordView} />}
-            {view === 'object' && <SolidIsland key={`object-${currentBoardId}`} component={ObjectView} />}
-            <CanvasPanel position="top-left">
-              <CameraIsland component={Toolbar} />
+      {/* The drawer spans the full width now that the editor is a dialog rather
+          than a column, and sits outside the canvas. */}
+      <div className="app__main">
+        <div className="app__canvas">
+          {/* Keyed on the board: the canvas's viewport and fit are
+              initialisation-only, so switching boards without a remount would
+              show the new cards under the old camera. The drawer's open state
+              is lazily initialised from the board's dates for the same reason. */}
+          <SolidIsland key={currentBoardId} component={BoardCanvas} />
+          {/* The record covers the canvas rather than replacing it. The canvas
+              stays mounted and measured, so the camera and the timeline's
+              pan-to-card survive a view switch — they would not across an
+              unmount, and the viewport would snap back on every toggle. */}
+          {view === 'record' && <SolidIsland key={`record-${currentBoardId}`} component={RecordView} />}
+          {view === 'object' && <SolidIsland key={`object-${currentBoardId}`} component={ObjectView} />}
+          <CanvasPanel position="top-left">
+            <SolidIsland component={Toolbar} />
+          </CanvasPanel>
+          {/* Shown over board and record: a cluster hides its cards wherever they
+              are, and the record reads visibility through the same visibleCards
+              the timeline does. The Objects view has no clusters — it shows its own
+              Maintenance dropdown in this corner instead. */}
+          {view !== 'object' && (
+            <CanvasPanel position="top-right">
+              <SolidIsland component={ClusterPanel} />
             </CanvasPanel>
-            {/* Shown over board and record: a cluster hides its cards wherever they
-                are, and the record reads visibility through the same visibleCards
-                the timeline does. The Objects view has no clusters — it shows its own
-                Maintenance dropdown in this corner instead. */}
-            {view !== 'object' && (
-              <CanvasPanel position="top-right">
-                <SolidIsland component={ClusterPanel} />
-              </CanvasPanel>
-            )}
-          </div>
-          <CameraIsland key={currentBoardId} component={TimelineDrawer} />
+          )}
         </div>
-        <SolidIsland component={CardEditor} />
-        {/* All three sit outside the canvas — nested in the pane, its
-            wheel/drag handlers would eat scrolling and text selection inside the
-            forms — and outside the panels, since position:fixed escapes
-            overflow but not stacking, so a backdrop inside a panel's z-index
-            would paint against CardEditor incorrectly.
-            Mounted only while open, so their local state (a half-typed paste, a
-            pending delete confirm) doesn't outlive the dialog. */}
-        {emailImportOpen && <CameraIsland component={EmailImportModal} />}
-        {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
-        {imageEditorCardId && <SolidIsland key={imageEditorCardId} component={ImageEditorModal} cardId={imageEditorCardId} />}
-        {bundleExportOpen && <SolidIsland component={BundleExportModal} />}
-        {bundleImportBoards && <SolidIsland component={BundleImportModal} boards={bundleImportBoards} />}
-        {manageOpen && <SolidIsland component={ManageModal} />}
-        <ImportOverlay />
-        <SolidIsland component={BackgroundTaskIndicator} />
-        <UndoToast />
-        <PromptHost />
-      </CameraProvider>
+        <SolidIsland key={currentBoardId} component={TimelineDrawer} />
+      </div>
+      <SolidIsland component={CardEditor} />
+      {/* All three sit outside the canvas — nested in the pane, its
+          wheel/drag handlers would eat scrolling and text selection inside the
+          forms — and outside the panels, since position:fixed escapes
+          overflow but not stacking, so a backdrop inside a panel's z-index
+          would paint against CardEditor incorrectly.
+          Mounted only while open, so their local state (a half-typed paste, a
+          pending delete confirm) doesn't outlive the dialog. */}
+      {emailImportOpen && <SolidIsland component={EmailImportModal} />}
+      {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
+      {imageEditorCardId && <SolidIsland key={imageEditorCardId} component={ImageEditorModal} cardId={imageEditorCardId} />}
+      {bundleExportOpen && <SolidIsland component={BundleExportModal} />}
+      {bundleImportBoards && <SolidIsland component={BundleImportModal} boards={bundleImportBoards} />}
+      {manageOpen && <SolidIsland component={ManageModal} />}
+      <ImportOverlay />
+      <SolidIsland component={BackgroundTaskIndicator} />
+      <UndoToast />
+      <PromptHost />
     </div>
   );
 }

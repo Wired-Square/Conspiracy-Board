@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@wired-square/canvas/canvas.css';

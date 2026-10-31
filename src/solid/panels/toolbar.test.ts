@@ -4,7 +4,6 @@ import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
 import { pushModal } from '../../lib/modalStack';
-import type { Camera } from '../../components/canvas/Canvas';
 import { Toolbar } from './Toolbar';
 
 vi.mock('../../storage', () => ({ storage: {} }));
@@ -16,7 +15,7 @@ beforeEach(() => {
   Object.values(actions).forEach((a) => a.mockClear());
   boardStore.setState({ ...actions, view: 'board', currentBoardId: 'b1', lastError: null });
   host = document.body.appendChild(document.createElement('div'));
-  dispose = render(() => createComponent(Toolbar, { camera: null as Camera | null }), host);
+  dispose = render(() => createComponent(Toolbar, {}), host);
 });
 afterEach(() => {
   dispose();

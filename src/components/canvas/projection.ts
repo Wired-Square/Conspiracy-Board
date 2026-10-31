@@ -1,4 +1,3 @@
-import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import type { Card, Cluster, Connection } from '../../types/board';
 import type { CardNode, StringEdge, StringEdgeData } from '../../types/canvas';
@@ -94,8 +93,6 @@ export const projectionStore = createStore<ProjectionState>()(() => {
   const { cards, clusters, connections } = boardStore.getState();
   return { nodes: reconcileNodes([], clusters, cards, clusters), edges: reconcileEdges([], connections) };
 });
-
-export const useProjection = <T,>(selector: (s: ProjectionState) => T): T => useStore(projectionStore, selector);
 
 // Synchronous, so a render never sees cards and nodes out of step.
 const unsubscribe = boardStore.subscribe((s, prev) => {

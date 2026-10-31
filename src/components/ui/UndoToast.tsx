@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { useEffect, useState } from 'react';
 import { type Deleted } from '../../store/boardStore';
 import { useBoardStore } from '../../hooks/useStores';

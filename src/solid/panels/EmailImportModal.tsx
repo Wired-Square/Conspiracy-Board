@@ -2,7 +2,7 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
 import { Modal } from '../ui/Modal';
-import type { Camera } from '../../components/canvas/Canvas';
+import { camera } from '../board/camera';
 import { NEW_CLUSTER, emailImportStore } from '../../store/emailImportStore';
 import { boardStore } from '../../store/boardStore';
 import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
@@ -17,7 +17,7 @@ import { storage } from '../../storage';
 import type { Card } from '../../types/board';
 import { fromStore } from '../fromStore';
 
-export function EmailImportModal(props: { camera: Camera | null }) {
+export function EmailImportModal() {
   // Mounted only while open (see App), so there is no self-hide guard here and
   // the paste box below starts empty every time.
   const tab = fromStore(emailImportStore, (s) => s.tab);
@@ -90,7 +90,7 @@ export function EmailImportModal(props: { camera: Camera | null }) {
     // Only what is drawn, though: an all-email import — the ordinary case — has
     // nothing on the board to frame.
     if (drawnIds.length) {
-      props.camera?.fitWhenDrawn({ ids: drawnIds, duration: 500, padding: 0.4, maxZoom: 1 });
+      camera()?.fitWhenDrawn({ ids: drawnIds, duration: 500, padding: 0.4, maxZoom: 1 });
     } else if (addedIds.length) {
       // It all went to the record — the ordinary case, an mbox with nobody
       // ticked. Nothing moves on the board, so say where it went instead.

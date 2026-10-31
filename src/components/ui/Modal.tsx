@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { pushModal } from '../../lib/modalStack';
 

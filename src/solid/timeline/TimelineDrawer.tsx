@@ -16,7 +16,7 @@ import {
 } from '../../lib/timeline';
 import { CARD_H, CARD_W } from '../../lib/layout';
 import type { Card, CardKind } from '../../types/board';
-import type { Camera } from '../../components/canvas/Canvas';
+import { camera } from '../board/camera';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '../fromStore';
 import { createDebounced } from '../createDebounced';
@@ -33,7 +33,7 @@ import { TimelineKindFilter } from './TimelineKindFilter';
  * leaves the rest of the axis empty. Uniform chips with day headings and gap
  * markers give the temporal reading without the scaling pathology.
  */
-export function TimelineDrawer(props: { camera: Camera | null }) {
+export function TimelineDrawer() {
   const cards = fromStore(boardStore, (s) => s.cards);
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
@@ -166,14 +166,14 @@ export function TimelineDrawer(props: { camera: Camera | null }) {
       return;
     }
     selectCard(id);
-    const camera = props.camera;
-    const n = camera?.getNode(id);
-    if (!camera || !n) return; // Not drawn: a record kind, or in a hidden cluster.
+    const cam = camera();
+    const n = cam?.getNode(id);
+    if (!cam || !n) return; // Not drawn: a record kind, or in a hidden cluster.
     const w = n.size?.width ?? CARD_W;
     const h = n.size?.height ?? CARD_H;
-    void camera.setCentre(n.x + w / 2, n.y + h / 2, {
+    void cam.setCentre(n.x + w / 2, n.y + h / 2, {
       // Don't centre the card and leave it stranded at minZoom.
-      zoom: Math.max(camera.getViewport().zoom, 0.9),
+      zoom: Math.max(cam.getViewport().zoom, 0.9),
       duration: 400,
     });
   };

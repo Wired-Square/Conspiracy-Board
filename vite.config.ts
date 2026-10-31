@@ -3,7 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import solid from 'vite-plugin-solid';
 
-const solidSources = /\/src\/solid\//;
+// The canvas package's Solid binding ships as TSX.
+const solidSources = /\/src\/solid\/|\/@wired-square\/canvas\/src\//;
 
 // base: './' keeps the static build path-relative so a future Tauri wrapper can
 // load it from the filesystem without rework.

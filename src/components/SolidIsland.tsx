@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { useEffect, useRef } from 'react';
 import { createComponent, createSignal, mergeProps, type Component } from 'solid-js';
 import { render } from 'solid-js/web';

@@ -15,6 +15,7 @@ import { createDocHits } from '../createDocHits';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
+import { CanvasPanel } from '../board/BoardCanvas';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
 // what the boards reference, plus a way to re-run the processing that first read
@@ -150,9 +151,9 @@ export function ObjectView() {
 
   return (
     <div class="record maintenance">
-      <div class="app-canvas-panel nopan nowheel" data-position="top-right">
+      <CanvasPanel position="top-right">
         <Menu label="Maintenance" items={maintenanceItems()} />
-      </div>
+      </CanvasPanel>
 
       <Show when={error()}>
         <p class="modal__warn maintenance__error">{error()}</p>

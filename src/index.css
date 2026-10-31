@@ -559,7 +559,7 @@ button:hover {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Derived participant links (see hooks/useParticipantEdges). Thin, faint and
+/* Derived participant links (see solid/board/BoardCanvas). Thin, faint and
    unpinned — the eye should read it as a suggestion, and never mistake it for
    the red string, which is only ever there because someone tied it. The colour
    is the Inference grade's, handed down as --grade by the edge itself.
@@ -577,7 +577,7 @@ button:hover {
   opacity: 0.45;
 }
 
-/* Highlight / dim driven by useHighlightConnections. */
+/* Highlight / dim driven by lib/highlight. */
 .app-canvas__node.dim {
   opacity: 0.3;
 }

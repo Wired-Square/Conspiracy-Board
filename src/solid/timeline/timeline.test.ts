@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
-import type { Camera } from '../../components/canvas/Canvas';
+import { setCamera, type Camera } from '../board/camera';
 import type { Card } from '../../types/board';
 import { TimelineDrawer } from './TimelineDrawer';
 
@@ -51,10 +51,12 @@ beforeEach(() => {
     ],
   });
   host = document.body.appendChild(document.createElement('div'));
-  dispose = render(() => createComponent(TimelineDrawer, { camera: camera as unknown as Camera }), host);
+  setCamera(camera as unknown as Camera);
+  dispose = render(() => createComponent(TimelineDrawer, {}), host);
 });
 afterEach(() => {
   dispose();
+  setCamera(null);
   document.body.replaceChildren();
 });
 
