@@ -86,7 +86,7 @@ function mediaRowMatches(row: MediaRow, q: string): boolean {
 
 /**
  * `mediaRowMatches`, plus a hit when the query matched a file's indexed full text —
- * `docHits` is the set of media names the current query found (see useDocHits), keyed
+ * `docHits` is the set of media names the current query found (see createDocHits), keyed
  * the same as `row.file`, so a file surfaces on its contents even when it has no owning
  * card. Mirrors lib/search's `cardMatchesWithDocs`.
  */

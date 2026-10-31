@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { Index, Show, createEffect, createSignal } from 'solid-js';
 import { cx } from '@wired-square/kit/core';
+import { createDismissal } from './createDismissal';
 
 export type MenuItem = {
   label: string;
@@ -18,50 +19,28 @@ type Props = {
  * A small dropdown menu. Hand-rolled to match the rest of this codebase, which
  * has no UI dependencies.
  *
- * Items are data rather than children: both call sites are flat lists, and an
+ * Items are data rather than children: every call site is a flat list, and an
  * array makes the roving focus below trivial.
  */
-export function Menu({ label, items, selectedLabel }: Props) {
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+export function Menu(props: Props) {
+  const [open, setOpen] = createSignal(false);
+  const [activeIndex, setActiveIndex] = createSignal(0);
+  let wrapper!: HTMLDivElement;
+  let trigger!: HTMLButtonElement;
+  const itemEls: HTMLButtonElement[] = [];
 
-  useEffect(() => {
-    if (!open) return;
-
-    // pointerdown, not click: a click listener registered during the opening
-    // click would fire immediately and close the menu on open.
-    const onPointerDown = (e: PointerEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        triggerRef.current?.focus();
-      } else if (e.key === 'Tab') {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+  createDismissal(open, () => setOpen(false), () => wrapper, () => trigger);
 
   // Move real focus with the active index, so screen readers follow along.
-  useEffect(() => {
-    if (open) itemRefs.current[activeIndex]?.focus();
-  }, [open, activeIndex]);
+  createEffect(() => {
+    if (open()) itemEls[activeIndex()]?.focus();
+  });
 
   /** Next selectable item in `delta`'s direction, wrapping. */
   const step = (from: number, delta: number): number => {
     // Move one slot at a time so the wrap correction is a plain `+ length`, and
     // give up after a full lap so an all-disabled menu can't spin forever.
+    const items = props.items;
     let next = from;
     for (let i = 0; i < items.length; i++) {
       next = (next + delta + items.length) % items.length;
@@ -71,34 +50,30 @@ export function Menu({ label, items, selectedLabel }: Props) {
   };
 
   const openAt = (index: number) => {
-    setActiveIndex(items[index]?.disabled ? step(index, 1) : index);
+    setActiveIndex(props.items[index]?.disabled ? step(index, 1) : index);
     setOpen(true);
   };
 
-  const onTriggerKeyDown = (e: React.KeyboardEvent) => {
+  const onTriggerKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openAt(0);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      openAt(items.length - 1);
+      openAt(props.items.length - 1);
     }
   };
 
-  const onListKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveIndex((i) => step(i, 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIndex((i) => step(i, -1));
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      setActiveIndex(step(-1, 1));
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      setActiveIndex(step(items.length, -1));
-    }
+  const onListKeyDown = (e: KeyboardEvent) => {
+    const to = {
+      ArrowDown: () => step(activeIndex(), 1),
+      ArrowUp: () => step(activeIndex(), -1),
+      Home: () => step(-1, 1),
+      End: () => step(props.items.length, -1),
+    }[e.key];
+    if (!to) return;
+    e.preventDefault();
+    setActiveIndex(to());
   };
 
   const select = (item: MenuItem) => {
@@ -109,43 +84,44 @@ export function Menu({ label, items, selectedLabel }: Props) {
     item.onSelect();
   };
 
+  const chooser = () => props.selectedLabel !== undefined;
+
   return (
-    <div className="menu" ref={wrapperRef}>
+    <div class="menu" ref={wrapper}>
       <button
-        ref={triggerRef}
-        className="menu__trigger"
+        ref={trigger}
+        class="menu__trigger"
         aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? setOpen(false) : openAt(0))}
+        aria-expanded={open()}
+        onClick={() => (open() ? setOpen(false) : openAt(0))}
         onKeyDown={onTriggerKeyDown}
       >
-        {label}
-        <span className="menu__caret" aria-hidden>
+        {props.label}
+        <span class="menu__caret" aria-hidden="true">
           ▾
         </span>
       </button>
 
-      {open && (
-        <div className="menu__list" role="menu" aria-label={label} onKeyDown={onListKeyDown}>
-          {items.map((item, i) => (
-            <button
-              key={item.label}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              role={selectedLabel === undefined ? 'menuitem' : 'menuitemradio'}
-              aria-checked={selectedLabel === undefined ? undefined : selectedLabel === item.label}
-              tabIndex={-1}
-              className={cx('menu__item', selectedLabel === item.label && 'is-selected')}
-              disabled={item.disabled}
-              onClick={() => select(item)}
-              onMouseEnter={() => !item.disabled && setActiveIndex(i)}
-            >
-              {item.label}
-            </button>
-          ))}
+      <Show when={open()}>
+        <div class="menu__list" role="menu" aria-label={props.label} onKeyDown={onListKeyDown}>
+          <Index each={props.items}>
+            {(item, i) => (
+              <button
+                ref={(el) => (itemEls[i] = el)}
+                role={chooser() ? 'menuitemradio' : 'menuitem'}
+                aria-checked={chooser() ? props.selectedLabel === item().label : undefined}
+                tabIndex={-1}
+                class={cx('menu__item', props.selectedLabel === item().label && 'is-selected')}
+                disabled={item().disabled}
+                onClick={() => select(item())}
+                onMouseEnter={() => !item().disabled && setActiveIndex(i)}
+              >
+                {item().label}
+              </button>
+            )}
+          </Index>
         </div>
-      )}
+      </Show>
     </div>
   );
 }

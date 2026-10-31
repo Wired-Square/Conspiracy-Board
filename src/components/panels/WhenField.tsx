@@ -1,3 +1,4 @@
+import { Show } from 'solid-js';
 import type { Card, DatePrecision } from '../../types/board';
 import {
   changePrecision,
@@ -6,8 +7,8 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from '../../lib/dates';
-import { useBoardStore } from '../../hooks/useStores';
-import { useDraft } from '../../hooks/useDraft';
+import { boardStore } from '../../store/boardStore';
+import { createDraft } from '../createDraft';
 
 type WhenMode = 'none' | DatePrecision;
 
@@ -19,74 +20,80 @@ type WhenMode = 'none' | DatePrecision;
  * `locked` shows the date read-only: an email's `When` is its sent time from the
  * headers, fixed on import, and not the reader's to edit.
  */
-export function WhenField({ card, locked = false }: { card: Card; locked?: boolean }) {
-  const updateCard = useBoardStore((s) => s.updateCard);
+export function WhenField(props: { card: Card; locked?: boolean }) {
+  const { updateCard } = boardStore.getState();
 
-  if (locked) {
-    return (
-      <div className="field">
-        <span>When</span>
-        <span className="kind-locked">
-          {card.occurredAt
-            ? formatOccurredAt(card.occurredAt, card.occurredAtPrecision)
-            : '— undated —'}
-        </span>
-        <span className="field__hint">From the email; fixed on import.</span>
-      </div>
-    );
-  }
-
-  const mode: WhenMode = card.occurredAt ? card.occurredAtPrecision : 'none';
+  const mode = (): WhenMode => (props.card.occurredAt ? props.card.occurredAtPrecision : 'none');
 
   const onModeChange = (next: WhenMode) => {
     if (next === 'none') {
-      updateCard(card.id, { occurredAt: null });
+      updateCard(props.card.id, { occurredAt: null });
       return;
     }
-    updateCard(card.id, {
+    updateCard(props.card.id, {
       occurredAtPrecision: next,
-      occurredAt: card.occurredAt
-        ? changePrecision(card.occurredAt, next)
-        : defaultOccurredAt(next),
+      occurredAt: props.card.occurredAt ? changePrecision(props.card.occurredAt, next) : defaultOccurredAt(next),
     });
   };
 
   return (
-    <div className="field">
-      <span>When</span>
-      <div className="field__row">
-        <select value={mode} onChange={(e) => onModeChange(e.target.value as WhenMode)}>
-          <option value="none">— undated —</option>
-          <option value="day">Date only</option>
-          <option value="minute">Date &amp; time</option>
-        </select>
+    <Show
+      when={!props.locked}
+      fallback={
+        <div class="field">
+          <span>When</span>
+          <span class="kind-locked">
+            {props.card.occurredAt
+              ? formatOccurredAt(props.card.occurredAt, props.card.occurredAtPrecision)
+              : '— undated —'}
+          </span>
+          <span class="field__hint">From the email; fixed on import.</span>
+        </div>
+      }
+    >
+      <div class="field">
+        <span>When</span>
+        <div class="field__row">
+          <select value={mode()} onChange={(e) => onModeChange(e.currentTarget.value as WhenMode)}>
+            <option value="none">— undated —</option>
+            <option value="day">Date only</option>
+            <option value="minute">Date &amp; time</option>
+          </select>
 
-        {card.occurredAt && (
-          <WhenInput key={card.occurredAtPrecision} card={card} occurredAt={card.occurredAt} />
-        )}
+          {/* Remounted per precision: the input's type and its draft's format change together. */}
+          <Show when={props.card.occurredAt}>
+            {(occurredAt) => (
+              <Show when={props.card.occurredAtPrecision} keyed>
+                {(precision) => <WhenInput cardId={props.card.id} occurredAt={occurredAt()} precision={precision} />}
+              </Show>
+            )}
+          </Show>
+        </div>
+        <Show when={!props.card.occurredAt}>
+          <p class="hint">Undated cards stay off the timeline.</p>
+        </Show>
       </div>
-      {!card.occurredAt && (
-        <p className="hint">Undated cards stay off the timeline.</p>
-      )}
-    </div>
+    </Show>
   );
 }
 
-function WhenInput({ card, occurredAt }: { card: Card; occurredAt: string }) {
-  const updateCard = useBoardStore((s) => s.updateCard);
-  const precision = card.occurredAtPrecision;
-  const [text, setText, flush] = useDraft(toLocalInputValue(occurredAt, precision), (text) => {
-    // A cleared or half-typed input parses to null; keep the stored value until
-    // the user commits something valid.
-    const next = fromLocalInputValue(text, precision);
-    if (next) updateCard(card.id, { occurredAt: next });
-  });
+function WhenInput(props: { cardId: string; occurredAt: string; precision: DatePrecision }) {
+  const { updateCard } = boardStore.getState();
+  const [text, setText, flush] = createDraft(
+    () => toLocalInputValue(props.occurredAt, props.precision),
+    (text) => {
+      // A cleared or half-typed input parses to null; keep the stored value until
+      // the user commits something valid.
+      const next = fromLocalInputValue(text, props.precision);
+      if (next) updateCard(props.cardId, { occurredAt: next });
+    },
+  );
 
   return (
     <input
-      type={precision === 'day' ? 'date' : 'datetime-local'}
-      value={text}
-      onChange={(e) => setText(e.target.value)}
+      type={props.precision === 'day' ? 'date' : 'datetime-local'}
+      value={text()}
+      onInput={(e) => setText(e.currentTarget.value)}
       onBlur={flush}
     />
   );

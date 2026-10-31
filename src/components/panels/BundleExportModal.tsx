@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { For, Show, Switch, Match, createMemo, createSignal } from 'solid-js';
+import type { BoardSummary } from '../../storage/StorageAdapter';
+import { count } from '@wired-square/kit/core';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { closeDialog } from '../../store/dialogStore';
-import { count } from '@wired-square/kit/core';
-import type { BoardSummary } from '../../storage/StorageAdapter';
-import { useBoardStore } from '../../hooks/useStores';
+import { boardStore } from '../../store/boardStore';
+import { fromStore } from '../fromStore';
 
 /**
  * Choose what to bundle: this board, some boards, or the whole library. The chosen
@@ -14,27 +15,20 @@ import { useBoardStore } from '../../hooks/useStores';
  */
 export function BundleExportModal() {
   const close = () => closeDialog('bundleExport');
-  const currentBoardId = useBoardStore((s) => s.currentBoardId);
-  const currentTitle = useBoardStore((s) => s.meta.title);
-  const exportBundle = useBoardStore((s) => s.exportBundle);
+  const currentBoardId = fromStore(boardStore, (s) => s.currentBoardId);
+  const currentTitle = fromStore(boardStore, (s) => s.meta.title);
 
-  const [summaries, setSummaries] = useState<BoardSummary[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(currentBoardId ? [currentBoardId] : []),
-  );
-  const [busy, setBusy] = useState(false);
+  const [summaries, setSummaries] = createSignal<BoardSummary[] | null>(null);
+  void storage.listBoards().then(setSummaries);
+  const initialId = currentBoardId();
+  const [selected, setSelected] = createSignal<Set<string>>(new Set(initialId ? [initialId] : []));
+  const [busy, setBusy] = createSignal(false);
 
-  useEffect(() => {
-    void storage.listBoards().then(setSummaries);
-  }, []);
-
-  const rows = useMemo(
-    () =>
-      (summaries ?? []).map((b) => ({
-        id: b.id,
-        title: (b.id === currentBoardId ? currentTitle : b.title) || 'Untitled board',
-      })),
-    [summaries, currentBoardId, currentTitle],
+  const rows = createMemo(() =>
+    (summaries() ?? []).map((b) => ({
+      id: b.id,
+      title: (b.id === currentBoardId() ? currentTitle() : b.title) || 'Untitled board',
+    })),
   );
 
   const toggle = (id: string) =>
@@ -45,15 +39,16 @@ export function BundleExportModal() {
       return next;
     });
 
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+  const allSelected = () => rows().length > 0 && rows().every((r) => selected().has(r.id));
+  const toggleAll = () => setSelected(allSelected() ? new Set<string>() : new Set(rows().map((r) => r.id)));
 
   const onExport = async () => {
     setBusy(true);
     try {
       // Close only once a file is actually written — a cancelled save panel leaves
       // the dialog up so the selection isn't lost.
-      if (await exportBundle(rows.filter((r) => selected.has(r.id)).map((r) => r.id))) close();
+      const ids = rows().filter((r) => selected().has(r.id)).map((r) => r.id);
+      if (await boardStore.getState().exportBundle(ids)) close();
     } finally {
       setBusy(false);
     }
@@ -65,58 +60,60 @@ export function BundleExportModal() {
       onClose={close}
       footer={
         <>
-          <span className="modal__status">
-            {selected.size} of {count(rows.length, 'board')} selected
+          <span class="modal__status">
+            {selected().size} of {count(rows().length, 'board')} selected
           </span>
-          <button className="link-button" onClick={close}>
+          <button class="link-button" onClick={close}>
             Cancel
           </button>
-          <button disabled={busy || selected.size === 0} onClick={() => void onExport()}>
-            {busy ? 'Exporting…' : 'Export'}
+          <button disabled={busy() || selected().size === 0} onClick={() => void onExport()}>
+            {busy() ? 'Exporting…' : 'Export'}
           </button>
         </>
       }
     >
-      <p className="hint">
+      <p class="hint">
         A <code>.zip</code> carrying each board and every file it references — pictures, the
         original messages, attachments and documents — so it can be imported on another Mac
         with everything intact.
       </p>
 
-      {summaries === null ? (
-        <p className="hint">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="hint">No boards to export yet.</p>
-      ) : (
-        <div className="field">
-          <label className="import-offer__main">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-            <span className="import-offer__text">
-              <span className="import-offer__label">Entire library</span>
-              <span className="import-offer__meta">All {count(rows.length, 'board')}</span>
-            </span>
-          </label>
-          <ul className="import-offer">
-            {rows.map((r) => (
-              <li key={r.id}>
-                <label className="import-offer__main">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.id)}
-                    onChange={() => toggle(r.id)}
-                  />
-                  <span className="import-offer__text">
-                    <span className="import-offer__label">{r.title}</span>
-                    {r.id === currentBoardId && (
-                      <span className="import-offer__meta">Current board</span>
-                    )}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <Switch>
+        <Match when={summaries() === null}>
+          <p class="hint">Loading…</p>
+        </Match>
+        <Match when={rows().length === 0}>
+          <p class="hint">No boards to export yet.</p>
+        </Match>
+        <Match when={true}>
+          <div class="field">
+            <label class="import-offer__main">
+              <input type="checkbox" checked={allSelected()} onChange={toggleAll} />
+              <span class="import-offer__text">
+                <span class="import-offer__label">Entire library</span>
+                <span class="import-offer__meta">All {count(rows().length, 'board')}</span>
+              </span>
+            </label>
+            <ul class="import-offer">
+              <For each={rows()}>
+                {(r) => (
+                  <li>
+                    <label class="import-offer__main">
+                      <input type="checkbox" checked={selected().has(r.id)} onChange={() => toggle(r.id)} />
+                      <span class="import-offer__text">
+                        <span class="import-offer__label">{r.title}</span>
+                        <Show when={r.id === currentBoardId()}>
+                          <span class="import-offer__meta">Current board</span>
+                        </Show>
+                      </span>
+                    </label>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </div>
+        </Match>
+      </Switch>
     </Modal>
   );
 }

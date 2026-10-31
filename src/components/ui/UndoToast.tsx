@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { type Deleted } from '../../store/boardStore';
-import { useBoardStore } from '../../hooks/useStores';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { boardStore, type Deleted } from '../../store/boardStore';
+import { fromStore } from '../fromStore';
 
 const SHOW_MS = 10_000;
 
@@ -15,26 +15,28 @@ function label(deleted: Deleted): string {
  * still the last edit. Cmd+Z (see startUndoShortcut) undoes it either way.
  */
 export function UndoToast() {
-  const deleted = useBoardStore((s) => s.lastDeleted);
-  const undo = useBoardStore((s) => s.undo);
-  const [hidden, setHidden] = useState(false);
+  const deleted = fromStore(boardStore, (s) => s.lastDeleted);
+  const [hidden, setHidden] = createSignal(false);
 
   // Re-show and re-arm the timer for each delete; object identity is the key, so
   // deleting twice in a row keeps the toast up.
-  useEffect(() => {
-    if (!deleted) return;
+  createEffect(() => {
+    if (!deleted()) return;
     setHidden(false);
     const t = setTimeout(() => setHidden(true), SHOW_MS);
-    return () => clearTimeout(t);
-  }, [deleted]);
+    onCleanup(() => clearTimeout(t));
+  });
 
-  if (!deleted || hidden) return null;
   return (
-    <div className="undo-toast" role="status" aria-live="polite">
-      <span>{label(deleted)}</span>
-      <button className="link-button" onClick={undo}>
-        Undo
-      </button>
-    </div>
+    <Show when={!hidden() && deleted()}>
+      {(shown) => (
+        <div class="undo-toast" role="status" aria-live="polite">
+          <span>{label(shown())}</span>
+          <button class="link-button" onClick={() => boardStore.getState().undo()}>
+            Undo
+          </button>
+        </div>
+      )}
+    </Show>
   );
 }

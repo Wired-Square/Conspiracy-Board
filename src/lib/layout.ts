@@ -19,7 +19,7 @@ const MAX_COLS = 6;
  * the first), capped so the most-connected person on an mbox board stays a
  * card rather than a poster. Degree is a count of what the board draws —
  * hand-strung connections and derived participant links alike (see
- * useHighlightConnections). Rounded only to keep the inline style value tidy.
+ * lib/highlight). Rounded only to keep the inline style value tidy.
  */
 export function actorScale(degree: number): number {
   return Math.round(Math.min(1.5, 1 + 0.08 * Math.sqrt(degree)) * 100) / 100;

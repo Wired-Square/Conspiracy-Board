@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { Modal } from '../ui/Modal';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { closeDialog } from '../../store/dialogStore';
+import { boardStore } from '../../store/boardStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import {
@@ -14,7 +15,7 @@ import {
   type Geom,
 } from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
-import { useBoardStore } from '../../hooks/useStores';
+import { fromStore } from '../fromStore';
 
 // What Save will store as the media file. An existing library file is kept and
 // only re-cropped; a picked file or a fetched URL is written from the held Blob on
@@ -34,10 +35,11 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export function ImageEditorModal({ cardId }: { cardId: string }) {
-  const card = useBoardStore((s) => s.cards.find((c) => c.id === cardId));
-  const cards = useBoardStore((s) => s.cards);
-  const updateCard = useBoardStore((s) => s.updateCard);
+const messageOf = (e: unknown) => String((e as Error).message ?? e);
+
+export function ImageEditorModal(props: { cardId: string }) {
+  const cards = fromStore(boardStore, (s) => s.cards);
+  const card = createMemo(() => cards().find((c) => c.id === props.cardId));
   const close = () => closeDialog('imageEditorCardId');
 
   // Pictures already on the board, one tile per file — the name is content-addressed,
@@ -45,44 +47,43 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
   // it). Each tile keeps all the cards that use it, first seen first, so the picker
   // can find it by any of them and show how many it is linked to. Picking one reuses
   // its stored file verbatim (see onSave's existingFile branch); nothing re-imports.
-  const existing = useMemo(() => {
+  const existing = createMemo(() => {
     const byFile = new Map<string, PickableObject>();
-    for (const c of cards) {
+    for (const c of cards()) {
       if (!c.imageFile) continue;
       const tile = byFile.get(c.imageFile);
       if (tile) tile.cards.push(c);
       else byFile.set(c.imageFile, { cards: [c], file: c.imageFile, src: mediaSrc(c.imageFile) });
     }
     return [...byFile.values()];
-  }, [cards]);
+  });
 
-  const frameRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  let frame!: HTMLDivElement;
+  let fileInput!: HTMLInputElement;
+  let objectUrl: string | null = null;
 
-  const [source, setSource] = useState<Source | null>(null);
-  const [view, setView] = useState<CropView | null>(null);
-  const [urlInput, setUrlInput] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = createSignal<Source | null>(null);
+  const [view, setView] = createSignal<CropView | null>(null);
+  const [urlInput, setUrlInput] = createSignal('');
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [busy, setBusy] = createSignal<string | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
 
   // A blob URL for a picked file or a fetched image, replaced as the source
-  // changes and revoked on unmount so a dialog opened many times leaks none.
+  // changes and revoked on close so a dialog opened many times leaks none.
   function swapObjectUrl(blob: Blob): string {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    const url = URL.createObjectURL(blob);
-    objectUrlRef.current = url;
-    return url;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+    return objectUrl;
   }
-  useEffect(() => () => {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-  }, []);
+  onCleanup(() => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  });
 
   /** The frame's on-screen box plus the image's natural pixels — measured now, as
    *  the frame is always mounted (it shows the empty-state span when there's none). */
   function frameGeom(natW: number, natH: number): Geom {
-    const { width, height } = frameRef.current!.getBoundingClientRect();
+    const { width, height } = frame.getBoundingClientRect();
     return { fw: width, fh: height, natW, natH };
   }
 
@@ -95,23 +96,18 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
 
   // Open onto the card's current picture, if it has one. A remote URL the migration
   // hasn't localised (offline, say) still displays and is downloaded on Save.
-  useEffect(() => {
-    if (!card) return;
+  onMount(() => {
+    const c = card();
+    const src = c && (c.imageFile ? mediaSrc(c.imageFile) : c.imageUrl);
+    if (!c || !src) return;
     let cancelled = false;
-    const src = card.imageFile ? mediaSrc(card.imageFile) : card.imageUrl;
-    if (!src) return;
+    onCleanup(() => (cancelled = true));
     void loadImage(src)
       .then((img) => {
-        if (cancelled) return;
-        show(img, card.imageFile ? { existingFile: card.imageFile } : { remoteUrl: card.imageUrl! }, card.imageCrop);
+        if (!cancelled) show(img, c.imageFile ? { existingFile: c.imageFile } : { remoteUrl: c.imageUrl! }, c.imageCrop);
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // Only on open: later source changes go through the file / URL handlers.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId]);
+  });
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -121,12 +117,12 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
       const img = await loadImage(swapObjectUrl(file));
       show(img, { blob: file, name: file.name }, null);
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(messageOf(e));
     }
   }
 
   async function onLoadUrl() {
-    const url = urlInput.trim();
+    const url = urlInput().trim();
     if (!url) return;
     setError(null);
     setBusy('Fetching…');
@@ -152,22 +148,28 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
       const img = await loadImage(mediaSrc(file));
       show(img, { existingFile: file }, null);
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(messageOf(e));
     }
   }
 
   function zoomTo(scale: number) {
-    if (!source || !view) return;
-    setView(zoomAbout(view, scale, frameGeom(source.natW, source.natH)));
+    const s = source();
+    const v = view();
+    if (!s || !v) return;
+    setView(zoomAbout(v, scale, frameGeom(s.natW, s.natH)));
   }
 
-  function onPointerDown(e: React.PointerEvent) {
-    if (!source || !view) return;
+  function onPointerDown(e: PointerEvent) {
+    const s = source();
+    const v = view();
+    if (!s || !v) return;
     // The frame is fixed for the whole drag, so measure it once here, not per move.
-    const geom = frameGeom(source.natW, source.natH);
-    const start = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    const geom = frameGeom(s.natW, s.natH);
+    const start = { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty };
     const move = (ev: PointerEvent) => {
-      setView((v) => (v ? clampView(v.scale, start.tx + (ev.clientX - start.x), start.ty + (ev.clientY - start.y), v.min, geom) : v));
+      setView((cur) =>
+        cur ? clampView(cur.scale, start.tx + (ev.clientX - start.x), start.ty + (ev.clientY - start.y), cur.min, geom) : cur,
+      );
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -177,18 +179,22 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     window.addEventListener('pointerup', up);
   }
 
-  function onWheel(e: React.WheelEvent) {
-    if (!view) return;
+  function onWheel(e: WheelEvent) {
+    const v = view();
+    if (!v) return;
     // Away from the user zooms out, toward zooms in; the exponential keeps the step
     // proportional so a trackpad glides rather than leaps. The slider is the
     // deterministic control — this is just the convenience of it under the pointer.
-    zoomTo(view.scale * Math.exp(-e.deltaY / 400));
+    zoomTo(v.scale * Math.exp(-e.deltaY / 400));
   }
 
   async function onSave() {
-    if (!card || !source || !view) return;
-    const crop = viewToCrop(view.scale, view.tx, view.ty, frameGeom(source.natW, source.natH));
-    const { persist } = source;
+    const c = card();
+    const s = source();
+    const v = view();
+    if (!c || !s || !v) return;
+    const crop = viewToCrop(v.scale, v.tx, v.ty, frameGeom(s.natW, s.natH));
+    const { persist } = s;
     setBusy('Saving…');
     setError(null);
     try {
@@ -200,21 +206,23 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
         imageFile = await storage.downloadImage(persist.remoteUrl);
       }
       if (!imageFile) throw new Error('There is no image to save.');
-      updateCard(card.id, { imageFile, imageUrl: null, imageCrop: crop });
+      boardStore.getState().updateCard(c.id, { imageFile, imageUrl: null, imageCrop: crop });
       close();
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(messageOf(e));
       setBusy(null);
     }
   }
 
   const footer = (
     <>
-      {busy && <span className="modal__status">{busy}</span>}
-      <button className="link-button" onClick={close}>
+      <Show when={busy()}>
+        <span class="modal__status">{busy()}</span>
+      </Show>
+      <button class="link-button" onClick={close}>
         Cancel
       </button>
-      <button onClick={() => void onSave()} disabled={!source || !view || busy != null}>
+      <button onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
         Save
       </button>
     </>
@@ -222,76 +230,76 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
 
   return (
     <Modal title="Card image" onClose={close} footer={footer}>
-      <div className="field__row">
+      <div class="field__row">
         <input
-          ref={fileRef}
+          ref={fileInput}
           type="file"
           accept="image/*"
           hidden
-          onChange={(e) => void onFile(e.target.files?.[0])}
+          onChange={(e) => void onFile(e.currentTarget.files?.[0])}
         />
-        <button onClick={() => fileRef.current?.click()}>File</button>
-        {existing.length > 0 && <button onClick={() => setPickerOpen(true)}>Object</button>}
+        <button onClick={() => fileInput.click()}>File</button>
+        <Show when={existing().length > 0}>
+          <button onClick={() => setPickerOpen(true)}>Object</button>
+        </Show>
         <input
-          className="field--grow"
+          class="field--grow"
           placeholder="…or paste an image URL"
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
+          value={urlInput()}
+          onInput={(e) => setUrlInput(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') void onLoadUrl();
           }}
         />
-        <button onClick={() => void onLoadUrl()} disabled={!urlInput.trim() || busy != null}>
+        <button onClick={() => void onLoadUrl()} disabled={!urlInput().trim() || busy() != null}>
           Load
         </button>
       </div>
-      {pickerOpen && (
+      <Show when={pickerOpen()}>
         <ObjectPickerDialog
-          objects={existing}
+          objects={existing()}
           onPick={(file) => void onPickExisting(file)}
           onClose={() => setPickerOpen(false)}
         />
-      )}
-      {error && <p className="modal__warn">{error}</p>}
-      <p className="field__hint">Drag to reposition, scroll or use the slider to zoom. The frame is how the card shows it.</p>
+      </Show>
+      <Show when={error()}>
+        <p class="modal__warn">{error()}</p>
+      </Show>
+      <p class="field__hint">Drag to reposition, scroll or use the slider to zoom. The frame is how the card shows it.</p>
 
-      <div className="image-cropper">
-        <div
-          className="image-cropper__frame"
-          ref={frameRef}
-          onPointerDown={onPointerDown}
-          onWheel={onWheel}
-        >
-          {source && view ? (
+      <div class="image-cropper">
+        <div class="image-cropper__frame" ref={frame} onPointerDown={onPointerDown} onWheel={onWheel}>
+          <Show
+            when={source() && view()}
+            fallback={<span class="image-cropper__empty">Choose a file or load a URL to frame it here.</span>}
+          >
             <img
-              src={source.url}
+              src={source()!.url}
               alt=""
               draggable={false}
               style={{
                 position: 'absolute',
-                left: 0,
-                top: 0,
-                width: source.natW * view.scale,
-                height: source.natH * view.scale,
-                maxWidth: 'none',
-                transform: `translate(${view.tx}px, ${view.ty}px)`,
+                left: '0',
+                top: '0',
+                width: `${source()!.natW * view()!.scale}px`,
+                height: `${source()!.natH * view()!.scale}px`,
+                'max-width': 'none',
+                transform: `translate(${view()!.tx}px, ${view()!.ty}px)`,
               }}
             />
-          ) : (
-            <span className="image-cropper__empty">Choose a file or load a URL to frame it here.</span>
-          )}
+          </Show>
         </div>
-        {source && view && (
+        <Show when={source() && view()}>
           <input
             type="range"
-            min={view.min}
-            max={zoomCeiling(view.min)}
+            min={view()!.min}
+            max={zoomCeiling(view()!.min)}
             step="any"
-            value={view.scale}
-            onChange={(e) => zoomTo(Number(e.target.value))}
+            value={view()!.scale}
+            onInput={(e) => zoomTo(Number(e.currentTarget.value))}
             aria-label="Zoom"
           />
-        )}
+        </Show>
       </div>
     </Modal>
   );

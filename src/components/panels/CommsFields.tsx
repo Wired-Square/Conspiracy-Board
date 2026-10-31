@@ -1,22 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Show } from 'solid-js';
 import type { Card, CallMeta, EmailAddress, MessageMeta } from '../../types/board';
-import {
-  formatAddress,
-  formatAddressList,
-  parseAddress,
-  parseAddressList,
-} from '../../lib/email/addresses';
+import { formatAddress, formatAddressList, parseAddress, parseAddressList } from '../../lib/email/addresses';
 import { emptyCallMeta, emptyMessageMeta } from '../../lib/comms';
 import { entitiesForNumber } from '../../lib/roster';
 import { personDraftForNumber, patchFor } from '../../lib/importOffer';
 import { withoutNumber } from '../../lib/entities';
 import { formatNumber } from '../../lib/phone';
-import {
-  NEW_PERSON,
-  ParticipantLine,
-  useEntityLinkCommon,
-  type LinkRowContext,
-} from './EntityLink';
+import { createSeeded } from '../createSeeded';
+import { NEW_PERSON, ParticipantLines, entityLinkCommon, type LinkRowContext } from './EntityLink';
 
 /**
  * The from/to for a Message or Call card, plus a message's body or a call's duration.
@@ -28,40 +19,27 @@ import {
  * and each committed party is resolved to the person/organisation it belongs to —
  * linked, and unlinked, exactly like an email's addresses, only by number.
  */
-export function CommsFields({ card }: { card: Card }) {
-  const { addCard, updateCard, roster, cardsById, hasOrgs, selectCard } = useEntityLinkCommon();
-  const isCall = card.kind === 'call';
-  const meta: MessageMeta | CallMeta = isCall
-    ? (card.call ?? emptyCallMeta())
-    : (card.message ?? emptyMessageMeta());
+export function CommsFields(props: { card: Card }) {
+  const { addCard, updateCard, roster, cardsById, hasOrgs, selectCard } = entityLinkCommon();
+  const isCall = () => props.card.kind === 'call';
+  const meta = (): MessageMeta | CallMeta =>
+    isCall() ? (props.card.call ?? emptyCallMeta()) : (props.card.message ?? emptyMessageMeta());
 
-  const [from, setFrom] = useState(() => formatAddress(meta.from));
-  const [to, setTo] = useState(() => formatAddressList(meta.to));
-  const [body, setBody] = useState(() => (isCall ? '' : (card.message?.body ?? '')));
-  const [durationMin, setDurationMin] = useState(() =>
-    card.call?.durationSecs ? String(Math.round(card.call.durationSecs / 60)) : '',
+  const [from, setFrom] = createSeeded(() => formatAddress(meta().from));
+  const [to, setTo] = createSeeded(() => formatAddressList(meta().to));
+  const [body, setBody] = createSeeded(() => (isCall() ? '' : (props.card.message?.body ?? '')));
+  const [durationMin, setDurationMin] = createSeeded(() =>
+    props.card.call?.durationSecs ? String(Math.round(props.card.call.durationSecs / 60)) : '',
   );
-
-  // Re-seed on card switch; the payload only gets a new identity when written, so
-  // this can't fire mid-typing.
-  const message = card.message;
-  const call = card.call;
-  useEffect(() => {
-    const m = isCall ? (call ?? emptyCallMeta()) : (message ?? emptyMessageMeta());
-    setFrom(formatAddress(m.from));
-    setTo(formatAddressList(m.to));
-    setBody(isCall ? '' : (message?.body ?? ''));
-    setDurationMin(call?.durationSecs ? String(Math.round(call.durationSecs / 60)) : '');
-  }, [card.id, isCall, message, call]);
 
   // One writer per payload, so the `{ ...(card.X ?? emptyXMeta()), ...patch }` merge
   // isn't re-inlined at every field; participants route to whichever this kind is.
   const patchMessage = (p: Partial<MessageMeta>) =>
-    updateCard(card.id, { message: { ...(card.message ?? emptyMessageMeta()), ...p } });
+    updateCard(props.card.id, { message: { ...(props.card.message ?? emptyMessageMeta()), ...p } });
   const patchCall = (p: Partial<CallMeta>) =>
-    updateCard(card.id, { call: { ...(card.call ?? emptyCallMeta()), ...p } });
+    updateCard(props.card.id, { call: { ...(props.card.call ?? emptyCallMeta()), ...p } });
   const commitParticipants = (p: { from?: EmailAddress | null; to?: EmailAddress[] }) =>
-    isCall ? patchCall(p) : patchMessage(p);
+    isCall() ? patchCall(p) : patchMessage(p);
 
   // Each committed party resolves to a person/organisation by number — linking and
   // unlinking write to the entity (its `numbers`), never to the message.
@@ -69,13 +47,13 @@ export function CommsFields({ card }: { card: Card }) {
     if (target === NEW_PERSON) {
       addCard(personDraftForNumber(party.address, party.name));
     } else {
-      const c = cardsById.get(target);
+      const c = cardsById().get(target);
       if (c) updateCard(c.id, patchFor(c, { addresses: [], domains: [], numbers: [party.address] }));
     }
   };
 
   const unlink = (party: EmailAddress, entityId: string) => {
-    const c = cardsById.get(entityId);
+    const c = cardsById().get(entityId);
     if (c?.kind === 'person' && c.person) {
       updateCard(c.id, { person: withoutNumber(c.person, party.address) });
     } else if (c?.kind === 'organisation' && c.organisation) {
@@ -100,69 +78,66 @@ export function CommsFields({ card }: { card: Card }) {
 
   // The resolved parties sit right under their field — chips and Link… belong to this
   // From or To, not a lumped list below.
-  const linked = (parties: EmailAddress[]) =>
-    parties.length > 0 && (
-      <ul className="email-addr__list email-fields__linked">
-        {parties.map((p, i) => (
-          <ParticipantLine key={i} party={p} ctx={ctx} />
-        ))}
-      </ul>
-    );
+  const Linked = (p: { parties: EmailAddress[] }) => (
+    <Show when={p.parties.length > 0}>
+      <ParticipantLines class="email-addr__list email-fields__linked" parties={p.parties} ctx={ctx} />
+    </Show>
+  );
 
   return (
-    <div className="field email-fields">
-      <span>{isCall ? 'Call details' : 'Message details'}</span>
+    <div class="field email-fields">
+      <span>{isCall() ? 'Call details' : 'Message details'}</span>
 
-      <label className="field email-fields__row">
+      <label class="field email-fields__row">
         <span>From</span>
         <input
-          value={from}
+          value={from()}
           placeholder="Jane Doe <0400 123 456>"
-          onChange={(e) => setFrom(e.target.value)}
-          onBlur={() => commitParticipants({ from: parseAddress(from) })}
+          onInput={(e) => setFrom(e.currentTarget.value)}
+          onBlur={() => commitParticipants({ from: parseAddress(from()) })}
         />
       </label>
-      {linked(meta.from?.address ? [meta.from] : [])}
+      <Linked parties={meta().from?.address ? [meta().from!] : []} />
 
-      <label className="field email-fields__row">
+      <label class="field email-fields__row">
         <span>To</span>
         <input
-          value={to}
+          value={to()}
           placeholder="comma separated"
-          onChange={(e) => setTo(e.target.value)}
-          onBlur={() => commitParticipants({ to: parseAddressList(to) })}
+          onInput={(e) => setTo(e.currentTarget.value)}
+          onBlur={() => commitParticipants({ to: parseAddressList(to()) })}
         />
       </label>
-      {linked(meta.to)}
+      <Linked parties={meta().to} />
 
-      {!isCall && (
-        <label className="field email-fields__row">
+      <Show when={!isCall()}>
+        <label class="field email-fields__row">
           <span>Message</span>
           <textarea
-            value={body}
+            value={body()}
             rows={3}
             placeholder="What was said (or leave it to the screenshot)"
-            onChange={(e) => setBody(e.target.value)}
-            onBlur={() => patchMessage({ body })}
+            onInput={(e) => setBody(e.currentTarget.value)}
+            onBlur={() => patchMessage({ body: body() })}
           />
         </label>
-      )}
+      </Show>
 
-      {isCall && (
-        <label className="field email-fields__row">
+      <Show when={isCall()}>
+        <label class="field email-fields__row">
           <span>Duration</span>
           <input
-            value={durationMin}
-            inputMode="numeric"
+            value={durationMin()}
+            inputmode="numeric"
             placeholder="minutes"
-            onChange={(e) => setDurationMin(e.target.value)}
+            onInput={(e) => setDurationMin(e.currentTarget.value)}
             onBlur={() => {
-              const mins = Number(durationMin.trim());
+              const mins = Number(durationMin().trim());
               patchCall({ durationSecs: Number.isFinite(mins) && mins > 0 ? Math.round(mins * 60) : undefined });
             }}
           />
         </label>
-      )}
+      </Show>
     </div>
   );
 }

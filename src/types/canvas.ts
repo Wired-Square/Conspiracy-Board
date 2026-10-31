@@ -16,7 +16,7 @@ export type CardNodeData = {
   extraClusterColors: string[];
   /**
    * How much an actor's face grows with its connections (see actorScale).
-   * Written by useHighlightConnections — it is a function of the edges drawn,
+   * Written by the board's highlight pass — it is a function of the edges drawn,
    * which only the canvas knows — not by cardToNode. Absent means 1.
    */
   tieScale?: number;

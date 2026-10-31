@@ -1,6 +1,6 @@
+import { For } from 'solid-js';
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import type { Grade } from '../../types/board';
-import { reactStyle } from '../ui/reactStyle';
 
 /**
  * Pick a grade, with the help to pick one.
@@ -13,38 +13,26 @@ import { reactStyle } from '../ui/reactStyle';
  * Shared by the card and its connections — a claim and a link are graded on the
  * same ladder, and reading GRADE_META once is what stops the two drifting apart.
  */
-export function GradeField({
-  grade,
-  onChange,
-}: {
-  grade?: Grade;
-  onChange: (grade: Grade | undefined) => void;
-}) {
+export function GradeField(props: { grade?: Grade; onChange: (grade: Grade | undefined) => void }) {
   return (
-    <label className="field">
+    <label class="field">
       <span>Grade</span>
       <select
-        className="grade-select"
-        value={grade ?? ''}
-        style={grade ? reactStyle(gradeTint(grade)) : undefined}
-        onChange={(e) => onChange((e.target.value || undefined) as Grade | undefined)}
+        class="grade-select"
+        value={props.grade ?? ''}
+        style={props.grade ? gradeTint(props.grade) : undefined}
+        onChange={(e) => props.onChange((e.currentTarget.value || undefined) as Grade | undefined)}
       >
         <option value="">— ungraded —</option>
-        {GRADES.map((g) => (
-          <option key={g} value={g}>
-            {GRADE_META[g].label}
-          </option>
-        ))}
+        <For each={GRADES}>{(g) => <option value={g}>{GRADE_META[g].label}</option>}</For>
       </select>
-      <span className="field__hint">
-        {grade ? (
-          GRADE_META[grade].definition
-        ) : (
-          // Absence is not a finding. "Unresolved" says the record was read and
-          // does not settle it; ungraded says nobody has looked yet, and the
-          // board must not quietly upgrade the second into the first.
-          <>Nobody has graded this yet — which is not the same as Unresolved.</>
-        )}
+      <span class="field__hint">
+        {props.grade
+          ? GRADE_META[props.grade].definition
+          : // Absence is not a finding. "Unresolved" says the record was read and
+            // does not settle it; ungraded says nobody has looked yet, and the
+            // board must not quietly upgrade the second into the first.
+            'Nobody has graded this yet — which is not the same as Unresolved.'}
       </span>
     </label>
   );
@@ -57,17 +45,19 @@ export function GradeField({
  */
 export function GradeLegend() {
   return (
-    <details className="grade-legend">
+    <details class="grade-legend">
       <summary>What the grades mean</summary>
       <ul>
-        {GRADES.map((g) => (
-          <li key={g}>
-            <span className="grade-chip" style={reactStyle(gradeTint(g))}>
-              {GRADE_META[g].label}
-            </span>
-            <span>{GRADE_META[g].definition}</span>
-          </li>
-        ))}
+        <For each={GRADES}>
+          {(g) => (
+            <li>
+              <span class="grade-chip" style={gradeTint(g)}>
+                {GRADE_META[g].label}
+              </span>
+              <span>{GRADE_META[g].definition}</span>
+            </li>
+          )}
+        </For>
       </ul>
     </details>
   );

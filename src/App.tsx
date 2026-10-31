@@ -1,139 +1,129 @@
-import { useEffect, useState } from 'react';
-import { BoardCanvas } from './components/BoardCanvas';
-import { CameraProvider, CanvasPanel } from './components/canvas/Canvas';
+import { Match, Show, Switch, createSignal, onCleanup, onMount } from 'solid-js';
+import { BoardCanvas, CanvasPanel } from './components/board/BoardCanvas';
+import { BusyOverlay } from './components/ui/BusyOverlay';
+import { BackgroundTaskIndicator } from './components/BackgroundTaskIndicator';
+import { FirstRunModal } from './components/panels/FirstRunModal';
+import { BoardPropertiesModal } from './components/panels/BoardPropertiesModal';
+import { ManageModal } from './components/panels/ManageModal';
+import { BundleExportModal } from './components/panels/BundleExportModal';
+import { BundleImportModal } from './components/panels/BundleImportModal';
+import { EmailImportModal } from './components/panels/EmailImportModal';
+import { ImageEditorModal } from './components/panels/ImageEditorModal';
+import { CardEditor } from './components/panels/CardEditor';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
-import { CardEditor } from './components/panels/CardEditor';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
-import { EmailImportModal } from './components/panels/EmailImportModal';
-import { BoardPropertiesModal } from './components/panels/BoardPropertiesModal';
-import { ImageEditorModal } from './components/panels/ImageEditorModal';
-import { BundleExportModal } from './components/panels/BundleExportModal';
-import { BundleImportModal } from './components/panels/BundleImportModal';
-import { FirstRunModal } from './components/panels/FirstRunModal';
-import { ManageModal } from './components/panels/ManageModal';
-import { BusyOverlay } from './components/ui/BusyOverlay';
-import { BackgroundTaskIndicator } from './components/ui/BackgroundTaskIndicator';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
-import { useStart } from './hooks/useStart';
+import { fromStore } from './components/fromStore';
 import { startInbox } from './platform/inbox';
 import { startUndoShortcut } from './platform/undoShortcut';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
-import { closeDialog } from './store/dialogStore';
-import { useBoardStore, useDialogStore, useEmailImportStore } from './hooks/useStores';
-
-// Subscribes to importStatus on its own, so a per-media progress event re-renders
-// this leaf rather than App and the whole canvas beneath it.
-function ImportOverlay() {
-  const status = useBoardStore((s) => s.importStatus);
-  return status ? <BusyOverlay status={status} /> : null;
-}
+import { boardStore } from './store/boardStore';
+import { closeDialog, dialogStore } from './store/dialogStore';
+import { emailImportStore } from './store/emailImportStore';
 
 export default function App() {
-  const init = useBoardStore((s) => s.init);
-  const currentBoardId = useBoardStore((s) => s.currentBoardId);
-  const emailImportOpen = useEmailImportStore((s) => s.open);
-  const propertiesOpen = useDialogStore((s) => s.properties);
-  const imageEditorCardId = useDialogStore((s) => s.imageEditorCardId);
-  const bundleExportOpen = useDialogStore((s) => s.bundleExport);
-  const bundleImportBoards = useDialogStore((s) => s.bundleImportBoards);
-  const manageOpen = useDialogStore((s) => s.manage);
-  const view = useBoardStore((s) => s.view);
-  const firstRun = useBoardStore((s) => s.firstRun);
-  const [ready, setReady] = useState(false);
+  const boardId = fromStore(boardStore, (s) => s.currentBoardId);
+  const view = fromStore(boardStore, (s) => s.view);
+  const firstRun = fromStore(boardStore, (s) => s.firstRun);
+  const dialogs = fromStore(dialogStore, (s) => s);
+  const emailImportOpen = fromStore(emailImportStore, (s) => s.open);
+  const [ready, setReady] = createSignal(false);
 
-  useEffect(() => {
-    void init().then(() => setReady(true));
-  }, [init]);
+  onMount(() => {
+    void boardStore.getState().init().then(() => setReady(true));
+    for (const start of [startInbox, startUndoShortcut, startBoardMenu, startImportProgress, startJobProgress]) {
+      onCleanup(start());
+    }
+  });
 
-  // Files the shell sweeps out of the Inbox drop-folder — the one automatic way
-  // in for email, images and documents (see src/platform/inbox.ts).
-  useStart(startInbox);
-  // Cmd+Z restores the last delete, board-wide.
-  useStart(startUndoShortcut);
-  // The native File menu (src-tauri/src/menu.rs) drives board management.
-  useStart(startBoardMenu);
-  // Refines the import busy-overlay text as the shell stores a bundle's media.
-  useStart(startImportProgress);
-  // Keeps the indexing badge on the shell's extraction queue.
-  useStart(startJobProgress);
-
-  if (!ready) {
-    return <div className="loading">Pinning the board…</div>;
-  }
-
-  // An empty library: choose a first board before anything else mounts (there is
-  // no board to draw yet). Adopting one clears firstRun and the app proceeds. The
-  // bundle-import dialog rides alongside so "Import a board" can open its picker
-  // here, before the main tree (which normally hosts it) exists.
-  if (firstRun) {
-    return (
-      <>
-        <FirstRunModal />
-        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
-        <ImportOverlay />
-      </>
-    );
-  }
+  const bundleImport = () => (
+    <Show when={dialogs().bundleImportBoards}>{(boards) => <BundleImportModal boards={boards()} />}</Show>
+  );
 
   return (
-    <div className="app">
-      <CameraProvider>
-        {/* The drawer spans the full width now that the editor is a dialog rather
-            than a column, and must sit inside the provider (it calls useCamera)
-            yet outside the canvas. */}
-        <div className="app__main">
-          <div className="app__canvas">
-            {/* Keyed on the board: the canvas's viewport and fit are
-                initialisation-only, so switching boards without a remount would
-                show the new cards under the old camera. The drawer's open state
-                is lazily initialised from the board's dates for the same reason. */}
-            <BoardCanvas key={currentBoardId} />
-            {/* The record covers the canvas rather than replacing it. The canvas
-                stays mounted and measured, so the camera and the timeline's
-                pan-to-card survive a view switch — they would not across an
-                unmount, and the viewport would snap back on every toggle. */}
-            {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
-            {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
-            <CanvasPanel position="top-left">
-              <Toolbar />
-            </CanvasPanel>
-            {/* Shown over board and record: a cluster hides its cards wherever they
-                are, and the record reads visibility through the same useVisibleCards
-                the timeline does. The Objects view has no clusters — it shows its own
-                Maintenance dropdown in this corner instead. */}
-            {view !== 'object' && (
-              <CanvasPanel position="top-right">
-                <ClusterPanel />
+    <Switch>
+      <Match when={!ready()}>
+        <div class="loading">Pinning the board…</div>
+      </Match>
+      {/* An empty library: choose a first board before anything else mounts (there
+          is no board to draw yet). Adopting one clears firstRun and the app proceeds.
+          The bundle-import dialog rides alongside so "Import a board" can open its
+          picker here, before the main tree (which normally hosts it) exists. */}
+      <Match when={firstRun()}>
+        <FirstRunModal />
+        {bundleImport()}
+        <BusyOverlay />
+      </Match>
+      <Match when={true}>
+        <div class="app">
+          <div class="app__main">
+            <div class="app__canvas">
+              {/* Keyed on the board: the canvas's viewport and fit are
+                  initialisation-only, so switching boards without a remount would
+                  show the new cards under the old camera. The drawer's open state
+                  is initialised from the board's dates for the same reason.
+                  The record covers the canvas rather than replacing it, so the
+                  camera and the timeline's pan-to-card survive a view switch. */}
+              <Show when={boardId()} keyed>
+                <BoardCanvas />
+                <Switch>
+                  <Match when={view() === 'record'}>
+                    <RecordView />
+                  </Match>
+                  <Match when={view() === 'object'}>
+                    <ObjectView />
+                  </Match>
+                </Switch>
+              </Show>
+              <CanvasPanel position="top-left">
+                <Toolbar />
               </CanvasPanel>
-            )}
+              {/* Shown over board and record: a cluster hides its cards wherever
+                  they are. The Objects view has no clusters — it shows its own
+                  Maintenance dropdown in this corner instead. */}
+              <Show when={view() !== 'object'}>
+                <CanvasPanel position="top-right">
+                  <ClusterPanel />
+                </CanvasPanel>
+              </Show>
+            </div>
+            <Show when={boardId()} keyed>
+              <TimelineDrawer />
+            </Show>
           </div>
-          <TimelineDrawer key={currentBoardId} />
+          <CardEditor />
+          {/* Outside the canvas, whose wheel and drag handlers would eat scrolling
+              and text selection in the forms, and outside the panels, whose
+              stacking a fixed backdrop can't escape. Mounted only while open, so
+              their local state doesn't outlive the dialog. */}
+          <Show when={emailImportOpen()}>
+            <EmailImportModal />
+          </Show>
+          <Show when={dialogs().properties}>
+            <BoardPropertiesModal onClose={() => closeDialog('properties')} />
+          </Show>
+          <Show when={dialogs().imageEditorCardId} keyed>
+            {(cardId) => <ImageEditorModal cardId={cardId} />}
+          </Show>
+          <Show when={dialogs().bundleExport}>
+            <BundleExportModal />
+          </Show>
+          {bundleImport()}
+          <Show when={dialogs().manage}>
+            <ManageModal />
+          </Show>
+          <BusyOverlay />
+          <BackgroundTaskIndicator />
+          <UndoToast />
+          <PromptHost />
         </div>
-        <CardEditor />
-        {/* All three sit outside the canvas — nested in the pane, its
-            wheel/drag handlers would eat scrolling and text selection inside the
-            forms — and outside the panels, since position:fixed escapes
-            overflow but not stacking, so a backdrop inside a panel's z-index
-            would paint against CardEditor incorrectly.
-            Mounted only while open, so their local state (a half-typed paste, a
-            pending delete confirm) doesn't outlive the dialog. */}
-        {emailImportOpen && <EmailImportModal />}
-        {propertiesOpen && <BoardPropertiesModal onClose={() => closeDialog('properties')} />}
-        {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
-        {bundleExportOpen && <BundleExportModal />}
-        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
-        {manageOpen && <ManageModal />}
-        <ImportOverlay />
-        <BackgroundTaskIndicator />
-        <UndoToast />
-        <PromptHost />
-      </CameraProvider>
-    </div>
+      </Match>
+    </Switch>
   );
 }

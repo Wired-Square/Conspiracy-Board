@@ -1,12 +1,11 @@
-import { useMemo } from 'react';
+import { For, Show, createMemo } from 'solid-js';
 import type { Card } from '../../types/board';
-import { useRoster } from '../../hooks/useRoster';
-import { relationsOf } from '../../lib/roster';
+import { buildRoster, relationsOf } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
-import { reactStyle } from '../ui/reactStyle';
-import { useBoardStore } from '../../hooks/useStores';
+import { boardStore } from '../../store/boardStore';
+import { fromStore } from '../fromStore';
 
 /**
  * What this card shares addresses with — derived, read-only, click to open.
@@ -23,82 +22,68 @@ import { useBoardStore } from '../../hooks/useStores';
  * The section hides itself when nothing is derived, so an evidence card with no
  * addresses is not made to display its own emptiness.
  */
-export function ParticipantsSection({ cardId }: { cardId: string }) {
-  const cards = useBoardStore((s) => s.cards);
-  const selectCard = useBoardStore((s) => s.selectCard);
-  const roster = useRoster();
-
-  const { actors, sent, received } = useMemo(
-    () => relationsOf(roster, cardId, cards),
-    [roster, cardId, cards],
-  );
-
-  if (!actors.length && !sent.length && !received.length) return null;
+export function ParticipantsSection(props: { cardId: string }) {
+  const cards = fromStore(boardStore, (s) => s.cards);
+  const { selectCard } = boardStore.getState();
+  const relations = createMemo(() => relationsOf(buildRoster(cards()), props.cardId, cards()));
 
   return (
-    // Dyed from the Inference grade, which is exactly what all of this is: a
-    // reasoned read of the addresses, not a finding.
-    <div className="field participants" style={reactStyle(gradeTint('inference'))}>
-      <span>Linked by address</span>
+    <Show when={relations().actors.length || relations().sent.length || relations().received.length}>
+      {/* Dyed from the Inference grade, which is exactly what all of this is: a
+          reasoned read of the addresses, not a finding. */}
+      <div class="field participants" style={gradeTint('inference')}>
+        <span>Linked by address</span>
 
-      {actors.length > 0 && (
-        <ul className="participants__list">
-          {actors.map((c) => (
-            <li key={c.id}>
-              <button className="link-button participants__row" onClick={() => selectCard(c.id)}>
-                <span className="participants__icon">{KIND_META[c.kind].icon}</span>
-                <span className="participants__title">{c.title}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+        <Show when={relations().actors.length > 0}>
+          <ul class="participants__list">
+            <For each={relations().actors}>
+              {(c) => (
+                <li>
+                  <button class="link-button participants__row" onClick={() => selectCard(c.id)}>
+                    <span class="participants__icon">{KIND_META[c.kind].icon}</span>
+                    <span class="participants__title">{c.title}</span>
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
 
-      {/* The arrow is the whole point: an email from them and an email to them
-          are different facts, and the roster is the only thing that still knows
-          which is which once the addresses are flattened. */}
-      <MailList label="Sent" arrow="→" mail={sent} onPick={selectCard} />
-      <MailList label="Received" arrow="←" mail={received} onPick={selectCard} />
+        {/* The arrow is the whole point: an email from them and an email to them
+            are different facts, and the roster is the only thing that still knows
+            which is which once the addresses are flattened. */}
+        <MailList label="Sent" arrow="→" mail={relations().sent} onPick={selectCard} />
+        <MailList label="Received" arrow="←" mail={relations().received} onPick={selectCard} />
 
-      <span className="field__hint">
-        Follows from the addresses themselves — not string anyone tied. Draw a connection
-        to assert one.
-      </span>
-    </div>
+        <span class="field__hint">
+          Follows from the addresses themselves — not string anyone tied. Draw a connection
+          to assert one.
+        </span>
+      </div>
+    </Show>
   );
 }
 
-function MailList({
-  label,
-  arrow,
-  mail,
-  onPick,
-}: {
-  label: string;
-  arrow: string;
-  mail: Card[];
-  onPick: (id: string) => void;
-}) {
-  if (!mail.length) return null;
+function MailList(props: { label: string; arrow: string; mail: Card[]; onPick: (id: string) => void }) {
   return (
-    <>
-      <span className="participants__direction">
-        {arrow} {label} ({mail.length})
+    <Show when={props.mail.length}>
+      <span class="participants__direction">
+        {props.arrow} {props.label} ({props.mail.length})
       </span>
-      <ul className="participants__list">
-        {mail.map((c) => (
-          <li key={c.id}>
-            <button className="link-button participants__row" onClick={() => onPick(c.id)}>
-              <span className="participants__title">{c.title || 'Untitled'}</span>
-              {c.occurredAt && (
-                <span className="participants__when">
-                  {formatOccurredAt(c.occurredAt, c.occurredAtPrecision)}
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
+      <ul class="participants__list">
+        <For each={props.mail}>
+          {(c) => (
+            <li>
+              <button class="link-button participants__row" onClick={() => props.onPick(c.id)}>
+                <span class="participants__title">{c.title || 'Untitled'}</span>
+                <Show when={c.occurredAt}>
+                  {(at) => <span class="participants__when">{formatOccurredAt(at(), c.occurredAtPrecision)}</span>}
+                </Show>
+              </button>
+            </li>
+          )}
+        </For>
       </ul>
-    </>
+    </Show>
   );
 }

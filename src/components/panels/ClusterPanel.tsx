@@ -1,72 +1,52 @@
-import { useState } from 'react';
-import { useBoardStore } from '../../hooks/useStores';
-import { useDraft } from '../../hooks/useDraft';
+import { For, Show, createSignal } from 'solid-js';
+import { boardStore } from '../../store/boardStore';
+import { fromStore } from '../fromStore';
+import { createDraft } from '../createDraft';
 import type { Cluster } from '../../types/board';
 
 export function ClusterPanel() {
-  const clusters = useBoardStore((s) => s.clusters);
-  const addCluster = useBoardStore((s) => s.addCluster);
-  const [open, setOpen] = useState(true);
+  const clusters = fromStore(boardStore, (s) => s.clusters);
+  const [open, setOpen] = createSignal(true);
+  // Rows by id, not by object: a write replaces the cluster, and a remounted row
+  // would drop the field the user is still typing in.
+  const clusterIds = () => clusters().map((c) => c.id);
 
   return (
-    <div className="cluster-panel">
-      <button
-        className="cluster-panel__toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="panel-heading">Clusters</span>
-        <span aria-hidden>{open ? '▾' : '▸'}</span>
+    <div class="cluster-panel">
+      <button class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
+        <span class="panel-heading">Clusters</span>
+        <span aria-hidden="true">{open() ? '▾' : '▸'}</span>
       </button>
-      {open && (
-        <>
-          {clusters.map((c) => (
-            <ClusterRow key={c.id} cluster={c} />
-          ))}
-          <button className="cluster-add" onClick={() => addCluster()}>
-            + Add cluster
-          </button>
-        </>
-      )}
+      <Show when={open()}>
+        <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
+        <button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
+          + Add cluster
+        </button>
+      </Show>
     </div>
   );
 }
 
-function ClusterRow({ cluster }: { cluster: Cluster }) {
-  const toggleCluster = useBoardStore((s) => s.toggleCluster);
-  const updateCluster = useBoardStore((s) => s.updateCluster);
-  const deleteCluster = useBoardStore((s) => s.deleteCluster);
+function ClusterRow(props: { cluster: Cluster }) {
+  const { toggleCluster, updateCluster, deleteCluster } = boardStore.getState();
+  const id = props.cluster.id;
   // The colour picker reports every step of a drag, so it drafts like the label.
-  const [color, setColor, flushColor] = useDraft(cluster.color, (color) => updateCluster(cluster.id, { color }));
-  const [label, setLabel, flushLabel] = useDraft(cluster.label, (label) => updateCluster(cluster.id, { label }));
+  const [color, setColor, flushColor] = createDraft(() => props.cluster.color, (color) => updateCluster(id, { color }));
+  const [label, setLabel, flushLabel] = createDraft(() => props.cluster.label, (label) => updateCluster(id, { label }));
 
   return (
-    <div className="cluster-row">
-      <input
-        type="checkbox"
-        checked={cluster.visible}
-        onChange={() => toggleCluster(cluster.id)}
-        title="Show/hide"
-      />
+    <div class="cluster-row">
+      <input type="checkbox" checked={props.cluster.visible} onChange={() => toggleCluster(id)} title="Show/hide" />
       <input
         type="color"
-        className="cluster-color"
-        value={color}
-        onChange={(e) => setColor(e.target.value)}
+        class="cluster-color"
+        value={color()}
+        onInput={(e) => setColor(e.currentTarget.value)}
         onBlur={flushColor}
         title="Colour"
       />
-      <input
-        className="cluster-label"
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        onBlur={flushLabel}
-      />
-      <button
-        className="cluster-delete"
-        onClick={() => deleteCluster(cluster.id)}
-        title="Delete cluster"
-      >
+      <input class="cluster-label" value={label()} onInput={(e) => setLabel(e.currentTarget.value)} onBlur={flushLabel} />
+      <button class="cluster-delete" onClick={() => deleteCluster(id)} title="Delete cluster">
         ×
       </button>
     </div>

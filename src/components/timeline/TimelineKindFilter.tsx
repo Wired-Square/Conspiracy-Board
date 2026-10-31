@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { For, Show, createSignal } from 'solid-js';
 import { KIND_META } from '../../lib/kinds';
 import type { CardKind } from '../../types/board';
+import { createDismissal } from '../ui/createDismissal';
 
 type Props = {
   /** The present timeline kinds, in CARD_KINDS order — one checklist row each. */
@@ -19,77 +20,52 @@ type Props = {
  *
  * Its own small dropdown rather than the shared Menu: that one is a single-choice
  * chooser that closes on every pick, and a filter you tick several boxes in must
- * stay open. The dismiss handling is the same though — see Menu for why pointerdown.
+ * stay open.
  */
-export function TimelineKindFilter({ kinds, hidden, counts, onToggle, onReset }: Props) {
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    // pointerdown, not click: a click listener added during the opening click would
-    // fire on that same click and close the menu on open.
-    const onPointerDown = (e: PointerEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        triggerRef.current?.focus();
-      } else if (e.key === 'Tab') {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+export function TimelineKindFilter(props: Props) {
+  const [open, setOpen] = createSignal(false);
+  let wrapper!: HTMLDivElement;
+  let trigger!: HTMLButtonElement;
+  createDismissal(open, () => setOpen(false), () => wrapper, () => trigger);
 
   return (
-    <div className="timeline__filter" ref={wrapperRef}>
+    <div class="timeline__filter" ref={wrapper}>
       <button
-        ref={triggerRef}
-        className={hidden.size ? 'is-active' : ''}
+        ref={trigger}
+        class={props.hidden.size ? 'is-active' : ''}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={open()}
         onClick={() => setOpen((v) => !v)}
         title="Show or hide card kinds on the timeline"
       >
         Filter
       </button>
-      {open && (
-        <div className="timeline__filter-menu" role="menu" aria-label="Show on timeline">
-          {kinds.map((k) => {
-            const shown = !hidden.has(k);
-            return (
-              <button
-                key={k}
-                role="menuitemcheckbox"
-                aria-checked={shown}
-                className="timeline__filter-option"
-                onClick={() => onToggle(k)}
-              >
-                <span className="timeline__filter-check" aria-hidden>
-                  {shown ? '☑' : '☐'}
-                </span>
-                {KIND_META[k].label}
-                <span className="timeline__filter-count">{counts.get(k) ?? 0}</span>
-              </button>
-            );
-          })}
-          <button
-            className="timeline__filter-reset"
-            onClick={onReset}
-            disabled={hidden.size === 0}
-          >
+      <Show when={open()}>
+        <div class="timeline__filter-menu" role="menu" aria-label="Show on timeline">
+          <For each={props.kinds}>
+            {(k) => {
+              const shown = () => !props.hidden.has(k);
+              return (
+                <button
+                  role="menuitemcheckbox"
+                  aria-checked={shown()}
+                  class="timeline__filter-option"
+                  onClick={() => props.onToggle(k)}
+                >
+                  <span class="timeline__filter-check" aria-hidden="true">
+                    {shown() ? '☑' : '☐'}
+                  </span>
+                  {KIND_META[k].label}
+                  <span class="timeline__filter-count">{props.counts.get(k) ?? 0}</span>
+                </button>
+              );
+            }}
+          </For>
+          <button class="timeline__filter-reset" onClick={() => props.onReset()} disabled={props.hidden.size === 0}>
             Reset
           </button>
         </div>
-      )}
+      </Show>
     </div>
   );
 }

@@ -1,7 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTimelineCards } from '../../hooks/useTimelineCards';
-import { useDocHits } from '../../hooks/useDocHits';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
+import { cx } from '@wired-square/kit/core';
 import { formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
 import {
@@ -12,15 +10,18 @@ import {
   measureMarks,
   nextPicks,
   stepEvent,
+  timelineCards,
   type EventStep,
 } from '../../lib/timeline';
 import { CARD_H, CARD_W } from '../../lib/layout';
-import type { CardKind } from '../../types/board';
+import type { Card, CardKind } from '../../types/board';
+import { camera } from '../board/camera';
+import { boardStore } from '../../store/boardStore';
+import { fromStore } from '../fromStore';
+import { createDebounced } from '../createDebounced';
+import { createDocHits } from '../createDocHits';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
-import { useCamera } from '../canvas/Canvas';
-import { useBoardStore } from '../../hooks/useStores';
-import { cx } from '@wired-square/kit/core';
 
 /**
  * A chronological strip under the board.
@@ -32,19 +33,20 @@ import { cx } from '@wired-square/kit/core';
  * markers give the temporal reading without the scaling pathology.
  */
 export function TimelineDrawer() {
+  const cards = fromStore(boardStore, (s) => s.cards);
+  const clusters = fromStore(boardStore, (s) => s.clusters);
+  const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
+  const { selectCard } = boardStore.getState();
+  let strip: HTMLDivElement | undefined;
+
   // The timeline's own full-text search — query and doc-hits are local (the drawer
   // remounts per board), distinct from the toolbar's in-memory entity search. The box
   // owns its text so typing is instant; one debounce feeds both the field filter and
-  // the indexed-body lookup (useDocHits).
-  const [tlText, setTlText] = useState('');
-  const tlQuery = useDebouncedValue(tlText, 200);
-  const tlDocHits = useDocHits(tlQuery);
-  const { dated: rawDated, undated: rawUndated } = useTimelineCards(tlQuery, tlDocHits);
-  const clusters = useBoardStore((s) => s.clusters);
-  const selectedCardId = useBoardStore((s) => s.selectedCardId);
-  const selectCard = useBoardStore((s) => s.selectCard);
-  const camera = useCamera();
-  const stripRef = useRef<HTMLDivElement>(null);
+  // the indexed-body lookup (createDocHits).
+  const [tlText, setTlText] = createSignal('');
+  const tlQuery = createDebounced(tlText, 200);
+  const tlDocHits = createDocHits(tlQuery);
+  const raw = createMemo(() => timelineCards(cards(), clusters(), tlQuery(), tlDocHits()));
 
   // Keeping your place: changing a filter used to snap the strip back to the
   // start — the filtered strip is short, so the old scroll offset lands near
@@ -55,80 +57,72 @@ export function TimelineDrawer() {
   // restore effect below). Candidates rather than one id, so narrowing by kind
   // anchors on the closest chip that survives; an empty strip keeps the
   // previous anchor, so even a fruitless search returns you to where you were.
-  const anchorRef = useRef<string[]>([]);
-  const captureAnchor = useCallback(() => {
-    const strip = stripRef.current;
+  let anchor: string[] = [];
+  const captureAnchor = () => {
     if (!strip) return;
     const centre = strip.getBoundingClientRect().left + strip.clientWidth / 2;
     const chips = [...strip.querySelectorAll<HTMLElement>('[data-card-id]')];
     if (!chips.length) return;
-    anchorRef.current = chips
+    anchor = chips
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { id: el.dataset.cardId!, d: Math.abs((r.left + r.right) / 2 - centre) };
       })
       .sort((a, b) => a.d - b.d)
       .map((c) => c.id);
-  }, []);
+  };
 
-  // Which kinds the strip hides. The search (through useTimelineCards) has already
-  // narrowed the raw sets to matches — this filters those by kind on top, so a chip
-  // shows only if it matches AND its kind isn't hidden. Empty by default (show all);
-  // a fresh Set per toggle so the memos below rerun. Local, like every other timeline
-  // control: nothing else reads it.
-  const [hidden, setHidden] = useState<Set<CardKind>>(() => new Set());
-  const toggleKind = useCallback(
-    (k: CardKind) => {
-      captureAnchor();
-      setHidden((prev) => {
-        const next = new Set(prev);
-        if (!next.delete(k)) next.add(k);
-        return next;
-      });
-    },
-    [captureAnchor],
-  );
-  const resetKinds = useCallback(() => {
+  // Which kinds the strip hides. The search has already narrowed the raw sets to
+  // matches — this filters those by kind on top, so a chip shows only if it matches
+  // AND its kind isn't hidden. Empty by default (show all); a fresh Set per toggle.
+  // Local, like every other timeline control: nothing else reads it.
+  const [hidden, setHidden] = createSignal<Set<CardKind>>(new Set());
+  const toggleKind = (k: CardKind) => {
     captureAnchor();
-    setHidden(new Set());
-  }, [captureAnchor]);
-  const dated = useMemo(() => rawDated.filter((c) => !hidden.has(c.kind)), [rawDated, hidden]);
-  const undated = useMemo(() => rawUndated.filter((c) => !hidden.has(c.kind)), [rawUndated, hidden]);
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(k)) next.add(k);
+      return next;
+    });
+  };
+  const resetKinds = () => {
+    captureAnchor();
+    setHidden(new Set<CardKind>());
+  };
+  const dated = createMemo(() => raw().dated.filter((c) => !hidden().has(c.kind)));
+  const undated = createMemo(() => raw().undated.filter((c) => !hidden().has(c.kind)));
 
   // The kinds actually on the strip (from the raw, pre-filter sets so they're stable
   // as you toggle) and how many of each — the checklist rows and their counts. In
   // CARD_KINDS order; actors never reach here, so they never list.
-  const { presentKinds, kindCounts } = useMemo(() => kindTally(rawDated, rawUndated), [rawDated, rawUndated]);
+  const tally = createMemo(() => kindTally(raw().dated, raw().undated));
 
-  const [open, setOpen] = useState(() => dated.length > 0);
-  const [showUndated, setShowUndated] = useState(false);
+  const [open, setOpen] = createSignal(dated().length > 0);
+  const [showUndated, setShowUndated] = createSignal(false);
 
-  const colorFor = useCallback(
-    (clusterId: string | null) => clusterColor(clusterId, clusters),
-    [clusters],
-  );
+  const colorFor = (card: Card) => clusterColor(primaryClusterId(card.clusterIds), clusters());
 
   // Bring a chip into view in the horizontal strip, so a selection made elsewhere
   // (the milestone controls) isn't left off-screen. Two frames: the strip may be
   // opening from collapsed, so let it mount and settle before scrolling.
-  const scrollChipIntoView = useCallback((id: string) => {
+  const scrollChipIntoView = (id: string) => {
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
-        stripRef.current
+        strip
           ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
           ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }),
       ),
     );
-  }, []);
+  };
 
   // Searching opens the drawer and jumps to the first (earliest) match — the way
   // goToEvent does for milestones. On the settled query.
-  useEffect(() => {
-    if (!tlQuery) return;
+  createEffect(() => {
+    if (!tlQuery()) return;
     setOpen(true);
-    const first = dated[0];
+    const first = dated()[0];
     if (first) scrollChipIntoView(first.id);
-  }, [tlQuery, dated, scrollChipIntoView]);
+  });
 
   // The anchor's other half: after a filter change re-renders the strip, put
   // the nearest surviving anchored chip back at the centre. Only with no
@@ -136,248 +130,241 @@ export function TimelineDrawer() {
   // first match). Instant, not smooth: the point is that the chip under the
   // eye stays put rather than travels. Keyed on the filters, not on `dated`,
   // so a set change from ordinary editing can never fire a stale anchor.
-  useEffect(() => {
-    if (tlQuery || !anchorRef.current.length) return;
-    const strip = stripRef.current;
-    const candidates = anchorRef.current;
-    anchorRef.current = [];
-    for (const id of candidates) {
-      const chip = strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
-      if (chip) {
-        chip.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
-        return;
+  createEffect(
+    on([tlQuery, hidden], ([query]) => {
+      if (query || !anchor.length) return;
+      const candidates = anchor;
+      anchor = [];
+      for (const id of candidates) {
+        const chip = strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
+        if (chip) {
+          chip.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
+          return;
+        }
       }
-    }
-  }, [tlQuery, hidden]);
+    }),
+  );
 
   // The measure tool: pick two dated chips and read the days between them. Kept
   // local — it never selects a card or moves the board, so it needs no store state.
-  const [measuring, setMeasuring] = useState(false);
-  const [picks, setPicks] = useState<string[]>([]);
-  const datedById = useMemo(() => new Map(dated.map((c) => [c.id, c])), [dated]);
+  const [measuring, setMeasuring] = createSignal(false);
+  const [picks, setPicks] = createSignal<string[]>([]);
+  const datedById = createMemo(() => new Map(dated().map((c) => [c.id, c])));
 
-  const toggleMeasure = useCallback(() => {
+  const toggleMeasure = () => {
     setMeasuring((v) => !v);
     setPicks([]);
     setOpen(true);
-  }, []);
+  };
 
-  // onPick is handed to every memoized chip, so it must keep a stable identity:
-  // every edit respreads `cards`, which rebuilds `datedById`, so depending on it
-  // directly would re-render the whole strip on every edit. The measure context is read through a ref instead.
-  const measureRef = useRef({ measuring, datedById });
-  measureRef.current = { measuring, datedById };
-
-  const onPick = useCallback(
-    (id: string) => {
-      const { measuring, datedById } = measureRef.current;
-      // Measuring picks endpoints instead of navigating. Undated chips can't be
-      // measured, so ignore them.
-      if (measuring) {
-        if (!datedById.has(id)) return;
-        setPicks((p) => nextPicks(p, id));
-        return;
-      }
-      selectCard(id);
-      const n = camera?.getNode(id);
-      if (!camera || !n) return; // Not drawn: a record kind, or in a hidden cluster.
-      const w = n.size?.width ?? CARD_W;
-      const h = n.size?.height ?? CARD_H;
-      void camera.setCentre(n.x + w / 2, n.y + h / 2, {
-        // Don't centre the card and leave it stranded at minZoom.
-        zoom: Math.max(camera.getViewport().zoom, 0.9),
-        duration: 400,
-      });
-    },
-    [selectCard, camera],
-  );
+  const onPick = (id: string) => {
+    // Measuring picks endpoints instead of navigating. Undated chips can't be
+    // measured, so ignore them.
+    if (measuring()) {
+      if (datedById().has(id)) setPicks((p) => nextPicks(p, id));
+      return;
+    }
+    selectCard(id);
+    const cam = camera();
+    const n = cam?.getNode(id);
+    if (!cam || !n) return; // Not drawn: a record kind, or in a hidden cluster.
+    const w = n.size?.width ?? CARD_W;
+    const h = n.size?.height ?? CARD_H;
+    void cam.setCentre(n.x + w / 2, n.y + h / 2, {
+      // Don't centre the card and leave it stranded at minZoom.
+      zoom: Math.max(cam.getViewport().zoom, 0.9),
+      duration: 400,
+    });
+  };
 
   // The dated events, in order: the milestones the Start/Prev/Next/End controls
   // scroll the strip through. The cursor is the controls' own position — they only
   // move the timeline, they don't select the card or move the board.
-  const events = useMemo(() => dated.filter((c) => c.kind === 'event'), [dated]);
+  const events = createMemo(() => dated().filter((c) => c.kind === 'event'));
 
   // The milestone-to-milestone reading, shown as a badge on each event chip.
-  const eventGap = useMemo(() => eventGaps(events), [events]);
+  const eventGap = createMemo(() => eventGaps(events()));
 
-  const [eventCursor, setEventCursor] = useState(0);
-  const cursor = events.length ? Math.min(eventCursor, events.length - 1) : 0;
-  const atStart = cursor === 0;
-  const atEnd = cursor === events.length - 1;
+  const [eventCursor, setEventCursor] = createSignal(0);
+  const cursor = () => (events().length ? Math.min(eventCursor(), events().length - 1) : 0);
 
-  const goToEvent = useCallback(
-    (where: EventStep) => {
-      if (events.length === 0) return;
-      const idx = stepEvent(where, cursor, events.length);
-      setEventCursor(idx);
-      setOpen(true);
-      scrollChipIntoView(events[idx].id);
-    },
-    [events, cursor, scrollChipIntoView],
+  const goToEvent = (where: EventStep) => {
+    if (events().length === 0) return;
+    const idx = stepEvent(where, cursor(), events().length);
+    setEventCursor(idx);
+    setOpen(true);
+    scrollChipIntoView(events()[idx].id);
+  };
+
+  // Consecutive chips under a day heading, with the elapsed gap between days. Keyed
+  // by day, so an edit redraws only its own day.
+  const groups = createMemo(() => new Map(dayGroups(dated()).map((g) => [g.key, g])));
+  const dayKeys = () => [...groups().keys()];
+
+  const measurement = createMemo(() => measureBetween(picks(), datedById()));
+  const marks = createMemo(() => measureMarks(measurement(), picks()));
+
+  const chip = (card: Card, onStrip: boolean) => (
+    <TimelineItem
+      card={card}
+      clusterColor={colorFor(card)}
+      selected={card.id === selectedCardId()}
+      onPick={onPick}
+      sincePrevEvent={onStrip ? eventGap().get(card.id) : undefined}
+      measureMark={onStrip ? (marks().get(card.id) ?? null) : undefined}
+    />
   );
 
-  // Consecutive chips under a day heading, with the elapsed gap between days.
-  const groups = useMemo(() => dayGroups(dated), [dated]);
-
-  const measurement = useMemo(() => measureBetween(picks, datedById), [picks, datedById]);
-  const marks = useMemo(() => measureMarks(measurement, picks), [measurement, picks]);
-
   return (
-    <section className={cx('timeline', open && 'is-open')}>
-      <header className="timeline__bar">
-        <button
-          className="timeline__toggle"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-        >
-          <span className="timeline__chevron">{open ? '▾' : '▸'}</span>
-          <span className="panel-heading">Timeline</span>
-          <span className="timeline__count">
-            {dated.length === 0
+    <section class={cx('timeline', open() && 'is-open')}>
+      <header class="timeline__bar">
+        <button class="timeline__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open()}>
+          <span class="timeline__chevron">{open() ? '▾' : '▸'}</span>
+          <span class="panel-heading">Timeline</span>
+          <span class="timeline__count">
+            {dated().length === 0
               ? 'no dated items'
-              : `${dated.length} dated${undated.length ? ` · ${undated.length} undated` : ''}`}
+              : `${dated().length} dated${undated().length ? ` · ${undated().length} undated` : ''}`}
           </span>
         </button>
         <input
-          className="timeline__search"
+          class="timeline__search"
           type="search"
-          value={tlText}
-          onChange={(e) => {
+          value={tlText()}
+          onInput={(e) => {
             // Before the text lands: the strip still shows the previous result,
             // which is exactly the view worth anchoring (see captureAnchor).
             captureAnchor();
-            setTlText(e.target.value);
+            setTlText(e.currentTarget.value);
           }}
           placeholder="Search timeline…"
           aria-label="Search the timeline (full text, including file contents)"
         />
-        {(presentKinds.length > 1 || hidden.size > 0) && (
+        <Show when={tally().presentKinds.length > 1 || hidden().size > 0}>
           <TimelineKindFilter
-            kinds={presentKinds}
-            hidden={hidden}
-            counts={kindCounts}
+            kinds={tally().presentKinds}
+            hidden={hidden()}
+            counts={tally().kindCounts}
             onToggle={toggleKind}
             onReset={resetKinds}
           />
-        )}
-        {events.length > 0 && (
-          <div className="timeline__events" aria-label="Scroll to events">
+        </Show>
+        <Show when={events().length > 0}>
+          <div class="timeline__events" aria-label="Scroll to events">
             <button onClick={() => goToEvent('start')} title="Scroll to first event">
               Start
             </button>
-            <button onClick={() => goToEvent('prev')} disabled={atStart} title="Scroll to previous event">
+            <button onClick={() => goToEvent('prev')} disabled={cursor() === 0} title="Scroll to previous event">
               Prev
             </button>
-            <button onClick={() => goToEvent('next')} disabled={atEnd} title="Scroll to next event">
+            <button
+              onClick={() => goToEvent('next')}
+              disabled={cursor() === events().length - 1}
+              title="Scroll to next event"
+            >
               Next
             </button>
             <button onClick={() => goToEvent('end')} title="Scroll to last event">
               End
             </button>
           </div>
-        )}
-        {dated.length >= 2 && (
-          <div className="timeline__tools">
+        </Show>
+        <Show when={dated().length >= 2}>
+          <div class="timeline__tools">
             <button
-              className={cx('timeline__measure-toggle', measuring && 'is-active')}
-              aria-pressed={measuring}
+              class={cx('timeline__measure-toggle', measuring() && 'is-active')}
+              aria-pressed={measuring()}
               onClick={toggleMeasure}
               title="Measure the days between two cards"
             >
               Measure
             </button>
           </div>
-        )}
+        </Show>
       </header>
 
-      {open && (
-        <div className="timeline__body">
-          {measuring && (
-            <div className="timeline__measure" role="status">
-              {measurement ? (
-                <span className="timeline__measure-result">
-                  <strong>{measurement.days}</strong> {measurement.days === 1 ? 'day' : 'days'}
-                  <span className="timeline__measure-range">
-                    {formatOccurredAt(measurement.from.occurredAt!, measurement.from.occurredAtPrecision)}
-                    {' → '}
-                    {formatOccurredAt(measurement.to.occurredAt!, measurement.to.occurredAtPrecision)}
+      <Show when={open()}>
+        <div class="timeline__body">
+          <Show when={measuring()}>
+            <div class="timeline__measure" role="status">
+              <Show
+                when={measurement()}
+                fallback={
+                  <span class="timeline__measure-hint">
+                    {picks().length === 0 ? 'Click a dated card to measure from.' : 'Now click the card to measure to.'}
                   </span>
-                </span>
-              ) : (
-                <span className="timeline__measure-hint">
-                  {picks.length === 0
-                    ? 'Click a dated card to measure from.'
-                    : 'Now click the card to measure to.'}
-                </span>
-              )}
-              {picks.length > 0 && (
-                <button className="link-button" onClick={() => setPicks([])}>
+                }
+              >
+                {(m) => (
+                  <span class="timeline__measure-result">
+                    <strong>{m().days}</strong> {m().days === 1 ? 'day' : 'days'}
+                    <span class="timeline__measure-range">
+                      {formatOccurredAt(m().from.occurredAt!, m().from.occurredAtPrecision)}
+                      {' → '}
+                      {formatOccurredAt(m().to.occurredAt!, m().to.occurredAtPrecision)}
+                    </span>
+                  </span>
+                )}
+              </Show>
+              <Show when={picks().length > 0}>
+                <button class="link-button" onClick={() => setPicks([])}>
                   Clear
                 </button>
-              )}
+              </Show>
             </div>
-          )}
-          <div className="timeline__body-row">
-            {undated.length > 0 && (
-              <div className="timeline__undated">
+          </Show>
+          <div class="timeline__body-row">
+            <Show when={undated().length > 0}>
+              <div class="timeline__undated">
                 <button
-                  className="timeline__undated-toggle"
+                  class="timeline__undated-toggle"
                   onClick={() => setShowUndated((v) => !v)}
-                  aria-expanded={showUndated}
+                  aria-expanded={showUndated()}
                 >
-                  Undated · {undated.length}
+                  Undated · {undated().length}
                 </button>
-                {showUndated && (
-                  <div className="timeline__undated-list">
-                    {undated.map((card) => (
-                      <TimelineItem
-                        key={card.id}
-                        card={card}
-                        clusterColor={colorFor(primaryClusterId(card.clusterIds))}
-                        selected={card.id === selectedCardId}
-                        onPick={onPick}
-                      />
-                    ))}
+                <Show when={showUndated()}>
+                  <div class="timeline__undated-list">
+                    <For each={undated()}>{(card) => chip(card, false)}</For>
                   </div>
-                )}
+                </Show>
               </div>
-            )}
+            </Show>
 
-            <div className="timeline__strip" ref={stripRef}>
-              {groups.length === 0 && (
-                <p className="hint timeline__empty">
-                  Give a card a date in the editor and it will appear here.
-                </p>
-              )}
-              {groups.map((g) => (
-                <Fragment key={g.key}>
-                  {g.gapDays > 1 && (
-                    <div className="timeline__gap" aria-hidden>
-                      — {g.gapDays} days —
-                    </div>
-                  )}
-                  <div className="timeline__group">
-                    <div className="timeline__day">{formatDayKey(g.key)}</div>
-                    <div className="timeline__chips">
-                      {g.cards.map((card) => (
-                        <TimelineItem
-                          key={card.id}
-                          card={card}
-                          clusterColor={colorFor(primaryClusterId(card.clusterIds))}
-                          selected={card.id === selectedCardId}
-                          onPick={onPick}
-                          sincePrevEvent={eventGap.get(card.id)}
-                          measureMark={marks.get(card.id) ?? null}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </Fragment>
-              ))}
+            <div
+              class="timeline__strip"
+              ref={(el) => {
+                strip = el;
+                onCleanup(() => (strip = undefined));
+              }}
+            >
+              <Show when={dayKeys().length === 0}>
+                <p class="hint timeline__empty">Give a card a date in the editor and it will appear here.</p>
+              </Show>
+              <For each={dayKeys()}>
+                {(key) => {
+                  const group = () => groups().get(key)!;
+                  return (
+                    <>
+                      <Show when={group().gapDays > 1}>
+                        <div class="timeline__gap" aria-hidden="true">
+                          — {group().gapDays} days —
+                        </div>
+                      </Show>
+                      <div class="timeline__group">
+                        <div class="timeline__day">{formatDayKey(key)}</div>
+                        <div class="timeline__chips">
+                          <For each={group().cards}>{(card) => chip(card, true)}</For>
+                        </div>
+                      </div>
+                    </>
+                  );
+                }}
+              </For>
             </div>
           </div>
         </div>
-      )}
+      </Show>
     </section>
   );
 }

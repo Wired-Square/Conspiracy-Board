@@ -1,7 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 
 // A reusable "ask the user for something" dialog, promise-based so any caller —
-// including the native menu handler, which lives outside React — can `await
+// including the native menu handler, which lives outside the UI — can `await
 // prompt(...)` / `await confirm(...)` and act on the answer. One request at a
 // time; <PromptHost> renders it on the shared Modal and resolves the promise.
 
@@ -29,12 +29,7 @@ export type ConfirmRequest = Common & {
 
 export type PromptRequest = TextRequest | ConfirmRequest;
 
-// token bumps per request so <PromptHost> remounts the dialog even on a direct
-// request→request swap, giving it fresh input state and re-running its focus.
-export const promptStore = createStore<{ request: PromptRequest | null; token: number }>()(() => ({
-  request: null,
-  token: 0,
-}));
+export const promptStore = createStore<{ request: PromptRequest | null }>()(() => ({ request: null }));
 
 /** Show a request, cancel-resolving any it displaces so no awaiter is left hung. */
 function show(request: PromptRequest) {
@@ -43,7 +38,7 @@ function show(request: PromptRequest) {
     if (prev.kind === 'text') prev.resolve(null);
     else prev.resolve(false);
   }
-  promptStore.setState((s) => ({ request, token: s.token + 1 }));
+  promptStore.setState({ request });
 }
 
 /** Ask for a line of text. Resolves the entered string, or null if cancelled. */

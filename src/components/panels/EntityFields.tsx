@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { Show } from 'solid-js';
 import type { Card } from '../../types/board';
 import { emptyOrgMeta, emptyPersonMeta, withAddress, withDomain, withNumber } from '../../lib/entities';
 import { formatNumber } from '../../lib/phone';
-import { useBoardStore } from '../../hooks/useStores';
+import { boardStore } from '../../store/boardStore';
+import { createSeeded } from '../createSeeded';
 
 /**
  * What a person or an organisation is matched on: addresses, and for an
@@ -16,16 +17,10 @@ import { useBoardStore } from '../../hooks/useStores';
  * in (case-folded — `Jane@X.com` and `jane@x.com` are one person) and shown back
  * normalised, so the value in the box is exactly the value that will match.
  */
-export function EntityFields({ card }: { card: Card }) {
-  const updateCard = useBoardStore((s) => s.updateCard);
+export function EntityFields(props: { card: Card }) {
+  const { updateCard } = boardStore.getState();
 
-  const isOrg = card.kind === 'organisation';
-  // The raw payloads, not `meta` below: these keep their identity between
-  // renders, so they can be effect deps. `emptyOrgMeta()` mints a new object
-  // every time and would re-seed the inputs mid-typing.
-  const { person, organisation } = card;
-  const meta = isOrg ? organisation ?? emptyOrgMeta() : person ?? emptyPersonMeta();
-
+  const isOrg = () => props.card.kind === 'organisation';
   const format = (list: string[]) => list.join(', ');
   // Numbers show grouped and canonical (+61 403 123 456) — standardised on the way
   // out, so what's in the box is what will match (see lib/phone).
@@ -33,21 +28,12 @@ export function EntityFields({ card }: { card: Card }) {
 
   // Edited as raw text and only committed on blur, like EmailFields: parsing and
   // re-formatting on every keystroke would fight the caret as you typed a
-  // separator.
-  const [addresses, setAddresses] = useState(() => format(meta.addresses));
-  const [numbers, setNumbers] = useState(() => formatNumbers(meta.numbers ?? []));
-  const [domainText, setDomainText] = useState(() => format(organisation?.domains ?? []));
-
-  // Re-seed when the editor switches card, and when these change under us — an
-  // import can add an address to a person in place, so the id never changes and
-  // keying on it alone would leave the box showing the old list. A payload only
-  // gets a new identity when it is actually written, so this can't fire
-  // mid-typing; committing on blur just re-seeds the same string back.
-  useEffect(() => {
-    setAddresses(format((organisation ?? person)?.addresses ?? []));
-    setNumbers(formatNumbers((organisation ?? person)?.numbers ?? []));
-    setDomainText(format(organisation?.domains ?? []));
-  }, [card.id, person, organisation]);
+  // separator. Re-seeded when the payload is rewritten under us — an import can
+  // add an address to a person in place.
+  const payload = () => props.card.organisation ?? props.card.person;
+  const [addresses, setAddresses] = createSeeded(() => format(payload()?.addresses ?? []));
+  const [numbers, setNumbers] = createSeeded(() => formatNumbers(payload()?.numbers ?? []));
+  const [domainText, setDomainText] = createSeeded(() => format(props.card.organisation?.domains ?? []));
 
   /**
    * Rebuild the list from what was typed, through the same withAddress/withDomain
@@ -58,89 +44,89 @@ export function EntityFields({ card }: { card: Card }) {
    * hold addresses, and each branch keeps its own type on the way to updateCard.
    */
   const rebuild = <T extends { addresses: string[] }>(base: T): T =>
-    addresses
+    addresses()
       .split(',')
       .reduce((m, a) => withAddress(m, a), { ...base, addresses: [] as string[] });
 
   const commitAddresses = () =>
     updateCard(
-      card.id,
-      isOrg
-        ? { organisation: rebuild(organisation ?? emptyOrgMeta()) }
-        : { person: rebuild(person ?? emptyPersonMeta()) },
+      props.card.id,
+      isOrg()
+        ? { organisation: rebuild(props.card.organisation ?? emptyOrgMeta()) }
+        : { person: rebuild(props.card.person ?? emptyPersonMeta()) },
     );
 
   const commitDomains = () =>
-    updateCard(card.id, {
-      organisation: domainText
+    updateCard(props.card.id, {
+      organisation: domainText()
         .split(',')
-        .reduce(withDomain, { ...(organisation ?? emptyOrgMeta()), domains: [] }),
+        .reduce(withDomain, { ...(props.card.organisation ?? emptyOrgMeta()), domains: [] }),
     });
 
   // The number equivalent of commitAddresses, through withNumber so the actor and a
   // text/call agree on what a number *is* (see lib/phone). Shared by both kinds.
   const rebuildNumbers = <T extends { numbers?: string[] }>(base: T): T =>
-    numbers.split(',').reduce((m, n) => withNumber(m, n), { ...base, numbers: [] as string[] });
+    numbers()
+      .split(',')
+      .reduce((m, n) => withNumber(m, n), { ...base, numbers: [] as string[] });
 
   const commitNumbers = () =>
     updateCard(
-      card.id,
-      isOrg
-        ? { organisation: rebuildNumbers(organisation ?? emptyOrgMeta()) }
-        : { person: rebuildNumbers(person ?? emptyPersonMeta()) },
+      props.card.id,
+      isOrg()
+        ? { organisation: rebuildNumbers(props.card.organisation ?? emptyOrgMeta()) }
+        : { person: rebuildNumbers(props.card.person ?? emptyPersonMeta()) },
     );
 
   return (
-    <div className="field entity-fields">
-      <span>{isOrg ? 'Organisation details' : 'Person details'}</span>
+    <div class="field entity-fields">
+      <span>{isOrg() ? 'Organisation details' : 'Person details'}</span>
 
-      <label className="field entity-fields__row">
+      <label class="field entity-fields__row">
         <span>Addresses</span>
         <input
-          value={addresses}
+          value={addresses()}
           placeholder="comma separated"
-          onChange={(e) => setAddresses(e.target.value)}
+          onInput={(e) => setAddresses(e.currentTarget.value)}
           onBlur={commitAddresses}
         />
       </label>
-      <span className="field__hint">
-        {isOrg
+      <span class="field__hint">
+        {isOrg()
           ? 'Mail this body sends itself — legal@, info@ — including at a domain it does not own.'
           : 'Every address they use. Their mail finds them by these.'}
       </span>
 
-      <label className="field entity-fields__row">
+      <label class="field entity-fields__row">
         <span>Numbers</span>
         <input
-          value={numbers}
+          value={numbers()}
           placeholder="+61 400 123 456, 02 9000 0000"
-          onChange={(e) => setNumbers(e.target.value)}
+          onInput={(e) => setNumbers(e.currentTarget.value)}
           onBlur={commitNumbers}
         />
       </label>
-      <span className="field__hint">
-        {isOrg
+      <span class="field__hint">
+        {isOrg()
           ? 'Switchboard or direct lines. A text or call finds this body by these.'
           : 'Their phone numbers. A text or call finds them by these.'}
       </span>
 
-      {isOrg && (
-        <>
-          <label className="field entity-fields__row">
-            <span>Domains</span>
-            <input
-              value={domainText}
-              placeholder="acme.com, acme.com.au"
-              onChange={(e) => setDomainText(e.target.value)}
-              onBlur={commitDomains}
-            />
-          </label>
-          <span className="field__hint">
-            Anyone mailing from these is this organisation’s. Subdomains are separate — add
-            <code> mail.acme.com</code> too if it uses one.
-          </span>
-        </>
-      )}
+      <Show when={isOrg()}>
+        <label class="field entity-fields__row">
+          <span>Domains</span>
+          <input
+            value={domainText()}
+            placeholder="acme.com, acme.com.au"
+            onInput={(e) => setDomainText(e.currentTarget.value)}
+            onBlur={commitDomains}
+          />
+        </label>
+        <span class="field__hint">
+          Anyone mailing from these is this organisation’s. Subdomains are separate — add
+          <code> mail.acme.com</code> too if it uses one.
+        </span>
+      </Show>
     </div>
   );
 }

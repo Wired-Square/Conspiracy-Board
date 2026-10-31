@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { For, Show, createMemo, createSignal } from 'solid-js';
+import { cx } from '@wired-square/kit/core';
 import type { Card, CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META } from '../../lib/kinds';
 import { cardMatches, normaliseQuery } from '../../lib/search';
 import { formatOccurredAt, dayKey } from '../../lib/dates';
 import { Modal } from '../ui/Modal';
-import { cx } from '@wired-square/kit/core';
+import { autofocus } from '../ui/autofocus';
 
 /** One reusable picture and every card that uses it — pictures are content-addressed,
  *  so a shared image (a group photo) lists all its objects. `cards[0]` is the
@@ -24,29 +25,29 @@ type Props = {
  * the board search uses (title, notes/OCR, participants, addresses, document author,
  * attachment names), plus the object's date. The value handed back is a media file.
  */
-export function ObjectPickerDialog({ objects, onPick, onClose }: Props) {
-  const [active, setActive] = useState<CardKind | 'all'>('all');
-  const [filter, setFilter] = useState('');
+export function ObjectPickerDialog(props: Props) {
+  const [active, setActive] = createSignal<CardKind | 'all'>('all');
+  const [filter, setFilter] = createSignal('');
   // The clicked thumbnail; `current` below falls back to the first shown, so the
   // initial (null) render already previews something.
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = createSignal<string | null>(null);
 
   // A shared image counts once under each kind it is linked to, so the tabs point at
   // where it can be found — the totals overlap (an image on a person and an email is
   // in both), which is fine; only "All" is the object total.
-  const counts = useMemo(() => {
+  const counts = createMemo(() => {
     const m = new Map<CardKind, number>();
-    for (const o of objects) for (const k of new Set(o.cards.map((c) => c.kind))) m.set(k, (m.get(k) ?? 0) + 1);
+    for (const o of props.objects) for (const k of new Set(o.cards.map((c) => c.kind))) m.set(k, (m.get(k) ?? 0) + 1);
     return m;
-  }, [objects]);
+  });
 
   // A typed date narrows the grid the way the board search narrows by text: match
   // against how each linked card's date reads (medium format) and its ISO day, so
   // "2011", "2011-09" or a month name all land. Built once per object set rather than
   // reformatted through Intl on every keystroke; dateless cards contribute nothing.
-  const dateText = useMemo(() => {
+  const dateText = createMemo(() => {
     const m = new Map<string, string>();
-    for (const { cards, file } of objects) {
+    for (const { cards, file } of props.objects) {
       const parts: string[] = [];
       for (const c of cards) {
         if (!c.occurredAt) continue;
@@ -55,124 +56,133 @@ export function ObjectPickerDialog({ objects, onPick, onClose }: Props) {
       if (parts.length) m.set(file, parts.join(' ').toLowerCase());
     }
     return m;
-  }, [objects]);
+  });
 
   // "All" first, then only the kinds that actually have a picture — an empty tab is
   // a dead end here (unlike the link picker, nothing is created from this one). Each
   // tab is a ready-to-render descriptor, so the JSX below has no per-kind branching.
-  const tabs = useMemo(
-    () => [
-      { key: 'all' as const, label: 'All', icon: undefined as string | undefined, count: objects.length },
-      ...CARD_KINDS.filter((k) => (counts.get(k) ?? 0) > 0).map((k) => ({
-        key: k,
-        label: KIND_META[k].label,
-        icon: KIND_META[k].icon,
-        count: counts.get(k) ?? 0,
-      })),
-    ],
-    [objects.length, counts],
-  );
+  const tabs = createMemo(() => [
+    { key: 'all' as const, label: 'All', icon: undefined as string | undefined, count: props.objects.length },
+    ...CARD_KINDS.filter((k) => (counts().get(k) ?? 0) > 0).map((k) => ({
+      key: k,
+      label: KIND_META[k].label,
+      icon: KIND_META[k].icon,
+      count: counts().get(k) ?? 0,
+    })),
+  ]);
 
-  const visible = useMemo(() => {
-    const q = normaliseQuery(filter);
-    return objects.filter(
+  const visible = createMemo(() => {
+    const q = normaliseQuery(filter());
+    const kind = active();
+    return props.objects.filter(
       (o) =>
-        (active === 'all' || o.cards.some((c) => c.kind === active)) &&
-        (o.cards.some((c) => cardMatches(c, q)) || (dateText.get(o.file)?.includes(q) ?? false)),
+        (kind === 'all' || o.cards.some((c) => c.kind === kind)) &&
+        (o.cards.some((c) => cardMatches(c, q)) || (dateText().get(o.file)?.includes(q) ?? false)),
     );
-  }, [objects, active, filter, dateText]);
+  });
 
   // Keep a live selection: the highlighted file if it survived the filter/tab, else
   // the first shown — so the preview always tracks what the grid is showing.
-  const current = visible.find((o) => o.file === selected) ?? visible[0] ?? null;
-  const rep = current?.cards[0] ?? null; // the representative object of the shown image
-  const shared = current ? current.cards.length - 1 : 0; // how many others share it
+  const current = createMemo(() => visible().find((o) => o.file === selected()) ?? visible()[0] ?? null);
 
   const choose = (file: string) => {
-    onPick(file);
-    onClose();
+    props.onPick(file);
+    props.onClose();
   };
 
   const footer = (
     <>
-      <button className="link-button" onClick={onClose}>
+      <button class="link-button" onClick={() => props.onClose()}>
         Cancel
       </button>
-      <button onClick={() => current && choose(current.file)} disabled={!current}>
+      <button onClick={() => current() && choose(current()!.file)} disabled={!current()}>
         Use image
       </button>
     </>
   );
 
   return (
-    <Modal title="Choose an object" onClose={onClose} footer={footer}>
-      <div className="object-picker">
-        <div className="entity-picker__tabs" role="tablist">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={t.key === active}
-              className={cx('entity-picker__tab', t.key === active && 'is-active')}
-              onClick={() => setActive(t.key)}
-            >
-              {t.icon && <span className="entity-picker__tab-icon">{t.icon}</span>}
-              {t.label}
-              <span className="entity-picker__tab-count">{t.count}</span>
-            </button>
-          ))}
+    <Modal title="Choose an object" onClose={props.onClose} footer={footer}>
+      <div class="object-picker">
+        <div class="entity-picker__tabs" role="tablist">
+          <For each={tabs()}>
+            {(t) => (
+              <button
+                role="tab"
+                aria-selected={t.key === active()}
+                class={cx('entity-picker__tab', t.key === active() && 'is-active')}
+                onClick={() => setActive(t.key)}
+              >
+                <Show when={t.icon}>
+                  <span class="entity-picker__tab-icon">{t.icon}</span>
+                </Show>
+                {t.label}
+                <span class="entity-picker__tab-count">{t.count}</span>
+              </button>
+            )}
+          </For>
         </div>
 
         <input
-          className="entity-picker__filter"
-          autoFocus
-          value={filter}
+          class="entity-picker__filter"
+          ref={autofocus}
+          value={filter()}
           placeholder="Filter by name, text, date…"
-          onChange={(e) => setFilter(e.target.value)}
+          onInput={(e) => setFilter(e.currentTarget.value)}
         />
 
-        {current ? (
-          <>
-            <div className="image-picker">
-              {visible.map((o) => {
-                const [first, ...rest] = o.cards;
-                return (
-                  <button
-                    key={o.file}
-                    type="button"
-                    className={cx('image-picker__item', o.file === current.file && 'is-active')}
-                    title={rest.length ? `${first.title || 'Untitled'} +${rest.length}` : first.title || 'Untitled'}
-                    aria-pressed={o.file === current.file}
-                    onClick={() => setSelected(o.file)}
-                    onDoubleClick={() => choose(o.file)}
-                  >
-                    <img src={o.src} alt={first.title} loading="lazy" />
-                    {rest.length > 0 && <span className="image-picker__count">+{rest.length}</span>}
-                  </button>
-                );
-              })}
-            </div>
+        <Show when={current()} fallback={<p class="object-picker__empty hint">Nothing matches.</p>}>
+          {(shown) => {
+            // The representative object of the shown image, and how many others share it.
+            const rep = () => shown().cards[0];
+            const shared = () => shown().cards.length - 1;
+            return (
+              <>
+                <div class="image-picker">
+                  <For each={visible()}>
+                    {(o) => {
+                      const [first, ...rest] = o.cards;
+                      return (
+                        <button
+                          type="button"
+                          class={cx('image-picker__item', o.file === shown().file && 'is-active')}
+                          title={rest.length ? `${first.title || 'Untitled'} +${rest.length}` : first.title || 'Untitled'}
+                          aria-pressed={o.file === shown().file}
+                          onClick={() => setSelected(o.file)}
+                          onDblClick={() => choose(o.file)}
+                        >
+                          <img src={o.src} alt={first.title} loading="lazy" />
+                          <Show when={rest.length > 0}>
+                            <span class="image-picker__count">+{rest.length}</span>
+                          </Show>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
 
-            <div className="object-picker__preview">
-              <img src={current.src} alt={current.cards[0].title} />
-              {rep && (
-                <span className="object-picker__caption">
-                  {KIND_META[rep.kind].icon && <span aria-hidden>{KIND_META[rep.kind].icon} </span>}
-                  {rep.title || 'Untitled'}
-                  {shared > 0 && <span className="object-picker__more"> +{shared}</span>}
-                  {rep.occurredAt && (
-                    <span className="object-picker__date">
-                      {' · '}
-                      {formatOccurredAt(rep.occurredAt, rep.occurredAtPrecision)}
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="object-picker__empty hint">Nothing matches.</p>
-        )}
+                <div class="object-picker__preview">
+                  <img src={shown().src} alt={rep().title} />
+                  <span class="object-picker__caption">
+                    <Show when={KIND_META[rep().kind].icon}>
+                      <span aria-hidden="true">{KIND_META[rep().kind].icon} </span>
+                    </Show>
+                    {rep().title || 'Untitled'}
+                    <Show when={shared() > 0}>
+                      <span class="object-picker__more"> +{shared()}</span>
+                    </Show>
+                    <Show when={rep().occurredAt}>
+                      <span class="object-picker__date">
+                        {' · '}
+                        {formatOccurredAt(rep().occurredAt!, rep().occurredAtPrecision)}
+                      </span>
+                    </Show>
+                  </span>
+                </div>
+              </>
+            );
+          }}
+        </Show>
       </div>
     </Modal>
   );
