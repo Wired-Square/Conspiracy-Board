@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Panel } from '@xyflow/react';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
@@ -11,6 +10,7 @@ import { mediaIconFor } from '../../lib/mediaIcon';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
+import { CanvasPanel } from '../canvas/Canvas';
 import { useBoardStore, useJobsStore, useMediaAuditStore } from '../../hooks/useStores';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
@@ -22,7 +22,7 @@ import { useBoardStore, useJobsStore, useMediaAuditStore } from '../../hooks/use
 // The file count moved out to the toolbar's Objects badge — which is why the audit is a
 // store (useMediaAuditStore), readable by that sibling, rather than a hook. The bulk
 // actions are still rendered here, but as a Menu positioned into the surround's top-right
-// corner (the <Panel> below) where the clusters dropdown sits on the other views.
+// corner (the <CanvasPanel> below) where the clusters dropdown sits on the other views.
 
 type Check = 'checking' | 'ok' | 'bad';
 
@@ -172,9 +172,9 @@ export function ObjectView() {
 
   return (
     <div className="record maintenance">
-      <Panel position="top-right">
+      <CanvasPanel position="top-right">
         <Menu label="Maintenance" items={maintenanceItems} />
-      </Panel>
+      </CanvasPanel>
 
       {error && <p className="modal__warn maintenance__error">{error}</p>}
       {incomplete && (

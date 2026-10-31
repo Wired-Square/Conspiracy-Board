@@ -4,7 +4,7 @@ import { isBoardKind } from './kinds';
 // The card face is 210px wide (see .evidence-card in index.css); a full card
 // plus a gutter clears any existing card by construction rather than by luck.
 // CARD_H is a fallback only — real height is content-dependent and comes from
-// React Flow's measured node; both are exported for callers that need a size
+// the canvas's measured node; both are exported for callers that need a size
 // before a node has been measured (see Toolbar's Tidy).
 export const CARD_W = 210;
 export const CARD_H = 140;

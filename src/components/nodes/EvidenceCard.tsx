@@ -1,6 +1,5 @@
 import { memo } from 'react';
-import { Handle, Position, useConnection, type NodeProps } from '@xyflow/react';
-import type { CardNode } from '../../types/reactflow';
+import type { CardNodeData } from '../../types/canvas';
 import type { Card } from '../../types/board';
 import { formatOccurredAt } from '../../lib/dates';
 import { KIND_META, isEntityKind, isGradedKind } from '../../lib/kinds';
@@ -50,9 +49,8 @@ function PolaroidFace({ card }: { card: Card }) {
       <div className="polaroid__photo">
         {image ? (
           // Not loading="lazy": WKWebView's lazy-load intersection is unreliable
-          // inside React Flow's transformed pane — images deferred and often never
-          // loaded. onlyRenderVisibleElements already keeps off-screen cards
-          // imageless, so eager here costs nothing.
+          // inside the canvas's transformed pane — images deferred and often never
+          // loaded. The canvas mounts only the cards in view, so eager costs nothing.
           <img src={image} alt="" draggable={false} decoding="async" style={reactStyle(cardImageStyle(card))} />
         ) : (
           // Empty film, not a hole: a polaroid nobody has found a photograph
@@ -117,16 +115,11 @@ function PaperFace({ card }: { card: Card }) {
   );
 }
 
-function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
+function EvidenceCardImpl({ data, selected }: { data: CardNodeData; selected: boolean }) {
   const { card } = data;
   const accent = data.clusterColor ?? NO_CLUSTER_ACCENT;
-  // Two faces, one node type. They are still the same card — same size, handles,
-  // accent, drag and selection — and six node types would widen the
-  // 'evidenceCard' literal across five files to change a stroke.
+  // Two faces, one card: the same size, nub, accent, drag and selection.
   const actor = isEntityKind(card.kind);
-  // Only let the whole-card target catch drops while a connection is in progress,
-  // so it never blocks normal clicking/dragging of the card.
-  const connecting = useConnection((c) => c.inProgress);
   return (
     <div
       // Not per kind any more: the record is not drawn here at all, and the
@@ -152,10 +145,10 @@ function EvidenceCardNodeImpl({ data, selected }: NodeProps<CardNode>) {
         </span>
       )}
       {/* Start a link from the hot corner; drop it anywhere on a card. */}
-      <Handle type="target" position={Position.Left} className={cx('card-target', connecting && 'connecting')} />
-      <Handle type="source" position={Position.Right} className="card-source" />
+      <span className="card-target" aria-hidden />
+      <span className="card-source canvas-source" aria-hidden />
     </div>
   );
 }
 
-export const EvidenceCardNode = memo(EvidenceCardNodeImpl);
+export const EvidenceCard = memo(EvidenceCardImpl);

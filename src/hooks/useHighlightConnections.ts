@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { highlight, linkDegrees, tieScaleInterner } from '../lib/highlight';
-import type { CardNode, CardNodeData, StringEdge } from '../types/reactflow';
+import type { CardNode, CardNodeData, StringEdge } from '../types/canvas';
 
 /**
  * Return display-ready nodes/edges: `hl`/`dim` classNames so the focused card
- * and its direct connections stand out, and React Flow's own `selected` flag so
- * the card draws its outline.
+ * and its direct connections stand out, and a `selected` flag so the card draws
+ * its outline.
  *
  * **The two ids are deliberately separate.** `focusId` is what the board is
  * answering questions about — hovered, or selected when nothing is hovered — and
@@ -14,9 +14,8 @@ import type { CardNode, CardNodeData, StringEdge } from '../types/reactflow';
  * way to somewhere else would throw away what you were reading.
  *
  * Both are derived here rather than stored, which keeps `selectedCardId` the
- * single source of truth — React Flow also writes `selected` onto store nodes
- * via applyNodeChanges, and deriving at render means that copy can never
- * disagree with the id the editor and timeline read.
+ * single source of truth: the flag can never disagree with the id the editor
+ * and timeline read.
  *
  * The derived participant edges are already in `edges` when this runs, treated
  * no differently from real ones: the neighbour pass un-dims the far end of any
@@ -46,7 +45,7 @@ export function useHighlightConnections(
   const degrees = useMemo(() => linkDegrees(edges), [edges]);
   // The nodes handed in are always store-derived and never carry tieScale, so
   // writing it with a bare spread would mint a fresh `data` object on every pass
-  // and defeat memo(EvidenceCardNode) for every actor on every hover and drag frame.
+  // and defeat memo(EvidenceCard) for every actor on every hover and drag frame.
   const [dataFor] = useState(() => tieScaleInterner<CardNodeData>());
   return useMemo(
     () => highlight(nodes, edges, { focusId, selectedId, matchIds, degrees }, dataFor),

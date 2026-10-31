@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ReactFlowProvider, Panel } from '@xyflow/react';
 import { BoardCanvas } from './components/BoardCanvas';
+import { CameraProvider, CanvasPanel } from './components/canvas/Canvas';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
 import { CardEditor } from './components/panels/CardEditor';
@@ -83,43 +83,43 @@ export default function App() {
 
   return (
     <div className="app">
-      <ReactFlowProvider>
+      <CameraProvider>
         {/* The drawer spans the full width now that the editor is a dialog rather
-            than a column, and must sit inside the provider (it calls useReactFlow)
-            yet outside <ReactFlow>. */}
+            than a column, and must sit inside the provider (it calls useCamera)
+            yet outside the canvas. */}
         <div className="app__main">
           <div className="app__canvas">
-            {/* Keyed on the board: React Flow's defaultViewport/fitView are
+            {/* Keyed on the board: the canvas's viewport and fit are
                 initialisation-only, so switching boards without a remount would
                 show the new cards under the old camera. The drawer's open state
                 is lazily initialised from the board's dates for the same reason. */}
             <BoardCanvas key={currentBoardId} />
-            {/* The record covers the canvas rather than replacing it. React Flow
+            {/* The record covers the canvas rather than replacing it. The canvas
                 stays mounted and measured, so the camera and the timeline's
                 pan-to-card survive a view switch — they would not across an
                 unmount, and the viewport would snap back on every toggle. */}
             {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
             {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
-            <Panel position="top-left">
+            <CanvasPanel position="top-left">
               <Toolbar />
-            </Panel>
+            </CanvasPanel>
             {/* Shown over board and record: a cluster hides its cards wherever they
                 are, and the record reads visibility through the same useVisibleCards
                 the timeline does. The Objects view has no clusters — it shows its own
                 Maintenance dropdown in this corner instead. */}
             {view !== 'object' && (
-              <Panel position="top-right">
+              <CanvasPanel position="top-right">
                 <ClusterPanel />
-              </Panel>
+              </CanvasPanel>
             )}
           </div>
           <TimelineDrawer key={currentBoardId} />
         </div>
         <CardEditor />
-        {/* All three sit outside <ReactFlow> — nested in the pane, its
+        {/* All three sit outside the canvas — nested in the pane, its
             wheel/drag handlers would eat scrolling and text selection inside the
-            forms — and outside the <Panel>, since position:fixed escapes
-            overflow but not stacking, so a backdrop inside the Panel's z-index
+            forms — and outside the panels, since position:fixed escapes
+            overflow but not stacking, so a backdrop inside a panel's z-index
             would paint against CardEditor incorrectly.
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
@@ -133,7 +133,7 @@ export default function App() {
         <BackgroundTaskIndicator />
         <UndoToast />
         <PromptHost />
-      </ReactFlowProvider>
+      </CameraProvider>
     </div>
   );
 }

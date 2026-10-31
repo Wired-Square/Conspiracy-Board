@@ -40,7 +40,7 @@ export function ConnectionsSection({ cardId }: { cardId: string }) {
                 {other?.title || '(unknown)'}
               </button>
               {/* The string's label, editable in place — its own paper tag on the
-                  board reads from this, so a rename lands there live (see flowAdapter,
+                  board reads from this, so a rename lands there live (see projection,
                   updateConnection). Blank clears it back to an unlabelled string. */}
               <input
                 className="connection-label"

@@ -1,9 +1,4 @@
-import type { Node, Edge } from '@xyflow/react';
 import type { Card, ConnectionKind, Grade } from './board';
-
-// React Flow requires node `data` to satisfy Record<string, unknown>, so these
-// must be `type` aliases (object types), not interfaces. Only the top level is
-// constrained, so a nested interface like Card is fine.
 
 /**
  * The card itself, plus the only things actually derived for the view.
@@ -27,15 +22,14 @@ export type CardNodeData = {
   tieScale?: number;
 };
 
-/**
- * One node type for every kind. They are six faces of the same card — same
- * size, handles, accent, drag, selection — differing by a header line and a
- * colour, which EvidenceCardNode already handles by interpolating the kind into
- * its class. Six node types would widen this literal across the mappers, the
- * registry, the canvas handlers, the highlight hook and the store, for that.
- * Split when a kind needs a genuinely different shape, on the evidence.
- */
-export type CardNode = Node<CardNodeData, 'evidenceCard'>;
+export type CardNode = {
+  id: string;
+  x: number;
+  y: number;
+  data: CardNodeData;
+  className?: string;
+  selected?: boolean;
+};
 
 export type StringEdgeData = {
   label?: string;
@@ -45,11 +39,15 @@ export type StringEdgeData = {
    * 'participant' marks a link derived from the addresses (see lib/roster) —
    * the app's suggestion, not a Connection anyone drew. It is a variant rather
    * than a second edge *type* because it is the same string under the same
-   * gravity; only the claim behind it differs, so only the stroke does. A type
-   * would widen the 'redString' literal across the mappers, the registry and
-   * the canvas for one dash pattern.
+   * gravity; only the claim behind it differs, so only the stroke does.
    */
   variant?: 'participant';
 };
 
-export type StringEdge = Edge<StringEdgeData, 'redString'>;
+export type StringEdge = {
+  id: string;
+  source: string;
+  target: string;
+  data: StringEdgeData;
+  className?: string;
+};
