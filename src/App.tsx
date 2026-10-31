@@ -3,7 +3,6 @@ import { BoardCanvas } from './components/BoardCanvas';
 import { CameraProvider, CanvasPanel, useCamera } from './components/canvas/Canvas';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
-import { CardEditor } from './components/panels/CardEditor';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
@@ -17,6 +16,7 @@ import { BundleExportModal } from './solid/panels/BundleExportModal';
 import { BundleImportModal } from './solid/panels/BundleImportModal';
 import { EmailImportModal } from './solid/panels/EmailImportModal';
 import { ImageEditorModal } from './solid/panels/ImageEditorModal';
+import { CardEditor } from './solid/panels/CardEditor';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -121,7 +121,7 @@ export default function App() {
           </div>
           <TimelineDrawer key={currentBoardId} />
         </div>
-        <CardEditor />
+        <SolidIsland component={CardEditor} />
         {/* All three sit outside the canvas — nested in the pane, its
             wheel/drag handlers would eat scrolling and text selection inside the
             forms — and outside the panels, since position:fixed escapes
