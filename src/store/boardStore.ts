@@ -1,7 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/board';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
-import { touches } from '../lib/connections';
 import { setLocalCallingCode } from '../lib/phone';
 import { eventFor } from '../lib/events';
 import { DEFAULT_KIND, isBoardKind, isRecordKind, viewFor } from '../lib/kinds';
@@ -17,19 +16,13 @@ import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocC
 import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
+import { drafts } from '../lib/drafts';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
 
-/**
- * What the last delete removed, so undoLastDelete can put exactly that back:
- * the card with only the string that touched it, or the cluster with each
- * member card's previous memberships (so a deleted primary restores as primary). Single level — each delete replaces this — and
- * only the affected slices, never the whole board, so holding one is bytes.
- */
-export type DeleteSnapshot =
-  | { kind: 'card'; card: Card; connections: Connection[] }
-  | { kind: 'cluster'; cluster: Cluster; memberships: Map<string, string[]> };
+/** A card or cluster just deleted, while that delete is still the last edit. */
+export type Deleted = { kind: 'card' | 'cluster'; id: string; label: string };
 
 // Sorts after any ISO timestamp, so undated drafts land at the end of a batch.
 const UNDATED_SORTS_LAST = '￿';
@@ -67,8 +60,11 @@ function newConnection(source: string, target: string, label?: string): Connecti
   return { id: newEdgeId(), source, target, kind: 'red-string', ...(trimmed ? { label: trimmed } : {}) };
 }
 
-/** `rows` with `upserts` laid in (a known id replaced in place, a new one appended) and `removed` dropped. */
-function patchRows<T extends { id: string }>(rows: T[], upserts: T[], removed: string[]): T[] {
+/**
+ * `rows` with `upserts` laid in (a known id replaced in place, a new one appended) and
+ * `removed` dropped, then put in `order` when an undo or redo gives one.
+ */
+function patchRows<T extends { id: string }>(rows: T[], upserts: T[], removed: string[], order?: string[]): T[] {
   if (!upserts.length && !removed.length) return rows;
   const gone = new Set(removed);
   const fresh = new Map(upserts.map((r) => [r.id, r]));
@@ -79,7 +75,10 @@ function patchRows<T extends { id: string }>(rows: T[], upserts: T[], removed: s
       fresh.delete(r.id);
       return next ?? r;
     });
-  return [...kept, ...fresh.values()];
+  const next = [...kept, ...fresh.values()];
+  if (!order) return next;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return next.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
 }
 
 export type BoardState = {
@@ -198,16 +197,16 @@ export type BoardState = {
    * that isn't itself an event.
    */
   setIsEvent: (cardId: string, on: boolean) => void;
-  /** Remove a card, and every piece of string tied to it. Undoable — once. */
+  /** Remove a card, and every piece of string tied to it. */
   deleteCard: (id: string) => void;
-  /**
-   * The last deletion, restorable until the next delete or a board switch.
-   * The toast offers it and Cmd+Z takes it (see startUndoShortcut); hiding the
-   * toast does not clear it.
-   */
-  lastDelete: DeleteSnapshot | null;
-  /** Put back what the last delete removed. See DeleteSnapshot. */
-  undoLastDelete: () => void;
+  /** What the toast offers to undo; cleared by the next content edit. */
+  lastDeleted: Deleted | null;
+  /** The shell's undo log for the open board (session.rs), as its last change reported it. */
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Commit any pending text draft, then step the shell's log back or forward. */
+  undo: () => void;
+  redo: () => void;
   toggleCluster: (id: string) => void;
   addCluster: (label?: string) => string;
   updateCluster: (id: string, patch: ClusterPatch) => void;
@@ -249,6 +248,16 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     );
   };
 
+  /** Send a card patch, unless the card is gone or already says so. */
+  const patchCard = (id: string, patch: CardPatch, command: typeof doc.updateCard) => {
+    // A no-op for a card that is gone: the editor's title/notes commits are
+    // debounced, so one can land after deleteCard took the card away.
+    const current = get().cards.find((c) => c.id === id);
+    if (!current) return;
+    if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
+    send((board) => command(board, id, patch));
+  };
+
   const hydrate = (board: Board) => {
     // Phone normalisation reads a module-level locale (lib/phone); a board carries
     // its own, so set it before any card's numbers are matched or shown.
@@ -260,8 +269,10 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       connections: board.connections,
       viewport: board.viewport,
       selectedCardId: null,
-      // A snapshot from one board must not be restorable into another.
-      lastDelete: null,
+      // A fresh session starts a fresh log.
+      lastDeleted: null,
+      canUndo: false,
+      canRedo: false,
       // A new board opens on the board, whatever the last one was showing.
       view: 'board',
       // The toolbar isn't remounted on a board switch, so a stale query would
@@ -303,7 +314,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     migrated.cards.forEach((card, i) => {
       if (card === board.cards[i]) return;
       // Housekeeping: a board switched away from meanwhile converts on its next open.
-      doc.updateCard(id, card.id, { imageFile: card.imageFile, imageUrl: null }).catch(() => {});
+      doc.refreshCard(id, card.id, { imageFile: card.imageFile, imageUrl: null }).catch(() => {});
     });
   };
 
@@ -349,7 +360,9 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     viewport: undefined,
     currentBoardId: null,
     selectedCardId: null,
-    lastDelete: null,
+    lastDeleted: null,
+    canUndo: false,
+    canRedo: false,
     view: 'board',
     searchQuery: '',
     lastError: null,
@@ -579,7 +592,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // Email: re-parse the .eml for attachments the import may have dropped.
       if (card.email?.emlFile) {
         const patch = await recoverCardAttachments(card);
-        if (patch) get().updateCard(id, patch);
+        if (patch) patchCard(id, patch, doc.refreshCard);
         return;
       }
 
@@ -591,7 +604,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         if (!draft) return;
         const patch: Partial<Card> = { imageMeta: draft.imageMeta ?? null };
         if (!card.notes.trim() && draft.notes) patch.notes = draft.notes;
-        get().updateCard(id, patch);
+        patchCard(id, patch, doc.refreshCard);
         return;
       }
 
@@ -601,7 +614,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         const read = (await storage.mediaCardDraft(card.document.file))?.document;
         if (!read) return;
         const { file: _file, name: _name, mime: _mime, ...props } = read;
-        get().updateCard(id, { document: { ...card.document, ...props } });
+        patchCard(id, { document: { ...card.document, ...props } }, doc.refreshCard);
       }
     },
 
@@ -652,12 +665,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     updateCard(id, patch) {
-      // A no-op for a card that is gone: the editor's title/notes commits are
-      // debounced, so one can land after deleteCard took the card away.
-      const current = get().cards.find((c) => c.id === id);
-      if (!current) return;
-      if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
-      send((board) => doc.updateCard(board, id, patch));
+      patchCard(id, patch, doc.updateCard);
     },
 
     setIsEvent(cardId, on) {
@@ -692,46 +700,26 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // drawn between two cards; one of them gone, it is not a claim any more. The
       // editor counts these first (see touches) so the user is told what they are
       // about to lose rather than finding out later.
-      const { cards, connections, selectedCardId } = get();
+      const { cards, selectedCardId } = get();
       const card = cards.find((c) => c.id === id);
       if (!card) return;
       set({
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
-        // The card and exactly the string it took with it, for undo.
-        lastDelete: { kind: 'card', card, connections: connections.filter((c) => touches(c, id)) },
+        lastDeleted: { kind: 'card', id, label: card.title },
       });
       send((board) => doc.deleteCards(board, [id]));
     },
 
-    undoLastDelete() {
-      const snap = get().lastDelete;
-      if (!snap) return;
-      set({ lastDelete: null });
+    undo() {
+      drafts.flushAll();
+      send(doc.undo);
+    },
 
-      if (snap.kind === 'card') {
-        // The board may have moved on since the delete: a cluster it was in may
-        // be gone, and so may the card at a string's far end. Restore what
-        // still holds and drop the rest, rather than resurrecting dangling ids.
-        const clusterIds = new Set(get().clusters.map((c) => c.id));
-        const card = {
-          ...snap.card,
-          clusterIds: snap.card.clusterIds.filter((x) => clusterIds.has(x)),
-        };
-        const present = new Set([...get().cards.map((c) => c.id), card.id]);
-        const connections = snap.connections.filter(
-          (c) => present.has(c.source) && present.has(c.target),
-        );
-        send((board) => doc.addCards(board, [card], connections));
-      } else {
-        // Memberships restore as they were at deletion — an edit made in
-        // between is overwritten. Acceptable for a single-level undo. The cluster
-        // returns at the end of the list, not its old place, until undo moves to
-        // the shell.
-        send((board) => doc.addCluster(board, snap.cluster));
-        for (const [id, was] of snap.memberships) get().updateCard(id, { clusterIds: was });
-      }
+    redo() {
+      drafts.flushAll();
+      send(doc.redo);
     },
 
     toggleCluster(id) {
@@ -757,14 +745,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     deleteCluster(id) {
       const cluster = get().clusters.find((c) => c.id === id);
       if (!cluster) return;
-      // Each member's previous memberships, order included, for undo; the shell
-      // drops the membership from the cards themselves.
-      const memberships = new Map(
-        get()
-          .cards.filter((c) => c.clusterIds.includes(id))
-          .map((c) => [c.id, c.clusterIds]),
-      );
-      set({ lastDelete: { kind: 'cluster', cluster, memberships } });
+      set({ lastDeleted: { kind: 'cluster', id, label: cluster.label } });
       send((board) => doc.deleteCluster(board, id));
     },
 
@@ -789,10 +770,16 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       const s = get();
       if (change.boardId !== s.currentBoardId) return;
       if (change.meta) setLocalCallingCode(change.meta.countryCode ?? '+61');
+      const deleted = s.lastDeleted;
+      const stillLast =
+        !deleted || !change.meta || [...change.removedCards, ...change.removedClusters].includes(deleted.id);
       set({
-        cards: patchRows(s.cards, change.cards, change.removedCards),
-        connections: patchRows(s.connections, change.connections, change.removedConnections),
-        clusters: patchRows(s.clusters, change.clusters, change.removedClusters),
+        cards: patchRows(s.cards, change.cards, change.removedCards, change.cardOrder),
+        connections: patchRows(s.connections, change.connections, change.removedConnections, change.connectionOrder),
+        clusters: patchRows(s.clusters, change.clusters, change.removedClusters, change.clusterOrder),
+        canUndo: change.canUndo,
+        canRedo: change.canRedo,
+        ...(stillLast ? {} : { lastDeleted: null }),
         ...(change.meta ? { meta: change.meta } : {}),
         ...(change.viewport ? { viewport: change.viewport } : {}),
         ...(s.selectedCardId && change.removedCards.includes(s.selectedCardId) ? { selectedCardId: null } : {}),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { drafts } from '../lib/drafts';
 
 const DRAFT_COMMIT_MS = 300;
 
@@ -18,6 +19,7 @@ export function useDraft<T>(value: T, commit: (draft: T) => void): [T, (draft: T
 
   const flush = useCallback(() => {
     clearTimeout(timer.current);
+    drafts.release(flush);
     const staged = pending.current;
     pending.current = null;
     if (staged) latestCommit.current(staged.draft);
@@ -27,6 +29,7 @@ export function useDraft<T>(value: T, commit: (draft: T) => void): [T, (draft: T
     (next: T) => {
       setDraft(next);
       pending.current = { draft: next };
+      drafts.hold(flush);
       clearTimeout(timer.current);
       timer.current = setTimeout(flush, DRAFT_COMMIT_MS);
     },

@@ -7,6 +7,7 @@ import type { Viewport } from "./Viewport";
 
 /**
  * One edit to the open board. `meta` is present when the edit touched content, which
- * is what restamps `updatedAt`; a viewport-only edit carries `viewport` alone.
+ * is what restamps `updatedAt`; a viewport-only edit carries `viewport` alone. An
+ * `*_order` is present when an undo or redo puts rows back where they were.
  */
-export type DocChanged = { boardId: string, meta?: BoardMeta, viewport?: Viewport, cards: Array<Card>, connections: Array<Connection>, clusters: Array<Cluster>, removedCards: Array<string>, removedConnections: Array<string>, removedClusters: Array<string>, };
+export type DocChanged = { boardId: string, meta?: BoardMeta, viewport?: Viewport, cards: Array<Card>, connections: Array<Connection>, clusters: Array<Cluster>, removedCards: Array<string>, removedConnections: Array<string>, removedClusters: Array<string>, cardOrder?: Array<string>, connectionOrder?: Array<string>, clusterOrder?: Array<string>, canUndo: boolean, canRedo: boolean, };

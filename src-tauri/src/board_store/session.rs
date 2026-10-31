@@ -1,7 +1,7 @@
 //! The open board's document. Rust holds it, and each command edits it in one
 //! transaction on the rows it touches, then broadcasts `doc:changed` with the new rows.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,6 +19,7 @@ use crate::library_index::LibraryDb;
 use crate::schema::{parse_card, Board, BoardMeta, Card, Cluster, Connection, Vec2, Viewport, BOARD_VERSION};
 
 const DOC_CHANGED: &str = "doc:changed";
+const UNDO_DEPTH: usize = 100;
 
 #[derive(Default)]
 pub struct OpenBoard(Mutex<Option<Session>>);
@@ -38,7 +39,8 @@ impl OpenBoard {
 }
 
 /// One edit to the open board. `meta` is present when the edit touched content, which
-/// is what restamps `updatedAt`; a viewport-only edit carries `viewport` alone.
+/// is what restamps `updatedAt`; a viewport-only edit carries `viewport` alone. An
+/// `*_order` is present when an undo or redo puts rows back where they were.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +58,17 @@ pub struct DocChanged {
   pub removed_cards: Vec<String>,
   pub removed_connections: Vec<String>,
   pub removed_clusters: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  #[cfg_attr(test, ts(optional))]
+  pub card_order: Option<Vec<String>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  #[cfg_attr(test, ts(optional))]
+  pub connection_order: Option<Vec<String>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  #[cfg_attr(test, ts(optional))]
+  pub cluster_order: Option<Vec<String>>,
+  pub can_undo: bool,
+  pub can_redo: bool,
 }
 
 impl DocChanged {
@@ -112,6 +125,17 @@ pub struct Session {
   board_id: String,
   conn: rusqlite::Connection,
   board: Board,
+  undo: Vec<DocChanged>,
+  redo: Vec<DocChanged>,
+}
+
+#[derive(Clone, Copy)]
+enum Logged {
+  Edit,
+  Undo,
+  Redo,
+  /// An edit the user didn't make (a migration, a re-read of a file), which Cmd+Z must not revert.
+  Unlogged,
 }
 
 type Outcome = Result<Option<DocChanged>, String>;
@@ -128,7 +152,7 @@ impl Session {
       .execute_batch("PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;")
       .map_err(|e| format!("Could not prepare the board database: {e}"))?;
     let board = reassemble_board(&conn)?;
-    Ok(Self { board_id, conn, board })
+    Ok(Self { board_id, conn, board, undo: Vec::new(), redo: Vec::new() })
   }
 
   fn card(&self, id: &str) -> Option<&Card> {
@@ -139,10 +163,10 @@ impl Session {
     self.card(id).is_some()
   }
 
-  fn update_card(&mut self, id: &str, patch: Map<String, Value>) -> Outcome {
+  fn update_card(&mut self, id: &str, patch: Map<String, Value>, logged: Logged) -> Outcome {
     let Some(card) = self.card(id) else { return Ok(None) };
     let next = patched(card, patch, parse_card)?;
-    self.commit(DocChanged { cards: changed(card, next), ..Default::default() })
+    self.write_change(DocChanged { cards: changed(card, next), ..Default::default() }, logged)
   }
 
   fn move_cards(&mut self, moves: &[CardMove]) -> Outcome {
@@ -252,13 +276,61 @@ impl Session {
     self.commit(DocChanged { viewport, ..Default::default() })
   }
 
+  fn undo(&mut self) -> Outcome {
+    self.replay(Logged::Undo)
+  }
+
+  fn redo(&mut self) -> Outcome {
+    self.replay(Logged::Redo)
+  }
+
+  fn replay(&mut self, logged: Logged) -> Outcome {
+    let Some(step) = self.steps(logged).pop() else { return Ok(None) };
+    self.write_change(step.clone(), logged).inspect_err(|_| self.steps(logged).push(step))
+  }
+
+  fn steps(&mut self, logged: Logged) -> &mut Vec<DocChanged> {
+    match logged {
+      Logged::Redo => &mut self.redo,
+      Logged::Edit | Logged::Undo | Logged::Unlogged => &mut self.undo,
+    }
+  }
+
+  /// The change that puts back what `change` replaces, removes or adds.
+  fn inverse(&self, change: &DocChanged) -> DocChanged {
+    let (cards, removed_cards, card_order) = invert(&self.board.cards, &change.cards, &change.removed_cards);
+    let (connections, removed_connections, connection_order) =
+      invert(&self.board.connections, &change.connections, &change.removed_connections);
+    let (clusters, removed_clusters, cluster_order) =
+      invert(&self.board.clusters, &change.clusters, &change.removed_clusters);
+    DocChanged {
+      meta: change.meta.as_ref().map(|_| self.board.meta.clone()),
+      cards,
+      connections,
+      clusters,
+      removed_cards,
+      removed_connections,
+      removed_clusters,
+      card_order,
+      connection_order,
+      cluster_order,
+      ..Default::default()
+    }
+  }
+
+  fn commit(&mut self, change: DocChanged) -> Outcome {
+    self.write_change(change, Logged::Edit)
+  }
+
   /// Writes the change in one transaction, then applies it to the held board, so a
   /// failed write leaves both as they were. An empty change writes and emits nothing.
-  fn commit(&mut self, mut change: DocChanged) -> Outcome {
+  /// A content change logs its inverse: an edit or redo for undo, an undo for redo.
+  fn write_change(&mut self, mut change: DocChanged, logged: Logged) -> Outcome {
     let content = change.touches_content();
     if !content && change.viewport.is_none() {
       return Ok(None);
     }
+    let inverse = (content && !matches!(logged, Logged::Unlogged)).then(|| self.inverse(&change));
     if content {
       let mut meta = change.meta.take().unwrap_or_else(|| self.board.meta.clone());
       meta.updated_at = now_utc();
@@ -268,6 +340,9 @@ impl Session {
     apply(&mut next.cards, &change.cards, &change.removed_cards);
     apply(&mut next.connections, &change.connections, &change.removed_connections);
     apply(&mut next.clusters, &change.clusters, &change.removed_clusters);
+    reorder(&mut next.cards, change.card_order.as_deref());
+    reorder(&mut next.connections, change.connection_order.as_deref());
+    reorder(&mut next.clusters, change.cluster_order.as_deref());
     if let Some(meta) = &change.meta {
       next.meta = meta.clone();
     }
@@ -300,7 +375,20 @@ impl Session {
     tx.commit().map_err(|e| format!("Could not save the edit: {e}"))?;
 
     self.board = next;
+    let stale = |step: &DocChanged| shares_rows(step, &change);
+    if matches!(logged, Logged::Unlogged) && self.undo.iter().chain(&self.redo).any(stale) {
+      self.undo.clear();
+      self.redo.clear();
+    }
+    if let Some(inverse) = inverse {
+      if matches!(logged, Logged::Edit) {
+        self.redo.clear();
+      }
+      push_capped(if matches!(logged, Logged::Undo) { &mut self.redo } else { &mut self.undo }, inverse);
+    }
     change.board_id = self.board_id.clone();
+    change.can_undo = !self.undo.is_empty();
+    change.can_redo = !self.redo.is_empty();
     Ok(Some(change))
   }
 }
@@ -334,6 +422,49 @@ fn apply<T: Row>(rows: &mut Vec<T>, upserts: &[T], removed: &[String]) {
       None => rows.push(upsert.clone()),
     }
   }
+}
+
+/// The prior rows of the ids `upserts` and `removed` touch, the ids `upserts` adds,
+/// and the prior order when rows come back.
+fn invert<T: Row>(rows: &[T], upserts: &[T], removed: &[String]) -> (Vec<T>, Vec<String>, Option<Vec<String>>) {
+  let prior = |id: &str| rows.iter().find(|r| r.id() == id);
+  let mut restored = Vec::new();
+  let mut added = Vec::new();
+  for row in upserts {
+    match prior(row.id()) {
+      Some(was) => restored.push(was.clone()),
+      None => added.push(row.id().to_string()),
+    }
+  }
+  restored.extend(removed.iter().filter_map(|id| prior(id)).cloned());
+  let order = (!removed.is_empty()).then(|| rows.iter().map(|r| r.id().to_string()).collect());
+  (restored, added, order)
+}
+
+fn row_ids(change: &DocChanged) -> impl Iterator<Item = &str> {
+  let upserted = change.cards.iter().map(Row::id);
+  let upserted = upserted.chain(change.connections.iter().map(Row::id)).chain(change.clusters.iter().map(Row::id));
+  let removed = change.removed_cards.iter().chain(&change.removed_connections).chain(&change.removed_clusters);
+  upserted.chain(removed.map(String::as_str))
+}
+
+fn shares_rows(a: &DocChanged, b: &DocChanged) -> bool {
+  let ids: HashSet<&str> = row_ids(a).collect();
+  row_ids(b).any(|id| ids.contains(id))
+}
+
+fn reorder<T: Row>(rows: &mut [T], order: Option<&[String]>) {
+  if let Some(order) = order {
+    let rank: HashMap<&str, usize> = order.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
+    rows.sort_by_key(|r| rank.get(r.id()).copied().unwrap_or(usize::MAX));
+  }
+}
+
+fn push_capped(steps: &mut Vec<DocChanged>, step: DocChanged) {
+  if steps.len() == UNDO_DEPTH {
+    steps.remove(0);
+  }
+  steps.push(step);
 }
 
 /// The order row is rewritten only when the set of rows changed.
@@ -410,7 +541,20 @@ pub fn update_card(
   id: String,
   patch: Map<String, Value>,
 ) -> Result<(), String> {
-  edit(&app, &open, &library, &board_id, |s| s.update_card(&id, patch))
+  edit(&app, &open, &library, &board_id, |s| s.update_card(&id, patch, Logged::Edit))
+}
+
+/// `update_card` for an edit the user didn't make, kept off the undo log.
+#[tauri::command(async)]
+pub fn refresh_card(
+  app: AppHandle,
+  open: State<OpenBoard>,
+  library: State<LibraryDb>,
+  board_id: String,
+  id: String,
+  patch: Map<String, Value>,
+) -> Result<(), String> {
+  edit(&app, &open, &library, &board_id, |s| s.update_card(&id, patch, Logged::Unlogged))
 }
 
 #[tauri::command(async)]
@@ -524,6 +668,16 @@ pub fn set_meta(
   patch: MetaPatch,
 ) -> Result<(), String> {
   edit(&app, &open, &library, &board_id, |s| s.set_meta(patch))
+}
+
+#[tauri::command(async)]
+pub fn undo(app: AppHandle, open: State<OpenBoard>, library: State<LibraryDb>, board_id: String) -> Result<(), String> {
+  edit(&app, &open, &library, &board_id, Session::undo)
+}
+
+#[tauri::command(async)]
+pub fn redo(app: AppHandle, open: State<OpenBoard>, library: State<LibraryDb>, board_id: String) -> Result<(), String> {
+  edit(&app, &open, &library, &board_id, Session::redo)
 }
 
 #[tauri::command(async)]

@@ -272,8 +272,8 @@ function EventToggle({ card }: { card: Card }) {
 }
 
 /**
- * Delete, confirmed in place. There is a single-level undo behind it now (the
- * toast, and Cmd+Z — see undoLastDelete), but one chance is still worth a
+ * Delete, confirmed in place. There is an undo behind it now (the toast, and
+ * Cmd+Z — see startUndoShortcut), but one chance is still worth a
  * confirm on the only destructive control on the panel.
  *
  * The confirm counts the string first. Deleting a card takes its connections

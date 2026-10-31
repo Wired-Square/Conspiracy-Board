@@ -111,7 +111,7 @@ fn opening_a_board_without_a_database_fails_without_making_one() {
 #[test]
 fn update_card_writes_only_its_row_and_the_stamp() {
   let mut f = Fixture::new("update");
-  let change = f.session.update_card("a", patch(json!({ "title": "Renamed" }))).unwrap().unwrap();
+  let change = f.session.update_card("a", patch(json!({ "title": "Renamed" })), Logged::Edit).unwrap().unwrap();
   // The card row, then the version and meta rows.
   assert_eq!(f.writes(), 3);
   assert_eq!(change.board_id, "brd_test");
@@ -130,8 +130,8 @@ fn update_card_writes_only_its_row_and_the_stamp() {
 #[test]
 fn an_edit_that_changes_nothing_neither_stamps_nor_emits() {
   let mut f = Fixture::new("noop");
-  assert_eq!(f.session.update_card("a", patch(json!({ "title": "A" }))).unwrap(), None);
-  assert_eq!(f.session.update_card("gone", patch(json!({ "title": "X" }))).unwrap(), None);
+  assert_eq!(f.session.update_card("a", patch(json!({ "title": "A" })), Logged::Edit).unwrap(), None);
+  assert_eq!(f.session.update_card("gone", patch(json!({ "title": "X" })), Logged::Edit).unwrap(), None);
   assert_eq!(f.session.move_cards(&[CardMove { id: "a".into(), position: Vec2 { x: 0.0, y: 0.0 } }]).unwrap(), None);
   assert_eq!(f.session.update_cluster("g1", patch(json!({ "label": "One" }))).unwrap(), None);
   assert_eq!(f.session.update_cluster("gone", patch(json!({ "label": "X" }))).unwrap(), None);
@@ -159,7 +159,7 @@ fn the_viewport_persists_without_restamping() {
 #[test]
 fn a_pan_after_an_edit_keeps_the_edit_stamp() {
   let mut f = Fixture::new("pan-after-edit");
-  let edit = f.session.update_card("a", patch(json!({ "title": "Renamed" }))).unwrap().unwrap();
+  let edit = f.session.update_card("a", patch(json!({ "title": "Renamed" })), Logged::Edit).unwrap().unwrap();
   f.session.set_viewport(Viewport { x: 5.0, y: 6.0, zoom: 2.0 }).unwrap();
   assert_eq!(f.on_disk().meta.updated_at, edit.meta.unwrap().updated_at);
 }
@@ -269,9 +269,9 @@ fn set_meta_changes_the_title_and_stamps() {
 #[test]
 fn a_patch_is_validated_whole_and_keeps_the_id() {
   let mut f = Fixture::new("patch");
-  assert!(f.session.update_card("a", patch(json!({ "kind": "suspect" }))).is_err());
-  assert!(f.session.update_card("a", patch(json!({ "id": "z" }))).is_err());
-  assert!(f.session.update_card("a", patch(json!({ "occurredAt": "2026-01-01T00:00:00+10:00" }))).is_err());
+  assert!(f.session.update_card("a", patch(json!({ "kind": "suspect" })), Logged::Edit).is_err());
+  assert!(f.session.update_card("a", patch(json!({ "id": "z" })), Logged::Edit).is_err());
+  assert!(f.session.update_card("a", patch(json!({ "occurredAt": "2026-01-01T00:00:00+10:00" })), Logged::Edit).is_err());
   assert!(f.session.update_connection("e1", patch(json!({ "target": "gone" }))).is_err());
   assert_eq!(f.writes(), 0);
   let change = f.session.update_connection("e1", patch(json!({ "label": "knows", "grade": "asserted" }))).unwrap().unwrap();
@@ -285,7 +285,7 @@ fn media_refs_follow_the_cards() {
   assert_eq!(f.refs(), ["c.png", "shared.png"]);
   f.session.delete_cards(&["c".into()]).unwrap().unwrap();
   // d still holds shared.png.
-  f.session.update_card("b", patch(json!({ "imageFile": "new.png" }))).unwrap().unwrap();
+  f.session.update_card("b", patch(json!({ "imageFile": "new.png" })), Logged::Edit).unwrap().unwrap();
   assert_eq!(f.refs(), ["new.png", "shared.png"]);
   f.session.delete_cards(&["d".into()]).unwrap().unwrap();
   assert_eq!(f.refs(), ["new.png"]);
@@ -314,4 +314,150 @@ fn closing_ignores_another_boards_id() {
   assert!(open.lock().unwrap().is_some());
   open.close("brd_test").unwrap();
   assert!(open.lock().unwrap().is_none());
+}
+
+fn unstamped(mut board: Board) -> Board {
+  board.meta.updated_at = String::new();
+  board
+}
+
+type Edit = fn(&mut Session) -> Outcome;
+
+#[test]
+fn every_kind_of_edit_undoes_and_redoes_exactly() {
+  let edits: [(&str, Edit); 12] = [
+    ("update_card", |s| s.update_card("a", patch(json!({ "title": "Renamed", "imageFile": "new.png" })), Logged::Edit)),
+    ("move_cards", |s| s.move_cards(&[CardMove { id: "b".into(), position: Vec2 { x: 9.0, y: 9.0 } }])),
+    ("add_cards", |s| s.add_cards(vec![card("x")], vec![link("e3", "x", "a")])),
+    ("add_connections", |s| s.add_cards(vec![], vec![link("e3", "c", "a")])),
+    ("delete_card", |s| s.delete_cards(&["b".into()])),
+    ("delete_cards", |s| s.delete_cards(&["a".into(), "c".into()])),
+    ("update_connection", |s| s.update_connection("e1", patch(json!({ "label": "knows" })))),
+    ("delete_connections", |s| s.delete_connections(&["e1".into()])),
+    ("add_cluster", |s| s.add_cluster(Cluster { id: "g3".into(), label: "Three".into(), color: "#f00".into(), visible: true })),
+    ("update_cluster", |s| s.update_cluster("g2", patch(json!({ "visible": false })))),
+    ("delete_cluster", |s| s.delete_cluster("g1")),
+    ("set_meta", |s| s.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) })),
+  ];
+  for (name, edit) in edits {
+    let mut f = Fixture::new(&format!("undo-{name}"));
+    let refs = f.refs();
+    edit(&mut f.session).unwrap().unwrap();
+    let edited = (unstamped(f.session.board.clone()), f.refs());
+
+    let undone = f.session.undo().unwrap().unwrap();
+    assert_eq!(unstamped(f.on_disk()), unstamped(fixture()), "{name}");
+    assert_eq!(f.on_disk(), f.session.board, "{name}");
+    assert_eq!(f.refs(), refs, "{name}");
+    assert_ne!(undone.meta.unwrap().updated_at, STAMPED_BEFORE, "{name}");
+    assert!(!undone.can_undo && undone.can_redo, "{name}");
+
+    let redone = f.session.redo().unwrap().unwrap();
+    assert_eq!((unstamped(f.on_disk()), f.refs()), edited, "{name}");
+    assert!(redone.can_undo && !redone.can_redo, "{name}");
+    f.session.undo().unwrap().unwrap();
+    assert_eq!(unstamped(f.on_disk()), unstamped(fixture()), "{name}");
+  }
+}
+
+#[test]
+fn undoing_a_delete_puts_rows_back_in_their_old_places_and_says_so() {
+  let mut f = Fixture::new("undo-order");
+  f.session.delete_cluster("g1").unwrap().unwrap();
+  f.session.delete_cards(&["b".into()]).unwrap().unwrap();
+  let card_back = f.session.undo().unwrap().unwrap();
+  assert_eq!(card_back.card_order.as_deref(), Some(&["a", "b", "c", "d"].map(String::from)[..]));
+  assert_eq!(ids(&card_back.connections), ["e1", "e2"]);
+  let cluster_back = f.session.undo().unwrap().unwrap();
+  assert_eq!(cluster_back.cluster_order.as_deref(), Some(&["g1", "g2"].map(String::from)[..]));
+  assert_eq!(f.on_disk().cards[0].cluster_ids, ["g1", "g2"]);
+  let event = serde_json::to_value(f.session.add_cluster(Cluster { id: "g3".into(), label: "".into(), color: "".into(), visible: true }).unwrap().unwrap()).unwrap();
+  assert!(event.get("clusterOrder").is_none());
+}
+
+#[test]
+fn undo_keeps_the_last_hundred_steps() {
+  let mut f = Fixture::new("undo-depth");
+  for i in 1..=UNDO_DEPTH + 1 {
+    f.session.move_cards(&[CardMove { id: "a".into(), position: Vec2 { x: i as f64, y: 0.0 } }]).unwrap().unwrap();
+  }
+  for _ in 0..UNDO_DEPTH {
+    f.session.undo().unwrap().unwrap();
+  }
+  assert_eq!(f.session.undo().unwrap(), None);
+  assert_eq!(f.on_disk().cards[0].position, Vec2 { x: 1.0, y: 0.0 });
+}
+
+#[test]
+fn a_new_edit_clears_redo() {
+  let mut f = Fixture::new("undo-clears-redo");
+  f.session.update_card("a", patch(json!({ "title": "One" })), Logged::Edit).unwrap().unwrap();
+  f.session.undo().unwrap().unwrap();
+  let change = f.session.update_card("b", patch(json!({ "title": "Two" })), Logged::Edit).unwrap().unwrap();
+  assert!(change.can_undo && !change.can_redo);
+  assert_eq!(f.session.redo().unwrap(), None);
+  assert_eq!(f.on_disk().cards[0].title, "A");
+}
+
+#[test]
+fn the_viewport_and_no_op_edits_are_never_logged() {
+  let mut f = Fixture::new("undo-not-logged");
+  f.session.update_card("a", patch(json!({ "title": "Renamed" })), Logged::Edit).unwrap().unwrap();
+  let panned = f.session.set_viewport(Viewport { x: 5.0, y: 6.0, zoom: 2.0 }).unwrap().unwrap();
+  assert!(panned.can_undo);
+  assert_eq!(f.session.update_card("a", patch(json!({ "title": "Renamed" })), Logged::Edit).unwrap(), None);
+  assert_eq!(f.session.delete_cards(&["gone".into()]).unwrap(), None);
+  f.session.undo().unwrap().unwrap();
+  let disk = f.on_disk();
+  assert_eq!(disk.cards[0].title, "A");
+  assert_eq!(disk.viewport, Some(Viewport { x: 5.0, y: 6.0, zoom: 2.0 }));
+  assert_eq!(f.session.undo().unwrap(), None);
+}
+
+#[test]
+fn a_fresh_session_has_nothing_to_undo() {
+  let open = OpenBoard::default();
+  let f = Fixture::new("undo-session");
+  let edit = |open: &OpenBoard, notes: &str| {
+    open.lock().unwrap().as_mut().unwrap().update_card("a", patch(json!({ "notes": notes })), Logged::Edit).unwrap().unwrap();
+  };
+  let undo = |open: &OpenBoard| open.lock().unwrap().as_mut().unwrap().undo().unwrap();
+
+  *open.lock().unwrap() = Some(Session::open(&f.path, "brd_test".into()).unwrap());
+  edit(&open, "one");
+  open.close("brd_test").unwrap();
+  *open.lock().unwrap() = Some(Session::open(&f.path, "brd_test".into()).unwrap());
+  assert_eq!(undo(&open), None);
+
+  edit(&open, "two");
+  *open.lock().unwrap() = Some(Session::open(&f.path, "brd_other".into()).unwrap());
+  assert_eq!(undo(&open), None);
+}
+
+#[test]
+fn an_unlogged_edit_is_not_undone_and_leaves_the_users_steps() {
+  let mut f = Fixture::new("unlogged-apart");
+  f.session.update_card("a", patch(json!({ "title": "Renamed" })), Logged::Edit).unwrap().unwrap();
+  let ocr = f.session.update_card("b", patch(json!({ "notes": "OCR text" })), Logged::Unlogged).unwrap().unwrap();
+  assert!(ocr.can_undo);
+  f.session.undo().unwrap().unwrap();
+  let disk = f.on_disk();
+  assert_eq!((disk.cards[0].title.as_str(), disk.cards[1].notes.as_str()), ("A", "OCR text"));
+  assert_eq!(f.session.undo().unwrap(), None);
+  f.session.redo().unwrap().unwrap();
+  assert_eq!(f.on_disk().cards[0].title, "Renamed");
+}
+
+#[test]
+fn an_unlogged_edit_to_a_logged_row_clears_both_stacks() {
+  let mut f = Fixture::new("unlogged-overlap");
+  f.session.update_card("a", patch(json!({ "title": "One" })), Logged::Edit).unwrap().unwrap();
+  f.session.update_card("b", patch(json!({ "title": "Two" })), Logged::Edit).unwrap().unwrap();
+  f.session.undo().unwrap().unwrap();
+  let ocr = f.session.update_card("a", patch(json!({ "notes": "OCR text" })), Logged::Unlogged).unwrap().unwrap();
+  assert!(!ocr.can_undo && !ocr.can_redo);
+  assert_eq!(f.session.undo().unwrap(), None);
+  assert_eq!(f.session.redo().unwrap(), None);
+  let a = &f.on_disk().cards[0];
+  assert_eq!((a.title.as_str(), a.notes.as_str()), ("One", "OCR text"));
 }

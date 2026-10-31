@@ -30,6 +30,9 @@ export const doc = {
   open: (boardId: string) => inOrder<Board>('open_board_session', { boardId }),
   updateCard: (boardId: string, id: string, patch: CardPatch) =>
     inOrder('update_card', { boardId, id, patch: clearing(patch) }),
+  /** An edit the user didn't make (a migration, a re-read of a file), kept off the undo log. */
+  refreshCard: (boardId: string, id: string, patch: CardPatch) =>
+    inOrder('refresh_card', { boardId, id, patch: clearing(patch) }),
   moveCards: (boardId: string, moves: CardMove[]) => inOrder('move_cards', { boardId, moves }),
   addCards: (boardId: string, cards: Card[], connections: Connection[] = []) =>
     inOrder('add_cards', { boardId, cards, connections }),
@@ -45,6 +48,8 @@ export const doc = {
   deleteCluster: (boardId: string, id: string) => inOrder('delete_cluster', { boardId, id }),
   setMeta: (boardId: string, patch: MetaPatch) => inOrder('set_meta', { boardId, patch }),
   setViewport: (boardId: string, viewport: Viewport) => inOrder('set_viewport', { boardId, viewport }),
+  undo: (boardId: string) => inOrder('undo', { boardId }),
+  redo: (boardId: string) => inOrder('redo', { boardId }),
   /** Every edit to the open board, whoever made it. */
   listen: (handler: (change: DocChanged) => void) => listen<DocChanged>('doc:changed', (e) => handler(e.payload)),
 };
