@@ -41,9 +41,6 @@ importers:
       solid-js:
         specifier: ^1.9.18
         version: 1.9.18
-      zod:
-        specifier: ^4.0.0
-        version: 4.4.3
       zustand:
         specifier: ^4.5.0
         version: 4.5.7(@types/react@19.2.17)(react@19.2.7)
@@ -1318,9 +1315,6 @@ packages:
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
-
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
   zustand@4.5.7:
     resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
@@ -2686,8 +2680,6 @@ snapshots:
       stackback: 0.0.2
 
   yallist@3.1.1: {}
-
-  zod@4.4.3: {}
 
   zustand@4.5.7(@types/react@19.2.17)(react@19.2.7):
     dependencies:

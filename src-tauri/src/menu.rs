@@ -1,7 +1,7 @@
 //! The native application menu — a "File" menu for managing boards.
 //!
-//! The webview owns the board list (the schema is TypeScript's, see board_store),
-//! so it hands the shell a flat `[{id, title}]` whenever the library changes and
+//! The webview holds the board list it shows, so it hands the shell a flat
+//! `[{id, title}]` whenever the library changes and
 //! the shell rebuilds the menu around it. Clicking an item emits `menu:board`,
 //! which the webview listens for (`src/platform/boardMenu.ts`) and turns into a
 //! store call — the same emit/listen bridge the Apple Mail drop uses. Nothing

@@ -359,7 +359,7 @@ Three rules explain most of the code:
 ```
 src/
   types/board.ts        the domain model — start here
-  data/                 schema (zod), mappers, the board index, the seed board
+  data/                 the empty board and the bundle manifest (the schema is src-tauri/src/schema.rs)
   store/boardStore.ts   canonical state + the derived view + autosave
   storage/              the IO seam; boards as files, via the shell
   platform/             the shell seam; inbox.ts hands watched-folder files to the importer
@@ -460,11 +460,11 @@ same spirit the schema reads an explicit `null` (a screenshot carries width and
 height but no EXIF `takenAt`/camera/GPS, which the shell returns as null) as
 *absent* rather than refusing the whole board over one such field.
 
-The shell owns the board's *envelope* — the five top-level keys, and which row
-belongs to which table — but never a card: each card is opaque JSON in its row,
-reassembled into the same `Board` on load. `src/data/schema.ts` stays the one
-definition of what a card is, and teaching Rust the shape as well would be a second
-one to keep in step, in exchange for nothing.
+The shell owns the board and its cards: `src-tauri/src/schema.rs` is the one
+definition of what a board is. Every row is validated on save and the board
+validated and migrated on load, and the webview's types are generated from the Rust
+ones (`src/bindings/`, by ts-rs; `cargo test` fails while they are stale, and
+`UPDATE_BINDINGS=1 cargo test bindings` rewrites them).
 
 **There is no quota.** localStorage was once the app's largest constraint — ~5MB,
 charged in UTF-16, with images inlined as base64 — and moving media out to files
@@ -691,11 +691,9 @@ what a webview cannot do for itself, and nothing else:
   reveals itself, no round-trip.
 
 Everything reaching them goes through `src/platform/` and `src/storage/`. Nothing
-else in `src/` knows the shell is there. The two sides' payload types are mirrored
-by hand, so every value-returning command's answer is parsed against a zod schema
-on receipt (`src/storage/ipc.ts`, shapes composed from `src/data/schema.ts`'s own)
-— a field renamed on either side fails loudly at the boundary instead of
-somewhere far away at runtime.
+else in `src/` knows the shell is there. The payload types are generated from the
+shell's own (`src/bindings/`), so a field renamed in Rust fails the typecheck
+rather than somewhere far away at runtime.
 
 ### The icon
 
@@ -743,7 +741,7 @@ get their own column in the drawer.
 
 Vitest, `environment: 'node'`, no jsdom. Deliberately narrow: the pure logic
 where clicking around lies to you — date/timezone handling, mbox splitting, the
-board index and schema, email parsing, Message-ID matching, address identity and
+email parsing, Message-ID matching, address identity and
 the roster, the import offer, the grade palette, slugs. Components, the store and
 the shell are verified by driving the real app instead.
 

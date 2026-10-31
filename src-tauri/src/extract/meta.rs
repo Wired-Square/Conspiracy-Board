@@ -8,20 +8,35 @@ use super::read_zip_entry;
 /// simply omits it — extraction is best-effort and never fails the import. Dates are
 /// ISO-8601 UTC so the webview can drop them straight onto a card's `occurredAt`.
 #[derive(serde::Serialize, Default)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(optional_fields))]
 #[serde(rename_all = "camelCase")]
 pub struct MediaMeta {
+  #[serde(skip_serializing_if = "Option::is_none")]
   title: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   author: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   created: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   modified: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pages: Option<u32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   words: Option<u32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   width: Option<u32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   height: Option<u32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   taken_at: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   camera_make: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   camera_model: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   latitude: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   longitude: Option<f64>,
 }
 

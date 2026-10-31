@@ -528,10 +528,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     async installExampleBoard() {
-      // Dynamically imported so data/board.json stays out of the main chunk —
-      // it only ever loads if the user asks for the example.
-      const { defaultBoard } = await import('../data/defaultBoard');
-      await adoptBoard(defaultBoard);
+      await adoptBoard(await storage.seedBoard());
     },
 
     async openBoard(id) {

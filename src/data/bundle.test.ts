@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildManifest, parseManifest } from './bundle';
+import { buildManifest } from './bundle';
 import type { Board } from '../types/board';
 
 function board(title: string): Board {
@@ -24,17 +24,5 @@ describe('bundle manifest', () => {
       { id: 'brd_aaa', title: 'First', file: 'boards/brd_aaa.json' },
       { id: 'brd_bbb', title: 'Second', file: 'boards/brd_bbb.json' },
     ]);
-  });
-
-  it('round-trips through parse', () => {
-    const m = buildManifest([{ id: 'brd_aaa', board: board('Only') }]);
-    const parsed = parseManifest(JSON.stringify(m));
-    expect(parsed).toEqual(m);
-  });
-
-  it('rejects non-JSON, the wrong shape, and a foreign format', () => {
-    expect(parseManifest('not json')).toBeNull();
-    expect(parseManifest('{}')).toBeNull(); // missing format/version
-    expect(parseManifest(JSON.stringify({ format: 'something-else', formatVersion: 1 }))).toBeNull();
   });
 });

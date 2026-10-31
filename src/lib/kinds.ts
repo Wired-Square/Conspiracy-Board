@@ -123,7 +123,7 @@ export function entitiesOfKind(cards: Card[], kind: CardKind): Card[] {
 /**
  * What a card is when nobody has said — a plain note. It is also what every card
  * written before kinds existed silently was, which is why the schema defaults
- * `kind` to it on the way in (`src/data/schema.ts`, the one other place this
+ * `kind` to it on the way in (`src-tauri/src/schema.rs`, the one other place this
  * literal is allowed to live: it is the migration boundary).
  */
 export const DEFAULT_KIND: CardKind = 'evidence';

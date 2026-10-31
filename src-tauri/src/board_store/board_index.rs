@@ -13,6 +13,7 @@ use super::board_db::valid_board_id;
 use crate::library_index::LibraryDb;
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSummary {
   id: String,

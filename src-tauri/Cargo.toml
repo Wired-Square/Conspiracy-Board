@@ -14,10 +14,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-# raw_value lets the board reassembler pass each stored card/connection/cluster
-# fragment through verbatim (validated as JSON, never interpreted) when rebuilding a
-# board's envelope from its SQLite rows — the shell still never parses a card.
-serde_json = { version = "1.0", features = ["raw_value"] }
+serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.12.1", features = ["protocol-asset"] }
@@ -50,7 +47,7 @@ imagesize = "0.13"
 # save writes only the rows that changed rather than rewriting the whole board, and a
 # crash can't tear the file. "bundled" compiles SQLite from the amalgamation — no system
 # dependency, and it enables FTS5 for the library-wide search index (library.sqlite). The
-# schema stays TypeScript's: Rust reads and writes id/json rows and never parses a card.
+# schema is Rust's (src/schema.rs): each id/json row is validated on save and on load.
 rusqlite = { version = "0.32", features = ["bundled"] }
 wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
 wslib-tauri = { version = "0.1.1", registry = "wired-square" }
@@ -62,6 +59,11 @@ getrandom = { version = "0.3", optional = true }
 [features]
 # `pnpm dev` turns it on; a release build refuses it (lib.rs).
 mcp = ["dep:wslib-mcp", "dep:getrandom"]
+
+[dev-dependencies]
+# The webview's types are generated from the Rust ones by a test (src/bindings.rs), so
+# this never ships. 11, as wslib-appliance-types uses.
+ts-rs = "11.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pinned to exactly what tauri/wry already resolve to. A different minor here

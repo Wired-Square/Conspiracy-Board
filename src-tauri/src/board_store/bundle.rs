@@ -3,14 +3,11 @@
 //! A portable `.zip` of one or more boards plus every media file they reference —
 //! the way a board (or a whole library) moves to another Mac with all its evidence
 //! intact, where a single-file JSON export could only carry inlined pictures. The
-//! shell is a dumb packager here, true to the rest of the store: it never parses
-//! a board. The webview hands it the board JSON strings, the union of media names,
-//! and the manifest text it authored; on the way back it is handed the strings to
-//! parse. The one JSON the shell reads is nothing — it treats even the manifest as
-//! opaque bytes. Export streams the archive straight to the file the user chose (so
-//! a large bundle never sits in memory or crosses the IPC boundary); import reads
-//! the file the user picked straight from its path. The `zip` crate is already a
-//! dependency, used to read Office metadata. Layout:
+//! webview hands export the board JSON strings, the union of media names and the
+//! manifest it authored; import hands back the boards validated, migrated and in the
+//! manifest's order. Export streams the archive straight to the file the user chose
+//! (so a large bundle never sits in memory or crosses the IPC boundary); import reads
+//! the file the user picked straight from its path. Layout:
 //!
 //!   manifest.json          { format, formatVersion, app, exportedAt, boards: [...] }
 //!   boards/<id>.json        one per board (id is the library id, the filename stem)
@@ -22,23 +19,81 @@ use tauri::{AppHandle, Emitter};
 
 use super::board_db::valid_board_id;
 use super::media::{media_ext, media_file, store_media_bytes, valid_media_name};
+use crate::schema::{parse_board_json, Board};
+
+const BUNDLE_FORMAT: &str = "conspiracy-bundle";
+
+/// What names a `.zip` a bundle: `format` is the signature, and `boards` the order and
+/// an advisory title. A bundle without a readable one still imports, in zip order.
+#[derive(Debug, PartialEq, serde::Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct BundleManifest {
+  format: String,
+  format_version: u32,
+  #[serde(default = "app_name")]
+  app: String,
+  #[serde(default)]
+  exported_at: String,
+  #[serde(default)]
+  boards: Vec<ManifestBoard>,
+}
+
+#[derive(Debug, PartialEq, serde::Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct ManifestBoard {
+  id: String,
+  #[serde(default)]
+  title: String,
+  #[serde(default)]
+  file: String,
+}
+
+fn app_name() -> String {
+  "Conspiracy".into()
+}
+
+fn parse_manifest(raw: &str) -> Option<BundleManifest> {
+  serde_json::from_str::<BundleManifest>(raw).ok().filter(|m| m.format == BUNDLE_FORMAT)
+}
+
+/// The boards that parse, in the manifest's order; any it doesn't name keep their zip
+/// order at the end. A board that won't parse is left out rather than failing the rest.
+fn boards_in_order(contents: BundleContents) -> Vec<Board> {
+  let manifest = contents.manifest.as_deref().and_then(parse_manifest);
+  let rank = |id: &str| {
+    manifest.as_ref().and_then(|m| m.boards.iter().position(|b| b.id == id)).unwrap_or(usize::MAX)
+  };
+  let mut boards: Vec<_> = contents
+    .boards
+    .into_iter()
+    .filter_map(|b| match parse_board_json(&b.json) {
+      Ok(board) => Some((rank(&b.id), board)),
+      Err(e) => {
+        log::warn!("Skipping a bundled board that won't parse ({}): {e}", b.id);
+        None
+      }
+    })
+    .collect();
+  boards.sort_by_key(|(rank, _)| *rank);
+  boards.into_iter().map(|(_, board)| board).collect()
+}
 
 /// The largest bundle we will read, as a guard on an untrusted `.zip`: the file, and
 /// the running total of what we decompress out of it (a zip bomb inflates far past
 /// its stored size, so the stored-size check alone is not enough).
 const MAX_BUNDLE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
-/// One board in a bundle: its library id and its JSON, both opaque to the shell.
-#[derive(serde::Deserialize, serde::Serialize)]
+/// One board in a bundle: its library id and its JSON.
+#[derive(serde::Deserialize)]
 pub struct BundleBoard {
   id: String,
   json: String,
 }
 
-/// What `read_bundle` hands back: the manifest text (absent for a hand-made zip)
-/// and every board it carried, for the webview to parse and offer for import.
-#[derive(serde::Serialize)]
-pub struct BundleContents {
+/// An opened bundle: the manifest text (absent for a hand-made zip) and every board
+/// it carried, still unparsed.
+struct BundleContents {
   manifest: Option<String>,
   boards: Vec<BundleBoard>,
 }
@@ -134,8 +189,7 @@ pub fn write_bundle(
 }
 
 /// Read a `.zip` bundle: store every media file it carries into the library and
-/// hand the board JSON strings (and the manifest) back for the webview to parse
-/// and offer. Media is stored eagerly — content-addressing makes a re-import of an
+/// hand its boards back for the webview to offer. Media is stored eagerly — content-addressing makes a re-import of an
 /// already-present file a no-op, and any media belonging to boards the user then
 /// declines is simply orphaned, which the media sweep reclaims. Untrusted input,
 /// so every entry name is checked for traversal (`enclosed_name`) and against the
@@ -143,7 +197,11 @@ pub fn write_bundle(
 /// size is capped against a zip bomb. A legacy `.json` board is read as a bundle of
 /// that one board.
 #[tauri::command(async)]
-pub fn read_bundle(app: AppHandle, path: String) -> Result<BundleContents, String> {
+pub fn read_bundle(app: AppHandle, path: String) -> Result<Vec<Board>, String> {
+  read_bundle_contents(&app, &path).map(boards_in_order)
+}
+
+fn read_bundle_contents(app: &AppHandle, path: &str) -> Result<BundleContents, String> {
   // The user picked this path through the OS open panel, so it is theirs to read.
   let mut file = std::fs::File::open(&path).map_err(|e| format!("Could not open the file: {e}"))?;
   if file.metadata().map_or(0, |m| m.len()) > MAX_BUNDLE_BYTES {
@@ -299,6 +357,49 @@ mod tests {
     assert!(unpack(&[("boards/brd_a.json", &half)], 50).is_ok());
     let err = unpack(&[("boards/brd_a.json", &half), ("boards/brd_b.json", &half)], 50).unwrap_err();
     assert_eq!(err, "That bundle is too large to import.");
+  }
+
+  fn board_json(title: &str) -> String {
+    serde_json::json!({
+      "version": 4,
+      "meta": { "title": title, "updatedAt": "2026-07-19T00:00:00.000Z" },
+      "clusters": [], "cards": [], "connections": [],
+    })
+    .to_string()
+  }
+
+  fn contents(manifest: Option<&str>, boards: &[(&str, String)]) -> BundleContents {
+    BundleContents {
+      manifest: manifest.map(str::to_string),
+      boards: boards.iter().map(|(id, json)| BundleBoard { id: id.to_string(), json: json.clone() }).collect(),
+    }
+  }
+
+  fn titles(boards: Vec<Board>) -> Vec<String> {
+    boards.into_iter().map(|b| b.meta.title).collect()
+  }
+
+  #[test]
+  fn a_manifest_parses_with_its_defaults_and_only_in_our_format() {
+    let m = parse_manifest(r#"{"format":"conspiracy-bundle","formatVersion":1,"boards":[{"id":"brd_a"}]}"#).unwrap();
+    assert_eq!((m.app.as_str(), m.exported_at.as_str(), m.boards[0].title.as_str()), ("Conspiracy", "", ""));
+    assert_eq!(parse_manifest("not json"), None);
+    assert_eq!(parse_manifest("{}"), None);
+    assert_eq!(parse_manifest(r#"{"format":"something-else","formatVersion":1}"#), None);
+  }
+
+  #[test]
+  fn boards_come_back_in_manifest_order_with_unnamed_ones_last() {
+    let manifest = r#"{"format":"conspiracy-bundle","formatVersion":1,"boards":[{"id":"brd_b"},{"id":"brd_a"}]}"#;
+    let boards = [("brd_x", board_json("X")), ("brd_a", board_json("A")), ("brd_b", board_json("B"))];
+    assert_eq!(titles(boards_in_order(contents(Some(manifest), &boards))), vec!["B", "A", "X"]);
+    assert_eq!(titles(boards_in_order(contents(Some("junk"), &boards))), vec!["X", "A", "B"]);
+  }
+
+  #[test]
+  fn a_board_that_wont_parse_is_left_out() {
+    let boards = [("brd_a", board_json("A")), ("brd_bad", "{}".to_string())];
+    assert_eq!(titles(boards_in_order(contents(None, &boards))), vec!["A"]);
   }
 
   #[test]

@@ -271,6 +271,7 @@ fn gc(boards: &Path, listed: &[String], media: &Path, min_age: Duration) -> Resu
 }
 
 #[derive(Debug, PartialEq, serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct GcOutcome {
   removed: u32,
   unknown: Vec<String>,
@@ -316,9 +317,11 @@ fn media_entries(dir: &Path) -> Result<Vec<(String, std::fs::DirEntry)>, String>
 /// One media file on disk, as the maintenance view needs it: the name it is
 /// linked by and its size. Read-only — this never deletes.
 #[derive(Clone, serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct MediaEntry {
   name: String,
+  #[cfg_attr(test, ts(type = "number"))]
   size: u64,
 }
 

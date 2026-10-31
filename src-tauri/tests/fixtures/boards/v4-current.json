@@ -1,0 +1,190 @@
+{
+  "version": 4,
+  "meta": { "title": "Current", "updatedAt": "2026-07-19T00:00:00.000Z", "countryCode": "+44" },
+  "clusters": [
+    { "id": "cl_1", "label": "People", "color": "#e23b3b", "visible": true },
+    { "id": "cl_2", "label": "Money", "color": "#3b7de2", "visible": true }
+  ],
+  "cards": [
+    {
+      "id": "card_mail",
+      "title": "Re: the collection",
+      "notes": "Per our call.\n\n**Attachments:** contract.pdf",
+      "imageUrl": null,
+      "imageFile": "aa11.png",
+      "imageCrop": { "x": 0.1, "y": 0.05, "w": 0.8, "h": 0.6 },
+      "imageMeta": null,
+      "clusterIds": ["cl_2", "cl_1"],
+      "position": { "x": 12.5, "y": -40 },
+      "kind": "email",
+      "occurredAt": "2024-11-15T01:32:11.000Z",
+      "occurredAtPrecision": "minute",
+      "email": {
+        "from": { "name": "Sable, Dominic", "address": "dutch@bluecanary.example" },
+        "to": [{ "address": "consignor@example.com" }, { "name": "Doe, Jane", "address": "jane@example.com" }],
+        "cc": [],
+        "messageId": "<abc123@bluecanary.example>",
+        "inReplyTo": "<prev999@example.com>",
+        "attachments": [
+          { "name": "contract.pdf", "file": "bb22.pdf", "mime": "application/pdf" },
+          { "name": "lost.txt" }
+        ],
+        "emlFile": "cc33.eml"
+      }
+    },
+    {
+      "id": "card_drag",
+      "title": "Dragged from Mail",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 0, "y": 0 },
+      "kind": "email",
+      "occurredAt": null,
+      "occurredAtPrecision": "minute",
+      "email": {
+        "from": null,
+        "to": [],
+        "cc": [],
+        "messageId": "<drag@x>",
+        "inReplyTo": null,
+        "attachments": [],
+        "source": "mail-drag"
+      }
+    },
+    {
+      "id": "card_text",
+      "title": "See you at nine",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": "dd44.png",
+      "imageCrop": null,
+      "imageMeta": {
+        "width": 1170,
+        "height": 2532,
+        "takenAt": "2024-11-14T21:00:00.000Z",
+        "cameraMake": "Apple",
+        "cameraModel": "iPhone 13",
+        "latitude": -33.86,
+        "longitude": 151.21
+      },
+      "clusterIds": [],
+      "position": { "x": 200, "y": 0 },
+      "kind": "message",
+      "occurredAt": "2024-11-14T21:00:00.000Z",
+      "occurredAtPrecision": "minute",
+      "message": { "from": { "address": "+61400000000" }, "to": [{ "address": "+61400000001" }], "body": "See you at nine" }
+    },
+    {
+      "id": "card_call",
+      "title": "Call",
+      "notes": "",
+      "imageUrl": "https://example.com/log.png",
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 400, "y": 0 },
+      "kind": "call",
+      "occurredAt": null,
+      "occurredAtPrecision": "minute",
+      "call": { "from": null, "to": [], "durationSecs": 95 }
+    },
+    {
+      "id": "card_jane",
+      "title": "Jane Doe",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": ["cl_1"],
+      "position": { "x": 0, "y": 200 },
+      "kind": "person",
+      "occurredAt": null,
+      "occurredAtPrecision": "minute",
+      "person": { "addresses": ["jane@example.com"], "numbers": ["+61400000001"] },
+      "email": { "from": null, "to": [], "cc": [], "messageId": "<a@b>", "inReplyTo": null, "attachments": [] }
+    },
+    {
+      "id": "card_acme",
+      "title": "Acme",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 200, "y": 200 },
+      "kind": "organisation",
+      "occurredAt": null,
+      "occurredAtPrecision": "minute",
+      "organisation": { "addresses": ["legal@acme.com"], "domains": ["acme.com"], "numbers": ["+61290000000"] }
+    },
+    {
+      "id": "card_doc",
+      "title": "Warrant",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 400, "y": 200 },
+      "kind": "document",
+      "occurredAt": "2024-10-01T00:00:00.000Z",
+      "occurredAtPrecision": "day",
+      "document": {
+        "file": "ee55.pdf",
+        "name": "warrant.pdf",
+        "mime": "application/pdf",
+        "title": "Warrant",
+        "author": "Registry",
+        "created": "2024-10-01T00:00:00Z",
+        "modified": "2024-10-02T08:30:00Z",
+        "pages": 3,
+        "words": 812
+      }
+    },
+    {
+      "id": "card_event",
+      "title": "The warrant was served",
+      "notes": "",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 400, "y": 400 },
+      "kind": "event",
+      "occurredAt": "2024-10-01T00:00:00.000Z",
+      "occurredAtPrecision": "day",
+      "event": { "sourceCardId": "card_doc" },
+      "grade": "confirmed"
+    },
+    {
+      "id": "card_claim",
+      "title": "Acme knew",
+      "notes": "Inferred from the thread.",
+      "imageUrl": null,
+      "imageFile": null,
+      "imageCrop": null,
+      "imageMeta": null,
+      "clusterIds": [],
+      "position": { "x": 600, "y": 400 },
+      "kind": "evidence",
+      "occurredAt": null,
+      "occurredAtPrecision": "minute",
+      "document": {},
+      "grade": "unresolved"
+    }
+  ],
+  "connections": [
+    { "id": "edge_1", "source": "card_jane", "target": "card_acme", "label": "works for", "kind": "red-string", "grade": "corroborated" },
+    { "id": "edge_2", "source": "card_doc", "target": "card_event", "kind": "plain" }
+  ],
+  "viewport": { "x": -120, "y": 40.25, "zoom": 0.8 }
+}

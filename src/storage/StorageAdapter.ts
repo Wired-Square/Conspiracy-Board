@@ -1,7 +1,11 @@
 import type { Board } from '../types/board';
+import type { BoardSummary } from '../bindings/BoardSummary';
+import type { DocHit } from '../bindings/DocHit';
+import type { DocStatus } from '../bindings/DocStatus';
+import type { MediaEntry } from '../bindings/MediaEntry';
+import type { MediaMeta } from '../bindings/MediaMeta';
 
-/** A board as the library lists it, without opening it. */
-export type BoardSummary = { id: string; title: string; updatedAt: string };
+export type { BoardSummary, DocHit, DocStatus, MediaEntry, MediaMeta };
 
 /** A file chosen by the user, as raw bytes. */
 export type PickedFile = { name: string; bytes: ArrayBuffer };
@@ -16,45 +20,6 @@ export type BundleExport = {
   media: string[];
   manifest: string;
   filename: string;
-};
-
-/** One media file on disk, as the maintenance view lists it. */
-export type MediaEntry = { name: string; size: number };
-
-/**
- * A full-text search hit from the library index: the media file that matched (its
- * content-addressed name, which the webview maps back to a card), a snippet with the
- * match marked, and its BM25 rank — smaller is a better match.
- */
-export type DocHit = { name: string; snippet: string; rank: number };
-
-/**
- * A media file's place in the search index: its name and terminal processing status —
- * `indexed`, `failed`, or `unsupported`. A file with no row yet is simply pending.
- */
-export type DocStatus = { name: string; status: string };
-
-/**
- * Metadata read out of an imported file by the shell (`extract_media_meta`). Every
- * field is optional — a format that doesn't carry one, or a file that wouldn't
- * parse, just omits it. Document fields (title…words) and image fields (width…
- * longitude) share the one shape; the caller takes whichever its kind uses. Dates
- * are ISO-8601 UTC, ready for a card's `occurredAt`.
- */
-export type MediaMeta = {
-  title?: string;
-  author?: string;
-  created?: string;
-  modified?: string;
-  pages?: number;
-  words?: number;
-  width?: number;
-  height?: number;
-  takenAt?: string;
-  cameraMake?: string;
-  cameraModel?: string;
-  latitude?: number;
-  longitude?: number;
 };
 
 /** Read DOM Files into the byte form the adapter and parsers trade in. */
@@ -85,8 +50,10 @@ export interface StorageAdapter {
 
   /** Board summaries for the library, newest first. Never opens a board. */
   listBoards(): Promise<BoardSummary[]>;
-  /** The board's content, or null if it is missing or unreadable. */
+  /** The board's content, validated and migrated, or null if it is missing or unreadable. */
   loadBoard(id: string): Promise<Board | null>;
+  /** The bundled example board. */
+  seedBoard(): Promise<Board>;
   /**
    * Persist a board, with its library summary derived from `board.meta` in the same
    * call, so the list cannot drift from the board. Throws with a user-facing message

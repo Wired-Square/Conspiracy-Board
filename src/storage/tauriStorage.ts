@@ -1,40 +1,34 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { z } from 'zod';
 import type { Board } from '../types/board';
-import { safeParseBoardJson } from '../data/schema';
-import { invokeChecked } from './ipc';
-import {
-  boardSummarySchema,
-  docHitSchema,
-  docStatusSchema,
-  gcOutcomeSchema,
-  libraryRefsSchema,
-  loadedBoardSchema,
-  mediaEntrySchema,
-  mediaMetaSchema,
-  readBundleSchema,
-} from './ipcSchemas';
-import { orderByManifest, parseManifest } from '../data/bundle';
+import type { BoardSummary } from '../bindings/BoardSummary';
+import type { DocHit } from '../bindings/DocHit';
+import type { DocStatus } from '../bindings/DocStatus';
+import type { GcOutcome } from '../bindings/GcOutcome';
+import type { LibraryRefs } from '../bindings/LibraryRefs';
+import type { LoadedBoard } from '../bindings/LoadedBoard';
+import type { MediaEntry } from '../bindings/MediaEntry';
+import type { MediaMeta } from '../bindings/MediaMeta';
+import type { SaveBoardPayload } from '../bindings/SaveBoardPayload';
 import { bytesToB64, b64ToBytes } from '../lib/base64';
 import { boardMediaRefs } from '../lib/media';
 import { setMediaDir } from './media';
 import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAdapter';
 
 // Boards as files, under the app's data directory (see src-tauri/src/board_store.rs
-// for the layout and why writes are atomic). The shell only ever sees strings:
-// the schema is TypeScript's, and parsing stays on this side of the seam.
+// for the layout). The shell owns the schema: it validates and migrates every board
+// it reads and every row it is asked to write, and the payload types are generated
+// from its own (src/bindings).
 //
 // The media picker is left to the webview: `<input type="file">` opens the real
 // macOS picker. A bundle is the exception both ways — the shell writes and reads it
 // by path, so a large `.zip` never crosses the IPC boundary — which is what the
 // dialog plugin's open and save panels are for.
 
-// What the board's .sqlite last held, per board id: each entity's canonical JSON,
-// keyed by id. Seeded on load and set to exactly what was written on each save, so a
-// save can send only the rows whose JSON changed (the diff) while still handing the
-// shell the complete id lists it needs to delete and reorder. Kept from the parsed
-// board — the schema's defaults are applied, so an unedited save diffs to nothing.
+// What the board's .sqlite last held, per board id: each entity's JSON, keyed by id.
+// Seeded on load and set to exactly what was written on each save, so a save can send
+// only the rows whose JSON changed (the diff) while still handing the shell the
+// complete id lists it needs to delete and reorder.
 type EntityBodies = {
   cards: Map<string, string>;
   connections: Map<string, string>;
@@ -63,8 +57,8 @@ const bodyMap = (xs: { id: string }[]): Map<string, string> =>
   new Map(xs.map((x) => [x.id, bodyJson(x)]));
 
 // The shell vouches only for boards whose media refs it has recorded, and names the
-// rest. A board saved before refs were recorded is read here, where the card schema
-// lives, and its refs recorded once; then the shell is asked again.
+// rest. A board saved before refs were recorded is read here, where the media refs are
+// derived (lib/media.ts), and its refs recorded once; then the shell is asked again.
 async function withRefsRecorded<T extends { unknown: string[] }>(ask: () => Promise<T>): Promise<T> {
   const first = await ask();
   if (!first.unknown.length) return first;
@@ -90,20 +84,19 @@ export const tauriStorage: StorageAdapter = {
     // before anything is read — not lazily inside a read, where two callers could
     // race it.
     await invoke('init_storage');
-    setMediaDir(await invokeChecked('media_dir_path', z.string()));
+    setMediaDir(await invoke<string>('media_dir_path'));
   },
 
   listBoards() {
-    return invokeChecked('list_boards', z.array(boardSummarySchema));
+    return invoke<BoardSummary[]>('list_boards');
   },
 
   async loadBoard(id) {
-    // A corrupt or locked database reads as "unreadable this time", never a throw:
-    // the load paths (loadBoardForOpen, withRefsRecorded) treat a null load as
+    // A corrupt, invalid or locked board reads as "unreadable this time", never a
+    // throw: the load paths (loadBoardForOpen, withRefsRecorded) treat a null load as
     // "leave it be", never as a board to delete.
-    const res = await invokeChecked('load_board', loadedBoardSchema, { id }).catch(() => null);
-    if (!res?.json) return null;
-    const board = safeParseBoardJson(res.json);
+    const res = await invoke<LoadedBoard>('load_board', { id }).catch(() => null);
+    const board = res?.board;
     if (!board) return null;
     if (res.legacy) {
       // First open of a pre-SQLite board: write its .sqlite through the normal save
@@ -118,6 +111,10 @@ export const tauriStorage: StorageAdapter = {
     return board;
   },
 
+  seedBoard() {
+    return invoke<Board>('seed_board');
+  },
+
   async saveBoard(id, board) {
     const prev = lastSaved.get(id);
     // Serialise each entity once: this map is both the diff input and the next save's
@@ -130,23 +127,19 @@ export const tauriStorage: StorageAdapter = {
     const next = boardBodies(board);
     const changed = (now: Map<string, string>, was: Map<string, string> | undefined) =>
       [...now].filter(([k, json]) => was?.get(k) !== json).map(([k, json]) => ({ id: k, json }));
-    await invoke('save_board', {
-      id,
-      payload: {
-        version: board.version,
-        meta: JSON.stringify(board.meta),
-        viewport: board.viewport ? JSON.stringify(board.viewport) : null,
-        cards: changed(next.cards, prev?.cards),
-        cardIds: board.cards.map((c) => c.id),
-        connections: changed(next.connections, prev?.connections),
-        connectionIds: board.connections.map((c) => c.id),
-        clusters: changed(next.clusters, prev?.clusters),
-        clusterIds: board.clusters.map((c) => c.id),
-        mediaRefs: boardMediaRefs(board),
-        title: board.meta.title,
-        updatedAt: board.meta.updatedAt,
-      },
-    });
+    const payload: SaveBoardPayload = {
+      version: board.version,
+      meta: board.meta,
+      viewport: board.viewport ?? null,
+      cards: changed(next.cards, prev?.cards),
+      cardIds: board.cards.map((c) => c.id),
+      connections: changed(next.connections, prev?.connections),
+      connectionIds: board.connections.map((c) => c.id),
+      clusters: changed(next.clusters, prev?.clusters),
+      clusterIds: board.clusters.map((c) => c.id),
+      mediaRefs: boardMediaRefs(board),
+    };
+    await invoke('save_board', { id, payload });
     // Only after the write lands, so a failed save leaves the cache stale and the next
     // save re-sends rather than assuming the shell has what it does not.
     lastSaved.set(id, next);
@@ -158,7 +151,7 @@ export const tauriStorage: StorageAdapter = {
   },
 
   getCurrentBoardId() {
-    return invokeChecked('current_board_id', z.string().nullable());
+    return invoke<string | null>('current_board_id');
   },
 
   async setCurrentBoardId(id) {
@@ -166,23 +159,23 @@ export const tauriStorage: StorageAdapter = {
   },
 
   saveMedia(bytes, ext) {
-    return invokeChecked('save_media', z.string(), { ext, b64: bytesToB64(bytes) });
+    return invoke<string>('save_media', { ext, b64: bytesToB64(bytes) });
   },
 
   downloadImage(url) {
-    return invokeChecked('download_image', z.string(), { url });
+    return invoke<string>('download_image', { url });
   },
 
   async readMedia(name) {
-    return b64ToBytes(await invokeChecked('read_media', z.string(), { name }));
+    return b64ToBytes(await invoke<string>('read_media', { name }));
   },
 
   extractMediaMeta(name) {
-    return invokeChecked('extract_media_meta', mediaMetaSchema, { name });
+    return invoke<MediaMeta>('extract_media_meta', { name });
   },
 
   ocrImage(name) {
-    return invokeChecked('ocr_image', z.string(), { name });
+    return invoke<string>('ocr_image', { name });
   },
 
   openMedia(name) {
@@ -190,22 +183,20 @@ export const tauriStorage: StorageAdapter = {
   },
 
   async gcMedia() {
-    return (await withRefsRecorded(() => invokeChecked('gc_media', gcOutcomeSchema))).removed;
+    return (await withRefsRecorded(() => invoke<GcOutcome>('gc_media'))).removed;
   },
 
   async mediaRefs(exceptId) {
-    const refs = await withRefsRecorded(() =>
-      invokeChecked('media_refs', libraryRefsSchema, { except: exceptId }),
-    );
+    const refs = await withRefsRecorded(() => invoke<LibraryRefs>('media_refs', { except: exceptId }));
     return refs.unknown.length ? null : new Set(refs.names);
   },
 
   listMedia() {
-    return invokeChecked('list_media', z.array(mediaEntrySchema));
+    return invoke<MediaEntry[]>('list_media');
   },
 
   verifyMedia(name) {
-    return invokeChecked('verify_media', z.boolean(), { name });
+    return invoke<boolean>('verify_media', { name });
   },
 
   openMediaDir() {
@@ -213,7 +204,7 @@ export const tauriStorage: StorageAdapter = {
   },
 
   searchDocuments(query, limit) {
-    return invokeChecked('search_documents', z.array(docHitSchema), { query, limit });
+    return invoke<DocHit[]>('search_documents', { query, limit });
   },
 
   async reindexMedia(names) {
@@ -225,17 +216,17 @@ export const tauriStorage: StorageAdapter = {
   },
 
   jobsPending() {
-    return invokeChecked('jobs_pending', z.number());
+    return invoke<number>('jobs_pending');
   },
 
   indexStatuses() {
-    return invokeChecked('index_statuses', z.array(docStatusSchema));
+    return invoke<DocStatus[]>('index_statuses');
   },
 
   async boardLocation(id) {
     // The shell builds the path — it is the only thing that knows the data
     // directory, and it validates the id before letting it near the filesystem.
-    return invokeChecked('board_location', z.string(), { id });
+    return invoke<string>('board_location', { id });
   },
 
   async revealBoard(id) {
@@ -261,15 +252,9 @@ export const tauriStorage: StorageAdapter = {
     });
     if (!path) return null;
     onReadStart?.();
-    // The shell reads the file, stores a bundle's media, and hands the board strings
-    // back to parse here — the schema stays this side of the seam. A legacy .json
-    // arrives as a one-board bundle, so both take the same path.
-    const res = await invokeChecked('read_bundle', readBundleSchema, { path });
-    const parsed = res.boards
-      .map((b) => ({ id: b.id, board: safeParseBoardJson(b.json) }))
-      .filter((b): b is { id: string; board: Board } => b.board !== null);
-    const manifest = res.manifest ? parseManifest(res.manifest) : null;
-    return orderByManifest(parsed, manifest).map((b) => b.board);
+    // The shell reads the file, stores a bundle's media, and hands back the boards
+    // that parse, in the manifest's order. A legacy .json arrives as a one-board bundle.
+    return invoke<Board[]>('read_bundle', { path });
   },
 
   pickFiles(accept, multiple = false) {

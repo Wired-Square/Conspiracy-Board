@@ -2,32 +2,32 @@
 //!
 //! One database per board (boards/<id>.sqlite). The webview hands `save_board` the
 //! board split into rows — each card/connection/cluster as `{ id, json }`, plus the
-//! complete ordered id lists and the envelope's small parts — and this side upserts
-//! the bodies and deletes any row whose id is no longer present, all in one
-//! transaction. `load_board` reassembles the exact board JSON the schema expects,
-//! passing each stored fragment through untouched. The extension is `.sqlite`; the
-//! old `boards/<id>.json` is read once, on first open, and migrated (see the seam in
-//! src/storage/tauriStorage.ts, which then calls `retire_legacy_board`).
+//! complete ordered id lists and the envelope's small parts — and this side validates
+//! each body against the schema, upserts it in canonical form and deletes any row whose
+//! id is no longer present, all in one transaction. `load_board` reassembles the rows
+//! and returns the validated, migrated board. The old `boards/<id>.json` is read once,
+//! on first open, and migrated (see the seam in src/storage/tauriStorage.ts, which then
+//! calls `retire_legacy_board`).
 //!
 //! A board's cards, connections and clusters are one `(id, json)` row each, so a
 //! save writes only the rows that changed rather than rewriting the whole board, and
-//! a crash can't tear the file (WAL + one transaction per save). The rule the old
-//! single-file store kept still holds: Rust owns the board *envelope* — the five
-//! top-level keys, and which id belongs to which table — and TypeScript owns the
-//! *card*. The `json` column is a card's bytes, passed through verbatim on the way
-//! out (`serde_json`'s `RawValue`) and never parsed here; the schema stays in
-//! TypeScript (`src/data/schema.ts`), its one canonical definition.
+//! a crash can't tear the file (WAL + one transaction per save). Rust owns the board
+//! and its cards: the schema is `crate::schema`, and the webview's types are generated
+//! from it.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
-use serde_json::value::RawValue;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
 use super::{boards_dir, read_opt, remove_if_present, run_open};
 use crate::library_index::LibraryDb;
+use crate::schema::{self, parse_board, parse_board_json, parse_card, Board, BoardMeta, Viewport, BOARD_VERSION};
 
 /// Whether an id is safe to reach the filesystem as a filename. Ids are generated
 /// as `brd_<hex>` (`src/lib/ids.ts`), so this rejects nothing legitimate; it exists
@@ -108,11 +108,13 @@ fn init_board_schema(conn: &Connection) -> Result<(), String> {
 /// id lists are always complete, so deletes and order never depend on which bodies the
 /// caller chose to send.
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBoardPayload {
-  version: i64,
-  meta: String,
-  viewport: Option<String>,
+  #[cfg_attr(test, ts(type = "4"))]
+  version: u8,
+  meta: BoardMeta,
+  viewport: Option<Viewport>,
   cards: Vec<BoardBody>,
   card_ids: Vec<String>,
   connections: Vec<BoardBody>,
@@ -120,24 +122,23 @@ pub struct SaveBoardPayload {
   clusters: Vec<BoardBody>,
   cluster_ids: Vec<String>,
   media_refs: Vec<String>,
-  title: String,
-  updated_at: String,
 }
 
-/// A single entity to upsert: its id (the envelope's, this side's) and its JSON (the
-/// card's, TypeScript's, opaque here).
+/// A single entity to upsert: its id and its JSON, which is validated and stored in
+/// canonical form. A string so the webview can send only the bodies that changed.
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct BoardBody {
   id: String,
   json: String,
 }
 
-/// What `load_board` returns: the reassembled board JSON (or None on first run), and
-/// whether it came from a legacy `boards/<id>.json` that the seam should now migrate.
+/// What `load_board` returns: the board (or None on first run), and whether it came
+/// from a legacy `boards/<id>.json` that the seam should now migrate.
 #[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct LoadedBoard {
-  json: Option<String>,
+  board: Option<Board>,
   legacy: bool,
 }
 
@@ -145,14 +146,20 @@ pub struct LoadedBoard {
 pub fn load_board(app: AppHandle, id: String) -> Result<LoadedBoard, String> {
   let db = board_db_file(&app, &id)?;
   if db.exists() {
-    return Ok(LoadedBoard { json: Some(read_board_db(&db)?), legacy: false });
+    return Ok(LoadedBoard { board: Some(read_board_db(&db)?), legacy: false });
   }
   // No database yet: a legacy JSON board is offered for the seam to migrate; nothing
   // at all is first run.
   match read_opt(board_file(&app, &id)?)? {
-    Some(json) => Ok(LoadedBoard { json: Some(json), legacy: true }),
-    None => Ok(LoadedBoard { json: None, legacy: false }),
+    Some(json) => Ok(LoadedBoard { board: Some(parse_board_json(&json)?), legacy: true }),
+    None => Ok(LoadedBoard { board: None, legacy: false }),
   }
+}
+
+/// The bundled seed board, for a library with nothing in it yet.
+#[tauri::command(async)]
+pub fn seed_board() -> Result<Board, String> {
+  parse_board_json(include_str!("../../../data/board.json"))
 }
 
 /// The board's rows, then its summary in the board list: a board is never listed
@@ -173,7 +180,7 @@ pub fn save_board(
   // Fold the WAL back into the main file and fsync, so a completed save is durable in
   // boards/<id>.sqlite before this returns and the sidecars are normally absent.
   let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-  upsert_summary(&*db.lock_db()?, &id, &payload.title, &payload.updated_at)
+  upsert_summary(&*db.lock_db()?, &id, &payload.meta.title, &payload.meta.updated_at)
 }
 
 /// Remove the legacy `boards/<id>.json` once its `.sqlite` is written and verified to
@@ -189,25 +196,55 @@ pub fn retire_legacy_board(app: AppHandle, id: String) -> Result<(), String> {
   remove_if_present(&board_file(&app, &id)?)
 }
 
-/// Upsert the envelope and every provided body, then delete any row whose id the
-/// caller no longer lists — the whole board in one transaction.
+/// Validate the envelope and every provided body, upsert them, then delete any row
+/// whose id the caller no longer lists — the whole board in one transaction.
 fn write_board_tx(tx: &Transaction, p: &SaveBoardPayload) -> Result<(), String> {
+  if p.version != BOARD_VERSION {
+    return Err(format!("Not a board version this build writes: {}", p.version));
+  }
+  let cards = checked(&p.cards, parse_card, |c| &c.id)?;
+  let connections = checked(&p.connections, from_value::<schema::Connection>, |c| &c.id)?;
+  let clusters = checked(&p.clusters, from_value::<schema::Cluster>, |c| &c.id)?;
   upsert_meta(tx, "version", &p.version.to_string())?;
-  upsert_meta(tx, "meta", &p.meta)?;
-  upsert_meta(tx, "card_order", &order_json(&p.card_ids)?)?;
-  upsert_meta(tx, "connection_order", &order_json(&p.connection_ids)?)?;
-  upsert_meta(tx, "cluster_order", &order_json(&p.cluster_ids)?)?;
+  upsert_meta(tx, "meta", &to_json(&p.meta)?)?;
+  upsert_meta(tx, "card_order", &to_json(&p.card_ids)?)?;
+  upsert_meta(tx, "connection_order", &to_json(&p.connection_ids)?)?;
+  upsert_meta(tx, "cluster_order", &to_json(&p.cluster_ids)?)?;
   match &p.viewport {
-    Some(v) => upsert_meta(tx, "viewport", v)?,
+    Some(v) => upsert_meta(tx, "viewport", &to_json(v)?)?,
     None => {
       tx.execute("DELETE FROM meta WHERE key='viewport'", [])
         .map_err(|e| format!("Could not clear the viewport: {e}"))?;
     }
   }
-  write_table(tx, "cards", &p.cards, &p.card_ids)?;
-  write_table(tx, "connections", &p.connections, &p.connection_ids)?;
-  write_table(tx, "clusters", &p.clusters, &p.cluster_ids)?;
+  write_table(tx, "cards", &cards, &p.card_ids)?;
+  write_table(tx, "connections", &connections, &p.connection_ids)?;
+  write_table(tx, "clusters", &clusters, &p.cluster_ids)?;
   write_media_refs(tx, &p.media_refs)
+}
+
+/// Each body validated, its id checked against the row's, and re-serialised in
+/// canonical form, so a row on disk is always a valid entity.
+fn checked<T: Serialize>(
+  bodies: &[BoardBody],
+  parse: impl Fn(Value) -> Result<T, String>,
+  id: impl Fn(&T) -> &str,
+) -> Result<Vec<BoardBody>, String> {
+  bodies
+    .iter()
+    .map(|body| {
+      let value = serde_json::from_str(&body.json).map_err(|e| format!("Not valid JSON for {}: {e}", body.id))?;
+      let entity = parse(value)?;
+      if id(&entity) != body.id {
+        return Err(format!("A row's body has another id: {}", body.id));
+      }
+      Ok(BoardBody { id: body.id.clone(), json: to_json(&entity)? })
+    })
+    .collect()
+}
+
+fn from_value<T: DeserializeOwned>(value: Value) -> Result<T, String> {
+  serde_json::from_value(value).map_err(|e| format!("Not a valid board row: {e}"))
 }
 
 /// The media names the board's cards link, which TypeScript derives from the cards
@@ -265,6 +302,7 @@ fn recorded_refs(conn: &Connection) -> rusqlite::Result<Option<Vec<String>>> {
 /// unknown: unrecorded, unreadable, or a legacy JSON board not yet migrated. While any
 /// are unknown the set is incomplete, and nothing may be swept on its say-so.
 #[derive(Default, serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryRefs {
   pub(crate) names: HashSet<String>,
@@ -327,8 +365,8 @@ pub fn media_refs(app: AppHandle, db: State<LibraryDb>, except: Option<String>) 
   library_media_refs(&boards_dir(&app)?, &listed, except.as_deref())
 }
 
-fn order_json(ids: &[String]) -> Result<String, String> {
-  serde_json::to_string(ids).map_err(|e| format!("Could not record board order: {e}"))
+fn to_json(value: &impl Serialize) -> Result<String, String> {
+  serde_json::to_string(value).map_err(|e| format!("Could not encode the board: {e}"))
 }
 
 fn upsert_meta(tx: &Transaction, key: &str, value: &str) -> Result<(), String> {
@@ -376,46 +414,26 @@ fn write_table(tx: &Transaction, table: &str, bodies: &[BoardBody], ids: &[Strin
   Ok(())
 }
 
-fn read_board_db(path: &Path) -> Result<String, String> {
+fn read_board_db(path: &Path) -> Result<Board, String> {
   reassemble_board(&open_board_db(path)?)
 }
 
-/// The board envelope, ready to serialise. Each fragment is a `RawValue` — the stored
-/// card/connection/cluster/meta JSON passed through verbatim (validated as JSON, never
-/// interpreted). Field order matches the `Board` interface, though the schema does not
-/// depend on it.
-#[derive(serde::Serialize)]
-struct BoardEnvelope<'a> {
-  version: i64,
-  meta: &'a RawValue,
-  clusters: Vec<&'a RawValue>,
-  cards: Vec<&'a RawValue>,
-  connections: Vec<&'a RawValue>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  viewport: Option<&'a RawValue>,
-}
-
-fn reassemble_board(conn: &Connection) -> Result<String, String> {
+/// The rows put back together and validated as a board, migrated from whatever version
+/// they were saved at.
+fn reassemble_board(conn: &Connection) -> Result<Board, String> {
   let meta = read_meta(conn)?;
-  let version: i64 = meta.get("version").and_then(|v| v.parse().ok()).unwrap_or(3);
-  let meta_box = raw(meta.get("meta").map(String::as_str).unwrap_or("{}"))?;
-  let viewport_box = match meta.get("viewport") {
-    Some(v) => Some(raw(v)?),
-    None => None,
-  };
-  let cards = ordered_bodies(conn, "cards", meta.get("card_order"))?;
-  let connections = ordered_bodies(conn, "connections", meta.get("connection_order"))?;
-  let clusters = ordered_bodies(conn, "clusters", meta.get("cluster_order"))?;
-
-  let env = BoardEnvelope {
-    version,
-    meta: &meta_box,
-    clusters: clusters.iter().map(|b| &**b).collect(),
-    cards: cards.iter().map(|b| &**b).collect(),
-    connections: connections.iter().map(|b| &**b).collect(),
-    viewport: viewport_box.as_deref(),
-  };
-  serde_json::to_string(&env).map_err(|e| format!("Could not assemble the board: {e}"))
+  let version: u8 = meta.get("version").and_then(|v| v.parse().ok()).unwrap_or(3);
+  let mut board = json!({
+    "version": version,
+    "meta": fragment(meta.get("meta").map_or("{}", String::as_str))?,
+    "clusters": ordered_bodies(conn, "clusters", meta.get("cluster_order"))?,
+    "cards": ordered_bodies(conn, "cards", meta.get("card_order"))?,
+    "connections": ordered_bodies(conn, "connections", meta.get("connection_order"))?,
+  });
+  if let Some(viewport) = meta.get("viewport") {
+    board["viewport"] = fragment(viewport)?;
+  }
+  parse_board(board)
 }
 
 fn read_meta(conn: &Connection) -> Result<HashMap<String, String>, String> {
@@ -428,11 +446,11 @@ fn read_meta(conn: &Connection) -> Result<HashMap<String, String>, String> {
     .map_err(|e| format!("Could not read board metadata: {e}"))
 }
 
-/// Every row of a table as `RawValue` bodies, in the order the id list gives. An id in
-/// the order list with no row is skipped; a row missing from the list is still emitted
-/// (after the ordered ones), so a reassembly is lossless even if the two ever disagree.
-fn ordered_bodies(conn: &Connection, table: &str, order: Option<&String>) -> Result<Vec<Box<RawValue>>, String> {
-  let bodies: HashMap<String, String> = {
+/// Every row of a table, in the order the id list gives. An id in the order list with
+/// no row is skipped; a row missing from the list is still emitted (after the ordered
+/// ones), so a reassembly is lossless even if the two ever disagree.
+fn ordered_bodies(conn: &Connection, table: &str, order: Option<&String>) -> Result<Vec<Value>, String> {
+  let mut bodies: HashMap<String, String> = {
     let mut stmt = conn
       .prepare(&format!("SELECT id, json FROM {table}"))
       .map_err(|e| format!("Could not read board rows: {e}"))?;
@@ -442,24 +460,20 @@ fn ordered_bodies(conn: &Connection, table: &str, order: Option<&String>) -> Res
       .map_err(|e| format!("Could not read board rows: {e}"))?
   };
   let ids: Vec<String> = order.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
-  let mut out: Vec<Box<RawValue>> = Vec::with_capacity(bodies.len());
-  let mut used: std::collections::HashSet<&str> = std::collections::HashSet::new();
+  let mut out = Vec::with_capacity(bodies.len());
   for id in &ids {
-    if let Some(json) = bodies.get(id) {
-      out.push(raw(json)?);
-      used.insert(id.as_str());
+    if let Some(json) = bodies.remove(id) {
+      out.push(fragment(&json)?);
     }
   }
-  for (id, json) in &bodies {
-    if !used.contains(id.as_str()) {
-      out.push(raw(json)?);
-    }
+  for json in bodies.values() {
+    out.push(fragment(json)?);
   }
   Ok(out)
 }
 
-fn raw(s: &str) -> Result<Box<RawValue>, String> {
-  RawValue::from_string(s.to_string()).map_err(|e| format!("A stored board fragment was not valid JSON: {e}"))
+fn fragment(s: &str) -> Result<Value, String> {
+  serde_json::from_str(s).map_err(|e| format!("A stored board fragment was not valid JSON: {e}"))
 }
 
 /// Where a board is kept, for telling the user.
@@ -528,26 +542,56 @@ mod tests {
   use super::*;
   use crate::board_store::temp_dir_for;
 
-  fn body(id: &str, json: &str) -> BoardBody {
+  fn body(id: &str, json: Value) -> BoardBody {
     BoardBody { id: id.to_string(), json: json.to_string() }
   }
 
+  fn card(id: &str, title: &str) -> BoardBody {
+    body(id, json!({ "id": id, "title": title, "clusterIds": [], "position": { "x": 0, "y": 0 } }))
+  }
+
+  fn meta(title: &str) -> BoardMeta {
+    BoardMeta { title: title.into(), updated_at: "2026-07-19T00:00:00.000Z".into(), country_code: None }
+  }
+
+  const VIEWPORT: Viewport = Viewport { x: 0.0, y: 0.0, zoom: 1.0 };
+
   /// A board of only cards, so the order/delete tests read at a glance. Connections
   /// and clusters take the same `write_table` path, exercised by the round-trip test.
-  fn card_payload(cards: &[(&str, &str)], ids: &[&str], viewport: Option<&str>) -> SaveBoardPayload {
+  fn card_payload(cards: &[&str], ids: &[&str], viewport: Option<Viewport>) -> SaveBoardPayload {
     SaveBoardPayload {
-      version: 3,
-      meta: r#"{"title":"t","updatedAt":"x"}"#.to_string(),
-      viewport: viewport.map(str::to_string),
-      cards: cards.iter().map(|(id, j)| body(id, j)).collect(),
+      version: 4,
+      meta: meta("t"),
+      viewport,
+      cards: cards.iter().map(|id| card(id, id)).collect(),
       card_ids: ids.iter().map(|s| s.to_string()).collect(),
       connections: vec![],
       connection_ids: vec![],
       clusters: vec![],
       cluster_ids: vec![],
       media_refs: vec![],
-      title: "t".into(),
-      updated_at: "x".into(),
+    }
+  }
+
+  /// A whole board as the webview sends it on a first save: every body, every id.
+  fn full_payload(board: &Board) -> SaveBoardPayload {
+    fn bodies<T: Serialize>(xs: &[T], id: impl Fn(&T) -> &str) -> (Vec<BoardBody>, Vec<String>) {
+      xs.iter().map(|x| (body(id(x), serde_json::to_value(x).unwrap()), id(x).to_string())).unzip()
+    }
+    let (cards, card_ids) = bodies(&board.cards, |c| &c.id);
+    let (connections, connection_ids) = bodies(&board.connections, |c| &c.id);
+    let (clusters, cluster_ids) = bodies(&board.clusters, |c| &c.id);
+    SaveBoardPayload {
+      version: board.version,
+      meta: board.meta.clone(),
+      viewport: board.viewport,
+      cards,
+      card_ids,
+      connections,
+      connection_ids,
+      clusters,
+      cluster_ids,
+      media_refs: vec![],
     }
   }
 
@@ -563,53 +607,39 @@ mod tests {
     tx.commit().unwrap();
   }
 
-  fn read(conn: &Connection) -> serde_json::Value {
-    serde_json::from_str(&reassemble_board(conn).unwrap()).unwrap()
+  fn read(conn: &Connection) -> Board {
+    reassemble_board(conn).unwrap()
   }
 
-  fn card_ids(v: &serde_json::Value) -> Vec<String> {
-    v["cards"]
-      .as_array()
-      .unwrap()
-      .iter()
-      .map(|c| c["id"].as_str().unwrap().to_string())
-      .collect()
+  fn card_ids(board: &Board) -> Vec<&str> {
+    board.cards.iter().map(|c| c.id.as_str()).collect()
   }
 
   #[test]
   fn round_trips_a_board() {
     let mut conn = fresh();
-    apply(
-      &mut conn,
-      &SaveBoardPayload {
-        version: 3,
-        meta: r#"{"title":"Case","updatedAt":"2026-07-19T00:00:00.000Z"}"#.to_string(),
-        viewport: Some(r#"{"x":1.0,"y":2.0,"zoom":1.5}"#.to_string()),
-        cards: vec![body("c1", r#"{"id":"c1","title":"A"}"#), body("c2", r#"{"id":"c2","title":"B"}"#)],
-        card_ids: vec!["c1".into(), "c2".into()],
-        connections: vec![body("e1", r#"{"id":"e1","source":"c1","target":"c2"}"#)],
-        connection_ids: vec!["e1".into()],
-        clusters: vec![body("g1", r#"{"id":"g1","label":"grp"}"#)],
-        cluster_ids: vec!["g1".into()],
-        media_refs: vec![],
-        title: "Case".into(),
-        updated_at: "2026-07-19T00:00:00.000Z".into(),
-      },
-    );
-    let v = read(&conn);
-    assert_eq!(v["version"], 3);
-    assert_eq!(v["meta"]["title"], "Case");
-    assert_eq!(card_ids(&v), vec!["c1", "c2"]);
-    assert_eq!(v["cards"][0]["title"], "A");
-    assert_eq!(v["connections"][0]["id"], "e1");
-    assert_eq!(v["clusters"][0]["id"], "g1");
-    assert_eq!(v["viewport"]["zoom"], 1.5);
+    let mut payload = card_payload(&[], &["c1", "c2"], Some(Viewport { x: 1.0, y: 2.0, zoom: 1.5 }));
+    payload.meta = meta("Case");
+    payload.cards = vec![card("c1", "A"), card("c2", "B")];
+    payload.connections = vec![body("e1", json!({ "id": "e1", "source": "c1", "target": "c2" }))];
+    payload.connection_ids = vec!["e1".into()];
+    payload.clusters = vec![body("g1", json!({ "id": "g1", "label": "grp", "color": "#fff", "visible": true }))];
+    payload.cluster_ids = vec!["g1".into()];
+    apply(&mut conn, &payload);
+    let board = read(&conn);
+    assert_eq!(board.version, 4);
+    assert_eq!(board.meta.title, "Case");
+    assert_eq!(card_ids(&board), vec!["c1", "c2"]);
+    assert_eq!(board.cards[0].title, "A");
+    assert_eq!(board.connections[0].id, "e1");
+    assert_eq!(board.clusters[0].id, "g1");
+    assert_eq!(board.viewport.unwrap().zoom, 1.5);
   }
 
   #[test]
   fn deletes_rows_absent_from_the_id_list() {
     let mut conn = fresh();
-    apply(&mut conn, &card_payload(&[("a", r#"{"id":"a"}"#), ("b", r#"{"id":"b"}"#)], &["a", "b"], None));
+    apply(&mut conn, &card_payload(&["a", "b"], &["a", "b"], None));
     // A save that no longer lists b removes it, even though no body is re-sent for a.
     apply(&mut conn, &card_payload(&[], &["a"], None));
     assert_eq!(card_ids(&read(&conn)), vec!["a"]);
@@ -618,10 +648,7 @@ mod tests {
   #[test]
   fn preserves_order_after_a_mid_list_delete() {
     let mut conn = fresh();
-    apply(
-      &mut conn,
-      &card_payload(&[("a", r#"{"id":"a"}"#), ("b", r#"{"id":"b"}"#), ("c", r#"{"id":"c"}"#)], &["a", "b", "c"], None),
-    );
+    apply(&mut conn, &card_payload(&["a", "b", "c"], &["a", "b", "c"], None));
     // Drop the middle row and re-send only the order — the surviving rows keep a,c.
     apply(&mut conn, &card_payload(&[], &["a", "c"], None));
     assert_eq!(card_ids(&read(&conn)), vec!["a", "c"]);
@@ -629,25 +656,83 @@ mod tests {
 
   #[test]
   fn empty_board_has_empty_arrays_and_no_viewport() {
-    let v = {
-      let mut conn = fresh();
-      apply(&mut conn, &card_payload(&[], &[], None));
-      read(&conn)
-    };
-    assert!(v["cards"].as_array().unwrap().is_empty());
-    assert!(v["connections"].as_array().unwrap().is_empty());
-    assert!(v["clusters"].as_array().unwrap().is_empty());
-    assert!(v.get("viewport").is_none());
-    assert_eq!(v["meta"]["title"], "t");
+    let mut conn = fresh();
+    apply(&mut conn, &card_payload(&[], &[], None));
+    let board = read(&conn);
+    assert!(board.cards.is_empty() && board.connections.is_empty() && board.clusters.is_empty());
+    assert_eq!(board.viewport, None);
+    assert_eq!(board.meta.title, "t");
   }
 
   #[test]
   fn viewport_is_dropped_when_a_later_save_omits_it() {
     let mut conn = fresh();
-    apply(&mut conn, &card_payload(&[], &[], Some(r#"{"x":0.0,"y":0.0,"zoom":1.0}"#)));
-    assert!(read(&conn).get("viewport").is_some());
+    apply(&mut conn, &card_payload(&[], &[], Some(VIEWPORT)));
+    assert!(read(&conn).viewport.is_some());
     apply(&mut conn, &card_payload(&[], &[], None));
-    assert!(read(&conn).get("viewport").is_none());
+    assert!(read(&conn).viewport.is_none());
+  }
+
+  #[test]
+  fn a_save_stores_each_body_validated_and_canonical() {
+    let mut conn = fresh();
+    apply(&mut conn, &card_payload(&["a"], &["a"], None));
+    let stored: String = conn.query_row("SELECT json FROM cards WHERE id='a'", [], |r| r.get(0)).unwrap();
+    let stored: Value = serde_json::from_str(&stored).unwrap();
+    assert_eq!(stored["kind"], "evidence");
+    assert_eq!(stored["notes"], "");
+  }
+
+  #[test]
+  fn a_save_with_an_invalid_body_writes_nothing() {
+    let mut conn = fresh();
+    apply(&mut conn, &card_payload(&["a"], &["a"], None));
+    for bad in [
+      body("b", json!({ "id": "b", "title": "B", "clusterIds": [], "position": { "x": 0, "y": 0 }, "kind": "suspect" })),
+      body("b", json!({ "id": "b" })),
+      body("b", json!({ "id": "other", "title": "B", "clusterIds": [], "position": { "x": 0, "y": 0 } })),
+      BoardBody { id: "b".into(), json: "not json".into() },
+    ] {
+      let mut p = card_payload(&[], &["b"], None);
+      p.cards = vec![bad];
+      let tx = conn.transaction().unwrap();
+      assert!(write_board_tx(&tx, &p).is_err());
+    }
+    let mut p = card_payload(&[], &[], None);
+    p.version = 3;
+    assert!(write_board_tx(&conn.transaction().unwrap(), &p).is_err());
+    assert_eq!(card_ids(&read(&conn)), vec!["a"]);
+  }
+
+  #[test]
+  fn a_board_saved_by_an_older_build_reassembles_migrated() {
+    let conn = fresh();
+    conn
+      .execute_batch(
+        r#"INSERT INTO meta VALUES ('version','3'), ('meta','{"title":"Old","updatedAt":"x"}'), ('card_order','["a"]');
+           INSERT INTO cards VALUES ('a','{"id":"a","title":"A","notes":"","imageUrl":null,"clusterId":"g","position":{"x":0,"y":0},"kind":"email","email":{"attachments":["r.pdf"]}}');"#,
+      )
+      .unwrap();
+    let board = read(&conn);
+    assert_eq!(board.version, 4);
+    assert_eq!(board.cards[0].cluster_ids, vec!["g"]);
+    assert_eq!(board.cards[0].email.as_ref().unwrap().attachments[0].name, "r.pdf");
+  }
+
+  /// Every fixture, saved as the webview would and read back, is the board it was.
+  #[test]
+  fn fixture_boards_survive_a_save_and_reload() {
+    for text in [
+      include_str!("../../tests/fixtures/boards/v1.json"),
+      include_str!("../../tests/fixtures/boards/v2-email.json"),
+      include_str!("../../tests/fixtures/boards/v3-entities.json"),
+      include_str!("../../tests/fixtures/boards/v4-current.json"),
+    ] {
+      let board = parse_board_json(text).unwrap();
+      let mut conn = fresh();
+      apply(&mut conn, &full_payload(&board));
+      assert_eq!(read(&conn), board);
+    }
   }
 
   /// The whole point of the swap, on a real file: a save committed through one
@@ -660,20 +745,18 @@ mod tests {
     {
       let mut conn = open_board_db(&path).unwrap();
       let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate).unwrap();
-      write_board_tx(
-        &tx,
-        &card_payload(&[("a", r#"{"id":"a","title":"Kept"}"#)], &["a"], Some(r#"{"x":0.0,"y":0.0,"zoom":1.0}"#)),
-      )
-      .unwrap();
+      let mut payload = card_payload(&[], &["a"], Some(VIEWPORT));
+      payload.cards = vec![card("a", "Kept")];
+      write_board_tx(&tx, &payload).unwrap();
       tx.commit().unwrap();
       let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
     } // the connection drops here — the file is closed
 
     // A brand-new connection, i.e. the file reopened, sees the committed board.
-    let v: serde_json::Value = serde_json::from_str(&read_board_db(&path).unwrap()).unwrap();
-    assert_eq!(card_ids(&v), vec!["a"]);
-    assert_eq!(v["cards"][0]["title"], "Kept");
-    assert!(v.get("viewport").is_some());
+    let board = read_board_db(&path).unwrap();
+    assert_eq!(card_ids(&board), vec!["a"]);
+    assert_eq!(board.cards[0].title, "Kept");
+    assert!(board.viewport.is_some());
     let _ = std::fs::remove_dir_all(&dir);
   }
 

@@ -9,8 +9,8 @@
 //! module is a *derived index*, never a source of truth: the media files and the
 //! extractors are authoritative, and this can be rebuilt from them at any time
 //! (`reindex_all`). It is board-agnostic — it knows media names and text, never a
-//! board id or a card field — which is what keeps the shell free of the card schema
-//! and cross-board search a later no-op. A pool of workers (`start_worker`) reads
+//! board id or a card field — which keeps it independent of the card schema and
+//! cross-board search a later no-op. A pool of workers (`start_worker`) reads
 //! each file as it is stored, and at startup whatever `pending_media` says is unread.
 
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -89,6 +89,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
 
 /// One file's place in the index, for the Objects view's badge.
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct DocStatus {
   name: String,
@@ -98,6 +99,7 @@ pub struct DocStatus {
 /// One search hit: the media name (which the webview maps back to a card), a snippet
 /// with the match marked, and its BM25 rank (smaller is better).
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct DocHit {
   name: String,

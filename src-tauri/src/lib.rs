@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod bindings;
 mod board_store;
 mod extract;
 mod jobs;
@@ -6,6 +8,7 @@ mod library_index;
 mod mcp;
 mod menu;
 mod quit;
+mod schema;
 
 #[cfg(all(feature = "mcp", not(debug_assertions)))]
 compile_error!("the `mcp` feature is for development builds only");
@@ -27,6 +30,7 @@ pub fn run() {
       board_store::board_index::current_board_id,
       board_store::board_index::set_current_board_id,
       board_store::board_db::load_board,
+      board_store::board_db::seed_board,
       board_store::board_db::save_board,
       board_store::board_db::retire_legacy_board,
       board_store::board_db::delete_board,
