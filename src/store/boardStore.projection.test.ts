@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { doc, type DocChanged } from '../platform/document';
 import { boardStore } from './boardStore';
 import { drafts } from '../lib/drafts';
+import { storage } from '../storage';
+import { emptyBoard } from '../data/emptyBoard';
 import type { Card, Connection } from '../types/board';
 
 vi.mock('../platform/document', () => ({
@@ -9,7 +11,8 @@ vi.mock('../platform/document', () => ({
     moveCards: vi.fn(),
     updateCard: vi.fn(),
     refreshCard: vi.fn(),
-    addCards: vi.fn(),
+    edit: vi.fn(),
+    open: vi.fn(),
     deleteCards: vi.fn(),
     updateCluster: vi.fn(),
     deleteCluster: vi.fn(),
@@ -18,7 +21,12 @@ vi.mock('../platform/document', () => ({
 }));
 
 vi.mock('../storage', () => ({
-  storage: { mediaCardDraft: vi.fn().mockResolvedValue({ notes: 'OCR text', imageMeta: null }) },
+  storage: {
+    mediaCardDraft: vi.fn().mockResolvedValue({ notes: 'OCR text', imageMeta: null }),
+    createBoards: vi.fn().mockResolvedValue(undefined),
+    setCurrentBoardId: vi.fn().mockResolvedValue(undefined),
+    gcMedia: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 const card = (id: string, x = 0) => ({ id, title: id, clusterIds: [], position: { x, y: 0 } }) as unknown as Card;
@@ -42,7 +50,7 @@ beforeEach(() => {
   vi.mocked(doc.moveCards).mockReset().mockResolvedValue();
   vi.mocked(doc.updateCard).mockReset().mockResolvedValue();
   vi.mocked(doc.refreshCard).mockReset().mockResolvedValue();
-  vi.mocked(doc.addCards).mockReset().mockResolvedValue();
+  vi.mocked(doc.edit).mockReset().mockResolvedValue();
   vi.mocked(doc.deleteCards).mockReset().mockResolvedValue();
   vi.mocked(doc.updateCluster).mockReset().mockResolvedValue();
   vi.mocked(doc.deleteCluster).mockReset().mockResolvedValue();
@@ -157,4 +165,17 @@ it('two quick edits to one cluster send only their own fields, so neither undoes
     ['brd_open', 'g1', { color: '#000' }],
     ['brd_open', 'g1', { label: 'Renamed' }],
   ]);
+});
+
+it('a bundle import writes every chosen board in one call and opens only the last', async () => {
+  vi.mocked(doc.open).mockImplementation(async () => emptyBoard());
+  await state().adoptBundle([
+    { board: emptyBoard(), title: 'First' },
+    { board: emptyBoard(), title: 'Second' },
+  ]);
+  expect(storage.createBoards).toHaveBeenCalledOnce();
+  const [written] = vi.mocked(storage.createBoards).mock.calls[0];
+  expect(written.map((b) => b.board.meta.title)).toEqual(['First', 'Second']);
+  expect(doc.open).toHaveBeenCalledExactlyOnceWith(written[1].id);
+  expect(state().currentBoardId).toBe(written[1].id);
 });

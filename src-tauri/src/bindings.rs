@@ -13,6 +13,7 @@ fn export_all(dir: &Path) -> Result<(), ts_rs::ExportError> {
   crate::board_store::session::DocChanged::export_all_to(dir)?;
   crate::board_store::session::MetaPatch::export_all_to(dir)?;
   crate::board_store::session::CardMove::export_all_to(dir)?;
+  crate::board_store::session::BoardEdit::export_all_to(dir)?;
   crate::board_store::bundle::BundleManifest::export_all_to(dir)?;
   crate::board_store::inbox::InboxBatch::export_all_to(dir)?;
   crate::import::MediaDraft::export_all_to(dir)?;

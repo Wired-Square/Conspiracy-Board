@@ -50,8 +50,8 @@ export interface StorageAdapter {
   loadBoard(id: string): Promise<Board | null>;
   /** The bundled example board. */
   seedBoard(): Promise<Board>;
-  /** Write a board new to the library, and list it. Refuses an id already in use. */
-  createBoard(id: string, board: Board): Promise<void>;
+  /** Write boards new to the library, all or none, and list them. Refuses an id already in use. */
+  createBoards(boards: { id: string; board: Board }[]): Promise<void>;
   /** Remove a board. Does not touch the current-board pointer; that is policy. */
   deleteBoard(id: string): Promise<void>;
 

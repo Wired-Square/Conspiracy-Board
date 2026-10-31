@@ -65,8 +65,8 @@ export const tauriStorage: StorageAdapter = {
     return invoke<Board>('seed_board');
   },
 
-  async createBoard(id, board) {
-    await invoke('create_board', { id, board });
+  async createBoards(boards) {
+    await invoke('create_boards', { boards });
   },
 
   deleteBoard(id) {

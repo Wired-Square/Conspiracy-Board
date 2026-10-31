@@ -9,7 +9,7 @@ import { isBoardKind } from '../lib/kinds';
 import type { OfferPlan } from '../lib/importOffer';
 import { listenTauri } from '../platform/listen';
 import { storage } from '../storage';
-import { boardStore, type CardDraft } from './boardStore';
+import { boardStore, newCluster, type CardDraft } from './boardStore';
 
 // Staged drafts are not board content, so they don't belong in boardStore —
 // which is deliberately the canonical board plus one scalar of UI state. Keeping
@@ -107,43 +107,45 @@ export const emailImportStore = createStore<EmailImportState>()((set, get) => {
 
       // Resolve the "new cluster" sentinel to a real cluster now, named after the
       // batch, so the fresh messages and any already-imported ones share one group.
-      const cid = clusterId === NEW_CLUSTER ? board.addCluster(clusterLabelFor(drafts)) : clusterId;
-
-      // One call: the messages and the new entities land in one grid block, in the
-      // same cluster, and every id comes back. Nothing is strung together — who is
-      // on what is derived from the addresses themselves (see lib/roster.ts), and
-      // only the user draws a connection.
-      const addedIds = board.addCards([...emailDrafts, ...entityDrafts], { clusterId: cid });
+      const fresh = clusterId === NEW_CLUSTER ? newCluster(clusterLabelFor(drafts), board.clusters) : null;
+      const cid = fresh?.id ?? clusterId;
 
       // A message already on the board is part of this thread too. With a cluster
       // chosen, add it in rather than leaving it outside the group the rest joined
       // — appended, not moved: the user placed that card's primary, and this batch
       // is an additional strand. A duplicate carries no card on its match, so it
       // is found the same way the preview matched it — by Message-ID.
-      if (cid) {
-        matches.forEach((m, i) => {
-          if (m.kind !== 'duplicate') return;
-          const mid = drafts[i].email.messageId;
-          const existing = mid ? byMessageId.get(mid) : undefined;
-          if (existing && !existing.clusterIds.includes(cid)) {
-            board.updateCard(existing.id, { clusterIds: withMembership(existing.clusterIds, cid) });
-          }
-        });
-      }
+      const joining = !cid
+        ? []
+        : matches.flatMap((m, i) => {
+            const mid = drafts[i].email.messageId;
+            const existing = m.kind === 'duplicate' && mid ? byMessageId.get(mid) : undefined;
+            return existing ? [{ id: existing.id, patch: { clusterIds: withMembership(existing.clusterIds, cid) } }] : [];
+          });
 
-      for (const [id, patch] of patches) board.updateCard(id, patch);
+      // One edit, so one undo takes the whole import back: the messages and the new
+      // entities land in one grid block, in the same cluster, and every id comes
+      // back. Nothing is strung together — who is on what is derived from the
+      // addresses themselves (see lib/roster.ts), and only the user draws a
+      // connection.
+      const added = board.addCards([...emailDrafts, ...entityDrafts], {
+        clusterId: cid,
+        alongside: {
+          clusters: fresh ? [fresh] : [],
+          cardUpdates: [...joining, ...patches.map(([id, patch]) => ({ id, patch }))],
+        },
+      });
+
       get().close();
 
-      // Read the cards back from the store rather than slicing addedIds: addCards
-      // sorts the batch by date, so the ids do not come back in the order they
-      // went in.
-      const drawn = new Set(
-        boardStore
-          .getState()
-          .cards.filter((c) => isBoardKind(c.kind))
-          .map((c) => c.id),
-      );
-      const drawnIds = [...addedIds, ...patches.map(([id]) => id)].filter((id) => drawn.has(id));
+      // Kinds from what the edit sends: the new cards reach the store only when the
+      // shell's change comes back.
+      const kinds = new Map([...board.cards, ...added].map((c) => [c.id, c.kind]));
+      const addedIds = added.map((c) => c.id);
+      const drawnIds = [...addedIds, ...patches.map(([id]) => id)].filter((id) => {
+        const kind = kinds.get(id);
+        return kind && isBoardKind(kind);
+      });
       return { addedIds, drawnIds };
     },
   };

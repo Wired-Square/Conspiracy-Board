@@ -1,5 +1,5 @@
 //! The board list and the board to reopen, in library.sqlite. Each summary is written
-//! by `create_board` and by each content edit, so listing boards never opens one.
+//! by `create_boards` and by each content edit, so listing boards never opens one.
 //! Unlike the search index beside it, this is a source of truth, imported once from
 //! the `index.json` that held it before.
 

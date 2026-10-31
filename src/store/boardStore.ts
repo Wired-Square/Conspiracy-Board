@@ -12,7 +12,7 @@ import { buildManifest } from '../data/bundle';
 import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
-import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocChanged } from '../platform/document';
+import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocChanged, type Edit } from '../platform/document';
 import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
@@ -52,6 +52,16 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
     occurredAt: null,
     occurredAtPrecision: 'minute',
     ...over,
+  };
+}
+
+/** A cluster in the next palette colour after `clusters`. */
+export function newCluster(label: string | undefined, clusters: Cluster[]): Cluster {
+  return {
+    id: newClusterId(),
+    label: label ?? 'New cluster',
+    color: CLUSTER_PALETTE[clusters.length % CLUSTER_PALETTE.length],
+    visible: true,
   };
 }
 
@@ -126,7 +136,7 @@ export type BoardState = {
    * True whenever the library is empty — no boards at all — whether on first run
    * or after deleting the last board. The app then shows the welcome dialog to
    * pick a way in rather than silently seeding a board; adopting one clears it
-   * (see adoptBoard, init, deleteBoard).
+   * (see adoptBoards, init, deleteBoard).
    */
   firstRun: boolean;
   /**
@@ -157,8 +167,14 @@ export type BoardState = {
 
   // Editing.
   addCard: (init?: CardDraft) => string;
-  /** Bulk append (email import). Returns the ids actually added. */
-  addCards: (drafts: CardDraft[], opts?: { clusterId?: string | null }) => string[];
+  /**
+   * Bulk append (email import), with `alongside`'s clusters and card patches in the
+   * same edit. Returns the cards actually added or completed, as sent.
+   */
+  addCards: (
+    drafts: CardDraft[],
+    opts?: { clusterId?: string | null; alongside?: Pick<Edit, 'clusters' | 'cardUpdates'> },
+  ) => Pick<Card, 'id' | 'kind'>[];
   /**
    * Place the cards the shell made from imported pictures and documents, and go to
    * them: one is opened, several show where they landed.
@@ -329,15 +345,17 @@ export const boardStore = createStore<BoardState>()((set, get) => {
   };
 
   /**
-   * Take a board that isn't in the library yet, give it an id, and switch to it.
-   * Shared by New and Import — both are additive; neither disturbs the board
-   * they replace on screen.
+   * Take boards that aren't in the library yet, give each an id, write them all in
+   * one call, and switch to the last. Shared by New and Import — both are additive;
+   * neither disturbs the board they replace on screen.
    */
-  const adoptBoard = async (board: Board) => {
-    const id = newBoardId();
+  const adoptBoards = async (boards: Board[]) => {
+    const fresh = boards.map((board) => ({ id: newBoardId(), board }));
+    const last = fresh.at(-1);
+    if (!last) return;
     try {
-      await storage.createBoard(id, board);
-      await enterBoard(id, await doc.open(id));
+      await storage.createBoards(fresh);
+      await enterBoard(last.id, await doc.open(last.id));
       set({ firstRun: false });
     } catch (err) {
       set({ lastError: errorMessage(err) });
@@ -345,7 +363,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
   };
 
   /**
-   * The mirror of adoptBoard: go to the empty-library state, where the welcome
+   * The mirror of adoptBoards: go to the empty-library state, where the welcome
    * dialog offers a way in (see firstRun). Used on a genuinely empty library at
    * init and after the last board is deleted. Clears the hydrated content too, so
    * a just-deleted board isn't left sitting in memory behind the dialog.
@@ -427,11 +445,11 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       const board = emptyBoard();
       const name = title?.trim();
       if (name) board.meta.title = name;
-      await adoptBoard(board);
+      await adoptBoards([board]);
     },
 
     async installExampleBoard() {
-      await adoptBoard(await storage.seedBoard());
+      await adoptBoards([await storage.seedBoard()]);
     },
 
     async openBoard(id) {
@@ -501,7 +519,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         // one that appears nowhere at all.
         view: viewFor(card.kind),
       });
-      send((board) => doc.addCards(board, [card]));
+      send((board) => doc.edit(board, { cards: [card] }));
       return id;
     },
 
@@ -512,7 +530,8 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // lands.
       const byMessageId = emailCardsByMessageId(get().cards);
       const fresh: CardDraft[] = [];
-      const completedIds: string[] = [];
+      const completions: NonNullable<Edit['cardUpdates']> = [];
+      const completed: Pick<Card, 'id' | 'kind'>[] = [];
       const seen = new Set<string>();
 
       for (const d of drafts) {
@@ -527,19 +546,17 @@ export const boardStore = createStore<BoardState>()((set, get) => {
           // Fill the card a Mail drag left waiting — in place, so its position,
           // cluster and connections survive. Provenance survives too: the
           // message is still the one sitting in the user's Mail.
-          get().updateCard(match.card.id, {
-            ...d,
-            email: { ...d.email!, source: match.card.email?.source },
+          completions.push({
+            id: match.card.id,
+            patch: { ...d, email: { ...d.email!, source: match.card.email?.source } },
           });
-          completedIds.push(match.card.id);
+          completed.push({ id: match.card.id, kind: d.kind ?? match.card.kind });
           continue;
         }
 
         if (id) seen.add(id);
         fresh.push(d);
       }
-
-      if (!fresh.length) return completedIds;
 
       // Lay the block out oldest-first so the board itself reads chronologically
       // left-to-right, not just the timeline. Undated drafts sort to the end.
@@ -568,13 +585,15 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         }),
       );
 
-      send((board) => doc.addCards(board, added));
-      return [...completedIds, ...added.map((c) => c.id)];
+      const { clusters = [], cardUpdates = [] } = opts?.alongside ?? {};
+      const edit = { clusters, cards: added, cardUpdates: [...completions, ...cardUpdates] };
+      if (clusters.length || added.length || edit.cardUpdates.length) send((board) => doc.edit(board, edit));
+      return [...completed, ...added];
     },
 
     addImportedMedia(drafts) {
       if (!drafts.length) return;
-      const ids = get().addCards(drafts);
+      const ids = get().addCards(drafts).map((c) => c.id);
       if (!ids.length) return;
       // One file: open it, so its picture/metadata is right there. Several: just go
       // to where they landed — the board unless every one is a record card. Read
@@ -688,7 +707,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
           event: { sourceCardId: cardId },
         });
         // With the string from the source to the event it evidences, in one edit.
-        send((board) => doc.addCards(board, [event], [newConnection(cardId, event.id, 'evidences')]));
+        send((board) => doc.edit(board, { cards: [event], connections: [newConnection(cardId, event.id, 'evidences')] }));
       } else if (existing) {
         // Takes its string with it (deleteCard cascades).
         get().deleteCard(existing.id);
@@ -728,13 +747,8 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     addCluster(label) {
-      const cluster: Cluster = {
-        id: newClusterId(),
-        label: label ?? 'New cluster',
-        color: CLUSTER_PALETTE[get().clusters.length % CLUSTER_PALETTE.length],
-        visible: true,
-      };
-      send((board) => doc.addCluster(board, cluster));
+      const cluster = newCluster(label, get().clusters);
+      send((board) => doc.edit(board, { clusters: [cluster] }));
       return cluster.id;
     },
 
@@ -755,7 +769,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         (c) => c.source === source && c.target === target,
       );
       if (exists) return;
-      send((board) => doc.addConnections(board, [newConnection(source, target, label)]));
+      send((board) => doc.edit(board, { connections: [newConnection(source, target, label)] }));
     },
 
     updateConnection(id, patch) {
@@ -841,12 +855,9 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     async adoptBundle(selected) {
-      // Additive: each board is adopted under a fresh id (adoptBoard mints one), so
-      // a renamed import lands beside the board it is a new version of rather than
-      // replacing it. The last one adopted is left current.
-      for (const { board, title } of selected) {
-        await adoptBoard({ ...board, meta: { ...board.meta, title } });
-      }
+      // Additive: each board is adopted under a fresh id, so a renamed import lands
+      // beside the board it is a new version of rather than replacing it.
+      await adoptBoards(selected.map(({ board, title }) => ({ ...board, meta: { ...board.meta, title } })));
       // Media for boards left unselected was stored when the bundle was read and is
       // now unreferenced; the sweep reclaims it (after its min-age grace).
       void gcMedia();

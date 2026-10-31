@@ -99,6 +99,25 @@ pub struct CardMove {
   position: Vec2,
 }
 
+/// Rows to add and cards to patch, as one edit and one undo step.
+#[derive(Deserialize, Default)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase", default)]
+pub struct BoardEdit {
+  clusters: Vec<Cluster>,
+  cards: Vec<Card>,
+  connections: Vec<Connection>,
+  card_updates: Vec<CardUpdate>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct CardUpdate {
+  id: String,
+  #[cfg_attr(test, ts(type = "Record<string, unknown>"))]
+  patch: Map<String, Value>,
+}
+
 trait Row: Clone + PartialEq + Serialize {
   fn id(&self) -> &str;
 }
@@ -177,9 +196,17 @@ impl Session {
     self.commit(DocChanged { cards, ..Default::default() })
   }
 
-  /// Cards and the strings among them, in one edit. A string repeating an existing
-  /// source→target pair is dropped, as `addConnection` drops it.
-  fn add_cards(&mut self, cards: Vec<Card>, connections: Vec<Connection>) -> Outcome {
+  /// Clusters, cards and the strings among them added, and cards patched, in one edit.
+  /// A string repeating an existing source→target pair is dropped, as `addConnection`
+  /// drops it; a patch to an unknown card is skipped, and patches to one card stack.
+  fn apply_edit(&mut self, edit: BoardEdit) -> Outcome {
+    let BoardEdit { clusters, mut cards, connections, card_updates } = edit;
+    let mut cluster_ids: HashSet<&str> = self.board.clusters.iter().map(|c| c.id.as_str()).collect();
+    for cluster in &clusters {
+      if !cluster_ids.insert(&cluster.id) {
+        return Err(format!("The board already has a cluster {:?}.", cluster.id));
+      }
+    }
     let mut card_ids: HashSet<&str> = self.board.cards.iter().map(|c| c.id.as_str()).collect();
     for card in &cards {
       if !card_ids.insert(&card.id) {
@@ -201,7 +228,15 @@ impl Session {
         fresh.push(link.clone());
       }
     }
-    self.commit(DocChanged { cards, connections: fresh, ..Default::default() })
+    for CardUpdate { id, patch } in card_updates {
+      if let Some(row) = cards.iter_mut().find(|c| c.id == id) {
+        *row = patched(&*row, patch, parse_card)?;
+      } else if let Some(card) = self.card(&id) {
+        cards.push(patched(card, patch, parse_card)?);
+      }
+    }
+    cards.retain(|c| self.card(&c.id) != Some(c));
+    self.commit(DocChanged { cards, connections: fresh, clusters, ..Default::default() })
   }
 
   /// Every string tied to a deleted card goes with it.
@@ -230,13 +265,6 @@ impl Session {
     let removed_connections =
       ids.iter().filter(|id| self.board.connections.iter().any(|c| c.id == **id)).cloned().collect();
     self.commit(DocChanged { removed_connections, ..Default::default() })
-  }
-
-  fn add_cluster(&mut self, cluster: Cluster) -> Outcome {
-    if self.board.clusters.iter().any(|c| c.id == cluster.id) {
-      return Err(format!("The board already has a cluster {:?}.", cluster.id));
-    }
-    self.commit(DocChanged { clusters: vec![cluster], ..Default::default() })
   }
 
   fn update_cluster(&mut self, id: &str, patch: Map<String, Value>) -> Outcome {
@@ -569,15 +597,14 @@ pub fn move_cards(
 }
 
 #[tauri::command(async)]
-pub fn add_cards(
+pub fn apply_edit(
   app: AppHandle,
   open: State<OpenBoard>,
   library: State<LibraryDb>,
   board_id: String,
-  cards: Vec<Card>,
-  connections: Vec<Connection>,
+  edit: BoardEdit,
 ) -> Result<(), String> {
-  edit(&app, &open, &library, &board_id, |s| s.add_cards(cards, connections))
+  self::edit(&app, &open, &library, &board_id, |s| s.apply_edit(edit))
 }
 
 #[tauri::command(async)]
@@ -589,17 +616,6 @@ pub fn delete_cards(
   ids: Vec<String>,
 ) -> Result<(), String> {
   edit(&app, &open, &library, &board_id, |s| s.delete_cards(&ids))
-}
-
-#[tauri::command(async)]
-pub fn add_connections(
-  app: AppHandle,
-  open: State<OpenBoard>,
-  library: State<LibraryDb>,
-  board_id: String,
-  connections: Vec<Connection>,
-) -> Result<(), String> {
-  edit(&app, &open, &library, &board_id, |s| s.add_cards(Vec::new(), connections))
 }
 
 #[tauri::command(async)]
@@ -623,17 +639,6 @@ pub fn delete_connections(
   ids: Vec<String>,
 ) -> Result<(), String> {
   edit(&app, &open, &library, &board_id, |s| s.delete_connections(&ids))
-}
-
-#[tauri::command(async)]
-pub fn add_cluster(
-  app: AppHandle,
-  open: State<OpenBoard>,
-  library: State<LibraryDb>,
-  board_id: String,
-  cluster: Cluster,
-) -> Result<(), String> {
-  edit(&app, &open, &library, &board_id, |s| s.add_cluster(cluster))
 }
 
 #[tauri::command(async)]

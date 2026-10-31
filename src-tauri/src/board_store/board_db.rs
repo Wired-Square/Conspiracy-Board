@@ -1,7 +1,7 @@
 //! Per-board SQLite.
 //!
 //! One database per board (boards/<id>.sqlite). A board is written whole only when it
-//! is created (`create_board`, or a legacy `boards/<id>.json` on first use); after that
+//! is created (`create_boards`, or a legacy `boards/<id>.json` on first use); after that
 //! the open-board session (`session`) edits it a row at a time. `load_board`
 //! reassembles the rows and returns the validated, migrated board.
 //!
@@ -16,7 +16,7 @@ use tauri::{AppHandle, State};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
@@ -133,14 +133,37 @@ pub fn seed_board() -> Result<Board, String> {
   parse_board_json(include_str!("../../../data/board.json"))
 }
 
-/// A new board, written whole, then listed: a board is never listed before it can be
-/// opened. Two files, so two commits.
+#[derive(Deserialize)]
+pub struct NewBoard {
+  id: String,
+  board: Value,
+}
+
+/// New boards, each written whole, then listed: a board is never listed before it can
+/// be opened.
 #[tauri::command(async)]
-pub fn create_board(app: AppHandle, library: State<LibraryDb>, id: String, board: Value) -> Result<(), String> {
+pub fn create_boards(app: AppHandle, library: State<LibraryDb>, boards: Vec<NewBoard>) -> Result<(), String> {
   let _held = quit::hold(&app);
-  let board = parse_board(board)?;
-  create_board_db(&board_db_file(&app, &id)?, &board)?;
-  upsert_summary(&*library.lock_db()?, &id, &board.meta.title, &board.meta.updated_at)
+  let boards = boards
+    .into_iter()
+    .map(|new| Ok((board_db_file(&app, &new.id)?, new.id, parse_board(new.board)?)))
+    .collect::<Result<Vec<_>, String>>()?;
+  create_board_dbs(boards.iter().map(|(path, _, board)| (path.as_path(), board)))?;
+  let library = library.lock_db()?;
+  boards.iter().try_for_each(|(_, id, board)| upsert_summary(&library, id, &board.meta.title, &board.meta.updated_at))
+}
+
+/// Every board or none: a failed write removes the ones already made.
+fn create_board_dbs<'a>(boards: impl IntoIterator<Item = (&'a Path, &'a Board)>) -> Result<(), String> {
+  let mut made = Vec::new();
+  for (path, board) in boards {
+    if let Err(e) = create_board_db(path, board) {
+      made.into_iter().try_for_each(remove_board_db)?;
+      return Err(e);
+    }
+    made.push(path);
+  }
+  Ok(())
 }
 
 /// Refuses a database that already exists, and leaves none behind when the write fails.
@@ -550,6 +573,21 @@ mod tests {
       assert!(create_board_db(path, &board("Second", json!([]))).is_err());
       assert_eq!(read_board_db(path).unwrap().meta.title, "First");
     });
+  }
+
+  #[test]
+  fn creating_several_boards_makes_all_or_none() {
+    let dir = temp_dir_for("create-several");
+    let (one, two) = (dir.join("brd_one.sqlite"), dir.join("brd_two.sqlite"));
+    let (first, second) = (board("First", json!([])), board("Second", json!([])));
+    create_board_dbs([(one.as_path(), &first), (two.as_path(), &second)]).unwrap();
+    assert_eq!(read_board_db(&two).unwrap().meta.title, "Second");
+
+    let three = dir.join("brd_three.sqlite");
+    assert!(create_board_dbs([(three.as_path(), &first), (one.as_path(), &second)]).is_err());
+    assert!(!three.exists());
+    assert_eq!(read_board_db(&one).unwrap().meta.title, "First");
+    let _ = std::fs::remove_dir_all(&dir);
   }
 
   #[test]

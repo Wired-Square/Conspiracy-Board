@@ -85,6 +85,22 @@ fn link(id: &str, source: &str, target: &str) -> Connection {
   from_value(json!({ "id": id, "source": source, "target": target })).unwrap()
 }
 
+fn cluster(id: &str) -> Cluster {
+  Cluster { id: id.into(), label: id.into(), color: "#f00".into(), visible: true }
+}
+
+fn adding(cards: Vec<Card>, connections: Vec<Connection>) -> BoardEdit {
+  BoardEdit { cards, connections, ..Default::default() }
+}
+
+fn adding_cluster(cluster: Cluster) -> BoardEdit {
+  BoardEdit { clusters: vec![cluster], ..Default::default() }
+}
+
+fn card_update(id: &str, value: Value) -> CardUpdate {
+  CardUpdate { id: id.into(), patch: patch(value) }
+}
+
 #[test]
 fn opening_a_session_writes_nothing() {
   let dir = temp_dir_for("session-open");
@@ -185,7 +201,7 @@ fn added_cards_and_their_strings_append_in_one_change() {
   let mut f = Fixture::new("add");
   let change = f
     .session
-    .add_cards(vec![card("x"), card("y")], vec![link("e3", "x", "a"), link("e4", "a", "b")])
+    .apply_edit(adding(vec![card("x"), card("y")], vec![link("e3", "x", "a"), link("e4", "a", "b")]))
     .unwrap()
     .unwrap();
   assert_eq!(ids(&change.cards), ["x", "y"]);
@@ -199,11 +215,11 @@ fn added_cards_and_their_strings_append_in_one_change() {
 #[test]
 fn a_bad_add_writes_nothing() {
   let mut f = Fixture::new("bad-add");
-  assert!(f.session.add_cards(vec![card("a")], vec![]).is_err());
-  assert!(f.session.add_cards(vec![card("x"), card("x")], vec![]).is_err());
-  assert!(f.session.add_cards(vec![card("x")], vec![link("e3", "x", "gone")]).is_err());
-  assert!(f.session.add_cards(vec![], vec![link("e3", "a", "a")]).is_err());
-  assert!(f.session.add_cards(vec![], vec![link("e1", "c", "a")]).is_err());
+  assert!(f.session.apply_edit(adding(vec![card("a")], vec![])).is_err());
+  assert!(f.session.apply_edit(adding(vec![card("x"), card("x")], vec![])).is_err());
+  assert!(f.session.apply_edit(adding(vec![card("x")], vec![link("e3", "x", "gone")])).is_err());
+  assert!(f.session.apply_edit(adding(vec![], vec![link("e3", "a", "a")])).is_err());
+  assert!(f.session.apply_edit(adding(vec![], vec![link("e1", "c", "a")])).is_err());
   assert_eq!(f.writes(), 0);
   assert_eq!(f.on_disk(), fixture());
 }
@@ -232,14 +248,14 @@ fn deleting_a_cluster_keeps_its_cards_without_the_membership() {
 }
 
 #[test]
-fn add_cluster_appends_and_refuses_an_id_in_use() {
+fn an_added_cluster_appends_and_an_id_in_use_is_refused() {
   let mut f = Fixture::new("add-cluster");
-  let added = Cluster { id: "g3".into(), label: "Three".into(), color: "#f00".into(), visible: true };
-  f.session.add_cluster(added.clone()).unwrap().unwrap();
-  assert!(f.session.add_cluster(Cluster { label: "Again".into(), ..added }).is_err());
+  let added = cluster("g3");
+  f.session.apply_edit(adding_cluster(added.clone())).unwrap().unwrap();
+  assert!(f.session.apply_edit(adding_cluster(Cluster { label: "Again".into(), ..added })).is_err());
   let disk = f.on_disk();
   assert_eq!(ids(&disk.clusters), ["g1", "g2", "g3"]);
-  assert_eq!(disk.clusters[2].label, "Three");
+  assert_eq!(disk.clusters[2].label, "g3");
 }
 
 #[test]
@@ -323,19 +339,89 @@ fn unstamped(mut board: Board) -> Board {
 
 type Edit = fn(&mut Session) -> Outcome;
 
+fn tidied() -> Vec<CardMove> {
+  let row = |(i, id): (usize, &str)| CardMove { id: id.into(), position: Vec2 { x: 100.0, y: i as f64 * 50.0 } };
+  ["a", "b", "c", "d"].into_iter().enumerate().map(row).collect()
+}
+
+/// A new cluster, a message and a person in it, a message already on the board
+/// joining it, and a person gaining an address.
+fn email_import() -> BoardEdit {
+  let joined = |id: &str| parse_card(json!({ "id": id, "title": id, "clusterIds": ["g3"], "position": { "x": 0, "y": 0 } }));
+  BoardEdit {
+    clusters: vec![cluster("g3")],
+    cards: vec![joined("m1").unwrap(), joined("p1").unwrap()],
+    connections: vec![],
+    card_updates: vec![
+      card_update("b", json!({ "clusterIds": ["g2", "g3"] })),
+      card_update("c", json!({ "notes": "jo@example.com" })),
+    ],
+  }
+}
+
+#[test]
+fn an_import_is_one_change_written_in_one_transaction() {
+  let mut f = Fixture::new("import");
+  let change = f.session.apply_edit(email_import()).unwrap().unwrap();
+  assert_eq!(ids(&change.clusters), ["g3"]);
+  assert_eq!(ids(&change.cards), ["m1", "p1", "b", "c"]);
+  let disk = f.on_disk();
+  assert_eq!(disk, f.session.board);
+  assert_eq!(ids(&disk.cards), ["a", "b", "c", "d", "m1", "p1"]);
+  assert_eq!(disk.cards[1].cluster_ids, ["g2", "g3"]);
+  assert_eq!(f.session.undo.len(), 1);
+}
+
+#[test]
+fn patches_in_one_edit_stack_and_skip_unknown_and_unchanged_cards() {
+  let mut f = Fixture::new("import-patches");
+  let edit = BoardEdit {
+    cards: vec![card("x")],
+    card_updates: vec![
+      card_update("a", json!({ "title": "One" })),
+      card_update("a", json!({ "notes": "Two" })),
+      card_update("x", json!({ "title": "Fresh" })),
+      card_update("b", json!({ "title": "B" })),
+      card_update("gone", json!({ "title": "Nobody" })),
+    ],
+    ..Default::default()
+  };
+  let change = f.session.apply_edit(edit).unwrap().unwrap();
+  assert_eq!(ids(&change.cards), ["x", "a"]);
+  let disk = f.on_disk();
+  assert_eq!((disk.cards[0].title.as_str(), disk.cards[0].notes.as_str()), ("One", "Two"));
+  assert_eq!(disk.cards[4].title, "Fresh");
+}
+
+#[test]
+fn a_bad_import_writes_nothing() {
+  let mut f = Fixture::new("bad-import");
+  assert!(f.session.apply_edit(adding_cluster(cluster("g1"))).is_err());
+  let bad_patch = BoardEdit { card_updates: vec![card_update("a", json!({ "position": "here" }))], ..email_import() };
+  assert!(f.session.apply_edit(bad_patch).is_err());
+  let renaming = BoardEdit { card_updates: vec![card_update("a", json!({ "id": "z" }))], ..Default::default() };
+  assert!(f.session.apply_edit(renaming).is_err());
+  assert_eq!(f.writes(), 0);
+  assert_eq!(f.on_disk(), fixture());
+  assert!(f.session.undo.is_empty());
+}
+
 #[test]
 fn every_kind_of_edit_undoes_and_redoes_exactly() {
-  let edits: [(&str, Edit); 12] = [
+  let edits: [(&str, Edit); 15] = [
     ("update_card", |s| s.update_card("a", patch(json!({ "title": "Renamed", "imageFile": "new.png" })), Logged::Edit)),
     ("move_cards", |s| s.move_cards(&[CardMove { id: "b".into(), position: Vec2 { x: 9.0, y: 9.0 } }])),
-    ("add_cards", |s| s.add_cards(vec![card("x")], vec![link("e3", "x", "a")])),
-    ("add_connections", |s| s.add_cards(vec![], vec![link("e3", "c", "a")])),
+    ("tidy", |s| s.move_cards(&tidied())),
+    ("email_import", |s| s.apply_edit(email_import())),
+    ("add_cards", |s| s.apply_edit(adding(vec![card("x")], vec![link("e3", "x", "a")]))),
+    ("add_connections", |s| s.apply_edit(adding(vec![], vec![link("e3", "c", "a")]))),
     ("delete_card", |s| s.delete_cards(&["b".into()])),
     ("delete_cards", |s| s.delete_cards(&["a".into(), "c".into()])),
     ("update_connection", |s| s.update_connection("e1", patch(json!({ "label": "knows" })))),
     ("delete_connections", |s| s.delete_connections(&["e1".into()])),
-    ("add_cluster", |s| s.add_cluster(Cluster { id: "g3".into(), label: "Three".into(), color: "#f00".into(), visible: true })),
+    ("add_cluster", |s| s.apply_edit(adding_cluster(cluster("g3")))),
     ("update_cluster", |s| s.update_cluster("g2", patch(json!({ "visible": false })))),
+    ("recolour_cluster", |s| s.update_cluster("g2", patch(json!({ "color": "#0f0" })))),
     ("delete_cluster", |s| s.delete_cluster("g1")),
     ("set_meta", |s| s.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) })),
   ];
@@ -371,7 +457,7 @@ fn undoing_a_delete_puts_rows_back_in_their_old_places_and_says_so() {
   let cluster_back = f.session.undo().unwrap().unwrap();
   assert_eq!(cluster_back.cluster_order.as_deref(), Some(&["g1", "g2"].map(String::from)[..]));
   assert_eq!(f.on_disk().cards[0].cluster_ids, ["g1", "g2"]);
-  let event = serde_json::to_value(f.session.add_cluster(Cluster { id: "g3".into(), label: "".into(), color: "".into(), visible: true }).unwrap().unwrap()).unwrap();
+  let event = serde_json::to_value(f.session.apply_edit(adding_cluster(cluster("g3"))).unwrap().unwrap()).unwrap();
   assert!(event.get("clusterOrder").is_none());
 }
 

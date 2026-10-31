@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Board, Card, Cluster, Connection, Viewport } from '../types/board';
+import type { BoardEdit } from '../bindings/BoardEdit';
 import type { CardMove } from '../bindings/CardMove';
 import type { DocChanged } from '../bindings/DocChanged';
 import type { MetaPatch } from '../bindings/MetaPatch';
@@ -10,6 +11,8 @@ export type { DocChanged };
 export type CardPatch = Partial<Omit<Card, 'id'>>;
 export type ConnectionPatch = Partial<Omit<Connection, 'id'>>;
 export type ClusterPatch = Partial<Omit<Cluster, 'id'>>;
+/** Rows to add and cards to patch, as one edit and one undo step. */
+export type Edit = Partial<Omit<BoardEdit, 'cardUpdates'>> & { cardUpdates?: { id: string; patch: CardPatch }[] };
 
 // JSON drops an undefined field, which would leave the stored value in place; null
 // clears it.
@@ -34,15 +37,15 @@ export const doc = {
   refreshCard: (boardId: string, id: string, patch: CardPatch) =>
     inOrder('refresh_card', { boardId, id, patch: clearing(patch) }),
   moveCards: (boardId: string, moves: CardMove[]) => inOrder('move_cards', { boardId, moves }),
-  addCards: (boardId: string, cards: Card[], connections: Connection[] = []) =>
-    inOrder('add_cards', { boardId, cards, connections }),
+  edit: (boardId: string, { clusters = [], cards = [], connections = [], cardUpdates = [] }: Edit) =>
+    inOrder('apply_edit', {
+      boardId,
+      edit: { clusters, cards, connections, cardUpdates: cardUpdates.map(({ id, patch }) => ({ id, patch: clearing(patch) })) },
+    }),
   deleteCards: (boardId: string, ids: string[]) => inOrder('delete_cards', { boardId, ids }),
-  addConnections: (boardId: string, connections: Connection[]) =>
-    inOrder('add_connections', { boardId, connections }),
   updateConnection: (boardId: string, id: string, patch: ConnectionPatch) =>
     inOrder('update_connection', { boardId, id, patch: clearing(patch) }),
   deleteConnections: (boardId: string, ids: string[]) => inOrder('delete_connections', { boardId, ids }),
-  addCluster: (boardId: string, cluster: Cluster) => inOrder('add_cluster', { boardId, cluster }),
   updateCluster: (boardId: string, id: string, patch: ClusterPatch) =>
     inOrder('update_cluster', { boardId, id, patch: clearing(patch) }),
   deleteCluster: (boardId: string, id: string) => inOrder('delete_cluster', { boardId, id }),
