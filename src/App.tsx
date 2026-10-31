@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
+import type { Component } from 'solid-js';
 import { BoardCanvas } from './components/BoardCanvas';
-import { CameraProvider, CanvasPanel, useCamera } from './components/canvas/Canvas';
-import { Toolbar } from './components/panels/Toolbar';
+import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
 import { ClusterPanel } from './components/panels/ClusterPanel';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
@@ -17,6 +17,7 @@ import { BundleImportModal } from './solid/panels/BundleImportModal';
 import { EmailImportModal } from './solid/panels/EmailImportModal';
 import { ImageEditorModal } from './solid/panels/ImageEditorModal';
 import { CardEditor } from './solid/panels/CardEditor';
+import { Toolbar } from './solid/panels/Toolbar';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -36,8 +37,8 @@ function ImportOverlay() {
 }
 
 // The camera is React context, which an island can't read, so it is handed in.
-function EmailImportIsland() {
-  return <SolidIsland component={EmailImportModal} camera={useCamera()} />;
+function CameraIsland<P extends object>(props: { component: Component<P & { camera: Camera | null }> } & P) {
+  return <SolidIsland<P & { camera: Camera | null }> {...props} camera={useCamera()} />;
 }
 
 export default function App() {
@@ -107,7 +108,7 @@ export default function App() {
             {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
             {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
             <CanvasPanel position="top-left">
-              <Toolbar />
+              <CameraIsland component={Toolbar} />
             </CanvasPanel>
             {/* Shown over board and record: a cluster hides its cards wherever they
                 are, and the record reads visibility through the same useVisibleCards
@@ -129,7 +130,7 @@ export default function App() {
             would paint against CardEditor incorrectly.
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
-        {emailImportOpen && <EmailImportIsland />}
+        {emailImportOpen && <CameraIsland component={EmailImportModal} />}
         {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
         {imageEditorCardId && <SolidIsland key={imageEditorCardId} component={ImageEditorModal} cardId={imageEditorCardId} />}
         {bundleExportOpen && <SolidIsland component={BundleExportModal} />}
