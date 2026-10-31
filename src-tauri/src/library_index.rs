@@ -5,7 +5,8 @@
 //! not just the fields typed onto it. Keyed by the media name (the content hash), so
 //! extraction is deduped across every board and re-running it is idempotent.
 //!
-//! It is a *derived index*, never a source of truth: the media files and the
+//! The board list shares the file (`board_store::board_index`); the rest of this
+//! module is a *derived index*, never a source of truth: the media files and the
 //! extractors are authoritative, and this can be dropped and rebuilt from them at any
 //! time (`rebuild_index`, then re-pump `pending_media`). It is board-agnostic — it
 //! knows media names and text, never a board id or a card field — which is what keeps
@@ -37,7 +38,7 @@ const MAX_ATTEMPTS: i64 = 3;
 pub struct LibraryDb(pub Mutex<Connection>);
 
 impl LibraryDb {
-  fn lock_db(&self) -> Result<MutexGuard<'_, Connection>, String> {
+  pub(crate) fn lock_db(&self) -> Result<MutexGuard<'_, Connection>, String> {
     self.0.lock().map_err(|_| "The search index is unavailable.".to_string())
   }
 }
@@ -56,6 +57,7 @@ pub fn open(app: &AppHandle) -> Result<LibraryDb, String> {
     )
     .map_err(|e| format!("Could not prepare the search index: {e}"))?;
   init_schema(&conn)?;
+  crate::board_store::board_index::init(&conn, &dir)?;
   Ok(LibraryDb(Mutex::new(conn)))
 }
 

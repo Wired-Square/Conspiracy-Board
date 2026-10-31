@@ -20,12 +20,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use serde_json::value::RawValue;
 
+use super::board_index::{listed_ids, remove_summary, upsert_summary};
 use super::{boards_dir, read_opt, remove_if_present, run_open};
+use crate::library_index::LibraryDb;
 
 /// Whether an id is safe to reach the filesystem as a filename. Ids are generated
 /// as `brd_<hex>` (`src/lib/ids.ts`), so this rejects nothing legitimate; it exists
@@ -117,6 +119,8 @@ pub struct SaveBoardPayload {
   clusters: Vec<BoardBody>,
   cluster_ids: Vec<String>,
   media_refs: Vec<String>,
+  title: String,
+  updated_at: String,
 }
 
 /// A single entity to upsert: its id (the envelope's, this side's) and its JSON (the
@@ -150,8 +154,10 @@ pub fn load_board(app: AppHandle, id: String) -> Result<LoadedBoard, String> {
   }
 }
 
+/// The board's rows, then its summary in the board list: a board is never listed
+/// before it can be opened. Two files, so two commits.
 #[tauri::command(async)]
-pub fn save_board(app: AppHandle, id: String, payload: SaveBoardPayload) -> Result<(), String> {
+pub fn save_board(app: AppHandle, db: State<LibraryDb>, id: String, payload: SaveBoardPayload) -> Result<(), String> {
   let mut conn = open_board_db(&board_db_file(&app, &id)?)?;
   let tx = conn
     .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -161,7 +167,7 @@ pub fn save_board(app: AppHandle, id: String, payload: SaveBoardPayload) -> Resu
   // Fold the WAL back into the main file and fsync, so a completed save is durable in
   // boards/<id>.sqlite before this returns and the sidecars are normally absent.
   let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-  Ok(())
+  upsert_summary(&*db.lock_db()?, &id, &payload.title, &payload.updated_at)
 }
 
 /// Remove the legacy `boards/<id>.json` once its `.sqlite` is written and verified to
@@ -259,9 +265,17 @@ pub struct LibraryRefs {
   pub unknown: Vec<String>,
 }
 
-pub(crate) fn library_media_refs(boards: &Path, except: Option<&str>) -> Result<LibraryRefs, String> {
+/// A board in the list with no file on disk is unknown too: it may only be unreachable
+/// for now.
+pub(crate) fn library_media_refs(boards: &Path, listed: &[String], except: Option<&str>) -> Result<LibraryRefs, String> {
   let entries = std::fs::read_dir(boards).map_err(|e| format!("Could not read the boards directory: {e}"))?;
   let mut refs = LibraryRefs::default();
+  for id in listed {
+    let file = boards.join(id);
+    if Some(id.as_str()) != except && !file.with_extension("sqlite").exists() && !file.with_extension("json").exists() {
+      refs.unknown.push(id.clone());
+    }
+  }
   for entry in entries {
     let path = entry.map_err(|e| format!("Could not read the boards directory: {e}"))?.path();
     let (Some(id), Some(ext)) = (path.file_stem().and_then(|s| s.to_str()), path.extension()) else {
@@ -296,8 +310,9 @@ fn read_refs(path: &Path) -> Option<Vec<String>> {
 /// The media refs of every board but `except` (the open one, whose live refs the
 /// caller already has), for the maintenance audit.
 #[tauri::command(async)]
-pub fn media_refs(app: AppHandle, except: Option<String>) -> Result<LibraryRefs, String> {
-  library_media_refs(&boards_dir(&app)?, except.as_deref())
+pub fn media_refs(app: AppHandle, db: State<LibraryDb>, except: Option<String>) -> Result<LibraryRefs, String> {
+  let listed = listed_ids(&*db.lock_db()?)?;
+  library_media_refs(&boards_dir(&app)?, &listed, except.as_deref())
 }
 
 fn order_json(ids: &[String]) -> Result<String, String> {
@@ -483,13 +498,16 @@ pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
 /// Deleting something already gone is a success — the caller wanted it absent. Takes
 /// the database and its `-wal`/`-shm` sidecars, plus any legacy `boards/<id>.json`
 /// left from before this board was migrated.
+/// The files first, then the board list: a listed board whose file is gone would open
+/// as null, where an unlisted file is merely invisible.
 #[tauri::command(async)]
-pub fn delete_board(app: AppHandle, id: String) -> Result<(), String> {
+pub fn delete_board(app: AppHandle, library: State<LibraryDb>, id: String) -> Result<(), String> {
   let db = board_db_file(&app, &id)?;
   remove_if_present(&db)?;
   remove_if_present(&db_sidecar(&db, "-wal"))?;
   remove_if_present(&db_sidecar(&db, "-shm"))?;
-  remove_if_present(&board_file(&app, &id)?)
+  remove_if_present(&board_file(&app, &id)?)?;
+  remove_summary(&*library.lock_db()?, &id)
 }
 
 #[cfg(test)]
@@ -515,6 +533,8 @@ mod tests {
       clusters: vec![],
       cluster_ids: vec![],
       media_refs: vec![],
+      title: "t".into(),
+      updated_at: "x".into(),
     }
   }
 
@@ -559,6 +579,8 @@ mod tests {
         clusters: vec![body("g1", r#"{"id":"g1","label":"grp"}"#)],
         cluster_ids: vec!["g1".into()],
         media_refs: vec![],
+        title: "Case".into(),
+        updated_at: "2026-07-19T00:00:00.000Z".into(),
       },
     );
     let v = read(&conn);
@@ -677,17 +699,19 @@ mod tests {
     std::fs::write(dir.join("brd_corrupt.sqlite"), "not a database").unwrap();
     std::fs::write(dir.join("brd_saved.sqlite-wal"), "").unwrap();
 
-    let refs = library_media_refs(&dir, None).unwrap();
+    std::fs::create_dir(dir.join("brd_dir")).unwrap();
+    let listed = ["brd_saved".to_string(), "brd_gone".to_string()];
+    let refs = library_media_refs(&dir, &listed, None).unwrap();
     let mut unknown = refs.unknown.clone();
     unknown.sort();
-    assert_eq!(unknown, vec!["brd_corrupt", "brd_legacy", "brd_old"]);
+    assert_eq!(unknown, vec!["brd_corrupt", "brd_gone", "brd_legacy", "brd_old"]);
     let mut names: Vec<_> = refs.names.into_iter().collect();
     names.sort();
     assert_eq!(names, vec!["a.png", "b.pdf", "c.eml"]);
 
-    let except = library_media_refs(&dir, Some("brd_other")).unwrap();
+    let except = library_media_refs(&dir, &[], Some("brd_other")).unwrap();
     assert!(!except.names.contains("c.eml"));
-    assert!(library_media_refs(&dir.join("absent"), None).is_err());
+    assert!(library_media_refs(&dir.join("absent"), &[], None).is_err());
     let _ = std::fs::remove_dir_all(&dir);
   }
 }

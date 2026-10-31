@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { documentPropsSchema, imageMetaSchema, withoutNulls } from '../data/schema';
-import type { DocHit, DocStatus, MediaEntry, MediaMeta } from './StorageAdapter';
+import type { BoardSummary, DocHit, DocStatus, MediaEntry, MediaMeta } from './StorageAdapter';
 
 // Return-payload schemas for the shell's commands, one per value-returning
 // invoke in tauriStorage. The Rust structs and the adapter's TS types are
@@ -25,6 +25,12 @@ export const mediaMetaSchema: z.ZodType<MediaMeta> = z.preprocess(
   withoutNulls,
   z.object({ ...documentPropsSchema.shape, ...imageMetaSchema.shape }),
 );
+
+export const boardSummarySchema: z.ZodType<BoardSummary> = z.object({
+  id: z.string(),
+  title: z.string(),
+  updatedAt: z.string(),
+});
 
 export const mediaEntrySchema: z.ZodType<MediaEntry> = z.object({
   name: z.string(),

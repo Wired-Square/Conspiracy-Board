@@ -1,5 +1,7 @@
 import type { Board } from '../types/board';
-import type { BoardSummary } from '../data/boardIndex';
+
+/** A board as the library lists it, without opening it. */
+export type BoardSummary = { id: string; title: string; updatedAt: string };
 
 /** A file chosen by the user, as raw bytes. */
 export type PickedFile = { name: string; bytes: ArrayBuffer };
@@ -63,8 +65,8 @@ export function toPickedFiles(files: File[]): Promise<PickedFile[]> {
 }
 
 /**
- * The IO seam. `tauriStorage` is the only implementation — one JSON file per
- * board plus an index, written by the shell (src-tauri/src/board_store.rs).
+ * The IO seam. `tauriStorage` is the only implementation — one SQLite database
+ * per board plus the library's, written by the shell (src-tauri/src/board_store.rs).
  *
  * The interface remains because it is what keeps persistence out of the rest of
  * `src/`: the store and the panels ask for boards and are told nothing about
@@ -81,14 +83,13 @@ export interface StorageAdapter {
    */
   init(): Promise<void>;
 
-  /** Board summaries for the library. Never parses board bodies. */
+  /** Board summaries for the library, newest first. Never opens a board. */
   listBoards(): Promise<BoardSummary[]>;
   /** The board's content, or null if it is missing or unreadable. */
   loadBoard(id: string): Promise<Board | null>;
   /**
-   * Persist a board and derive its index entry from `board.meta`. The summary is
-   * never supplied by the caller, so the index cannot drift from the board.
-   * Throws with a user-facing message if storage is full.
+   * Persist a board, with its library summary derived from `board.meta` in the same
+   * call, so the list cannot drift from the board.
    */
   saveBoard(id: string, board: Board): Promise<void>;
   /** Remove a board. Does not touch the current-board pointer; that is policy. */

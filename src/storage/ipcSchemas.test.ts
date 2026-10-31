@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boardSummarySchema,
   docHitSchema,
   docStatusSchema,
   loadedBoardSchema,
@@ -21,6 +22,8 @@ describe('IPC return-payload schemas', () => {
     expect(
       readBundleSchema.parse({ manifest: null, boards: [{ id: 'b1', json: '{}' }] }).boards,
     ).toHaveLength(1);
+    const summary = { id: 'brd_a', title: 'A', updatedAt: '2025-01-01T00:00:00.000Z' };
+    expect(boardSummarySchema.parse(summary)).toEqual(summary);
   });
 
   it('strips the nulls Rust sends for absent metadata, keeping what is real', () => {
@@ -52,5 +55,6 @@ describe('IPC return-payload schemas', () => {
     expect(loadedBoardSchema.safeParse({ body: '{}', legacy: false }).success).toBe(false);
     expect(docHitSchema.safeParse({ name: 'x', snippet: 'y', score: 1 }).success).toBe(false);
     expect(mediaEntrySchema.safeParse({ name: 'x', size: '12' }).success).toBe(false);
+    expect(boardSummarySchema.safeParse({ id: 'x', title: 'y', updated_at: 'z' }).success).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ use base64::Engine as _;
 use sha2::{Digest, Sha256};
 
 use super::board_db::library_media_refs;
+use super::board_index::listed_ids;
 use super::{boards_dir, media_dir, run_open, write_atomic};
 use crate::library_index::{prune_documents, LibraryDb};
 use crate::extract::meta::{read_meta, MediaMeta};
@@ -247,15 +248,16 @@ fn ocr_bytes(_bytes: &[u8]) -> String {
 /// drops the rows of whatever went.
 #[tauri::command(async)]
 pub fn gc_media(app: AppHandle, db: State<LibraryDb>) -> Result<GcOutcome, String> {
-  let outcome = gc(&boards_dir(&app)?, &media_dir(&app)?, GC_MIN_AGE)?;
+  let listed = listed_ids(&*db.lock_db()?)?;
+  let outcome = gc(&boards_dir(&app)?, &listed, &media_dir(&app)?, GC_MIN_AGE)?;
   if outcome.unknown.is_empty() {
     prune_documents(&app, &db)?;
   }
   Ok(outcome)
 }
 
-fn gc(boards: &Path, media: &Path, min_age: Duration) -> Result<GcOutcome, String> {
-  let refs = library_media_refs(boards, None)?;
+fn gc(boards: &Path, listed: &[String], media: &Path, min_age: Duration) -> Result<GcOutcome, String> {
+  let refs = library_media_refs(boards, listed, None)?;
   if !refs.unknown.is_empty() {
     return Ok(GcOutcome { removed: 0, unknown: refs.unknown });
   }
@@ -469,7 +471,7 @@ mod tests {
     set_old(&staged);
     save_board_file(&boards.join("brd_a.sqlite"), Some(&["kept.png"]));
 
-    let outcome = gc(&boards, &media, GC_MIN_AGE).unwrap();
+    let outcome = gc(&boards, &["brd_a".into()], &media, GC_MIN_AGE).unwrap();
     assert_eq!(outcome, GcOutcome { removed: 1, unknown: vec![] });
     assert_eq!(on_disk(&media), vec!["fresh.eml", "kept.png", "staged.png.new"]);
     let _ = std::fs::remove_dir_all(&dir);
@@ -482,11 +484,11 @@ mod tests {
     save_board_file(&boards.join("brd_old.sqlite"), None);
     std::fs::write(boards.join("brd_legacy.json"), "{}").unwrap();
 
-    let mut outcome = gc(&boards, &media, GC_MIN_AGE).unwrap();
+    let mut outcome = gc(&boards, &[], &media, GC_MIN_AGE).unwrap();
     outcome.unknown.sort();
     assert_eq!(outcome, GcOutcome { removed: 0, unknown: vec!["brd_legacy".into(), "brd_old".into()] });
     assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
-    assert!(gc(&dir.join("absent"), &media, GC_MIN_AGE).is_err());
+    assert!(gc(&dir.join("absent"), &[], &media, GC_MIN_AGE).is_err());
     assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
     let _ = std::fs::remove_dir_all(&dir);
   }

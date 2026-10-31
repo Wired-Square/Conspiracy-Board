@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { closeDialog } from '../../store/dialogStore';
 import { plural } from '../../lib/format';
-import type { BoardSummary } from '../../data/boardIndex';
+import type { BoardSummary } from '../../storage/StorageAdapter';
 import { useBoardStore } from '../../hooks/useStores';
 
 /**

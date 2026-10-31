@@ -5,6 +5,7 @@ import type { Board } from '../types/board';
 import { safeParseBoardJson } from '../data/schema';
 import { invokeChecked } from './ipc';
 import {
+  boardSummarySchema,
   docHitSchema,
   docStatusSchema,
   gcOutcomeSchema,
@@ -14,13 +15,6 @@ import {
   mediaMetaSchema,
   readBundleSchema,
 } from './ipcSchemas';
-import {
-  byRecency,
-  emptyBoardIndex,
-  parseBoardIndexJson,
-  summarize,
-  type BoardIndex,
-} from '../data/boardIndex';
 import { orderByManifest, parseManifest } from '../data/bundle';
 import { bytesToB64, b64ToBytes } from '../lib/base64';
 import { boardMediaRefs } from '../lib/media';
@@ -35,16 +29,6 @@ import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAd
 // macOS picker. A bundle is the exception both ways — the shell writes and reads it
 // by path, so a large `.zip` never crosses the IPC boundary — which is what the
 // dialog plugin's open and save panels are for.
-
-/** Whatever the index says, or an empty one — a missing file is just first run. */
-async function readIndex(): Promise<BoardIndex> {
-  const raw = await invokeChecked('load_index', z.string().nullable());
-  return (raw && parseBoardIndexJson(raw)) || emptyBoardIndex();
-}
-
-function writeIndex(index: BoardIndex): Promise<void> {
-  return invoke('save_index', { json: JSON.stringify(index) });
-}
 
 // What the board's .sqlite last held, per board id: each entity's canonical JSON,
 // keyed by id. Seeded on load and set to exactly what was written on each save, so a
@@ -78,11 +62,6 @@ const bodyJson = (x: { id: string }): string => {
 const bodyMap = (xs: { id: string }[]): Map<string, string> =>
   new Map(xs.map((x) => [x.id, bodyJson(x)]));
 
-// What the index last recorded for each board, as summary JSON — so a save
-// whose summary is unchanged (a viewport-only autosave; updatedAt untouched)
-// skips the read-modify-write of index.json entirely.
-const lastSummary = new Map<string, string>();
-
 // The shell vouches only for boards whose media refs it has recorded, and names the
 // rest. A board saved before refs were recorded is read here, where the card schema
 // lives, and its refs recorded once; then the shell is asked again.
@@ -114,8 +93,8 @@ export const tauriStorage: StorageAdapter = {
     setMediaDir(await invokeChecked('media_dir_path', z.string()));
   },
 
-  async listBoards() {
-    return byRecency((await readIndex()).entries);
+  listBoards() {
+    return invokeChecked('list_boards', z.array(boardSummarySchema));
   },
 
   async loadBoard(id) {
@@ -164,42 +143,26 @@ export const tauriStorage: StorageAdapter = {
         clusters: changed(next.clusters, prev?.clusters),
         clusterIds: board.clusters.map((c) => c.id),
         mediaRefs: boardMediaRefs(board),
+        title: board.meta.title,
+        updatedAt: board.meta.updatedAt,
       },
     });
     // Only after the write lands, so a failed save leaves the cache stale and the next
     // save re-sends rather than assuming the shell has what it does not.
     lastSaved.set(id, next);
-
-    // Derived from the board we just wrote, never from a caller — so the index
-    // cannot claim something the board does not say. Skipped when this board's
-    // summary already reads exactly the same, which is every viewport-only save.
-    const summary = summarize(id, board);
-    const summaryJson = JSON.stringify(summary);
-    if (lastSummary.get(id) === summaryJson) return;
-    const index = await readIndex();
-    const entries = index.entries.some((e) => e.id === id)
-      ? index.entries.map((e) => (e.id === id ? summary : e))
-      : [...index.entries, summary];
-    await writeIndex({ ...index, entries });
-    lastSummary.set(id, summaryJson);
   },
 
   async deleteBoard(id) {
-    // The board first: an index still naming a deleted board would list a board
-    // that opens as null, where an unlisted file is merely invisible.
     await invoke('delete_board', { id });
     lastSaved.delete(id);
-    lastSummary.delete(id);
-    const index = await readIndex();
-    await writeIndex({ ...index, entries: index.entries.filter((e) => e.id !== id) });
   },
 
-  async getCurrentBoardId() {
-    return (await readIndex()).currentId;
+  getCurrentBoardId() {
+    return invokeChecked('current_board_id', z.string().nullable());
   },
 
   async setCurrentBoardId(id) {
-    await writeIndex({ ...(await readIndex()), currentId: id });
+    await invoke('set_current_board_id', { id });
   },
 
   saveMedia(bytes, ext) {

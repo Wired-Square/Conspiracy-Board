@@ -11,14 +11,15 @@
 //! iCloud's reach, which a Documents folder is not. On macOS that is
 //! ~/Library/Application Support/com.wiredsquare.conspiracy:
 //!
-//!   <app-data>/index.json         { version, currentId, entries: [...] }
+//!   <app-data>/library.sqlite      the board list (`board_index`) and the search index
 //!   <app-data>/boards/<id>.sqlite  the board itself, one SQLite database per board
 //!   <app-data>/media/<hash>.<ext>  one imported file, referenced by name
 //!
-//! A board is a SQLite database (`board_db`); media and the index are plain files
-//! (see `write_atomic`).
+//! A board is a SQLite database (`board_db`); media are plain files (see
+//! `write_atomic`).
 
 pub mod board_db;
+pub mod board_index;
 pub mod bundle;
 pub mod inbox;
 pub mod media;
@@ -59,10 +60,6 @@ fn inbox_dir(app: &AppHandle) -> Result<PathBuf, String> {
   Ok(library_dir(app)?.join("Inbox"))
 }
 
-fn index_file(app: &AppHandle) -> Result<PathBuf, String> {
-  Ok(library_dir(app)?.join("index.json"))
-}
-
 /// Missing is not an error: it is the first run, and the caller seeds from it.
 fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
   match std::fs::read_to_string(&path) {
@@ -72,7 +69,7 @@ fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
   }
 }
 
-/// How the index and media files are written: staged beside the target as
+/// How media files are written: staged beside the target as
 /// `<name>.new`, synced, then renamed over it, so a crash leaves the old file or the
 /// new one. (Boards are SQLite databases with their own transactional write.)
 fn atomic_writer() -> Options {
@@ -86,16 +83,6 @@ static WRITE_LOCK: Mutex<()> = Mutex::new(());
 fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
   let _turn = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
   atomic_writer().write(path, contents).map_err(|e| format!("Save failed: {e}"))
-}
-
-#[tauri::command(async)]
-pub fn load_index(app: AppHandle) -> Result<Option<String>, String> {
-  read_opt(index_file(&app)?)
-}
-
-#[tauri::command(async)]
-pub fn save_index(app: AppHandle, json: String) -> Result<(), String> {
-  write_atomic(&index_file(&app)?, json.as_bytes())
 }
 
 /// Delete a file, treating "already gone" as success — the caller wanted it absent.
@@ -149,7 +136,7 @@ mod tests {
   #[test]
   fn write_atomic_replaces_whole_and_leaves_no_staging_file() {
     let dir = temp_dir_for("atomic");
-    let path = dir.join("nested").join("index.json");
+    let path = dir.join("nested").join("a.png");
     write_atomic(&path, b"first").unwrap();
     write_atomic(&path, b"second").unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), b"second");

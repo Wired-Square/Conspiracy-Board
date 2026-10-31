@@ -17,8 +17,9 @@ pub fn run() {
     .plugin(wslib_tauri::quit_guard::init(quit::is_busy))
     .invoke_handler(tauri::generate_handler![
       board_store::init_storage,
-      board_store::load_index,
-      board_store::save_index,
+      board_store::board_index::list_boards,
+      board_store::board_index::current_board_id,
+      board_store::board_index::set_current_board_id,
       board_store::board_db::load_board,
       board_store::board_db::save_board,
       board_store::board_db::retire_legacy_board,
