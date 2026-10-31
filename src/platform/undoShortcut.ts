@@ -1,27 +1,30 @@
 import { boardStore } from '../store/boardStore';
 
+type Keyed = Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'target'>;
+
 /** Whether the key event happened inside something that has its own undo. */
 function inEditable(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-  );
+  const el = target as Partial<HTMLElement> | null;
+  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
+}
+
+/** Cmd+Z is board undo and Shift+Cmd+Z board redo, except in a text field, which keeps its own. */
+export function boardUndoKey(e: Keyed): 'undo' | 'redo' | null {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'z' || inEditable(e.target)) return null;
+  return e.shiftKey ? 'redo' : 'undo';
 }
 
 /**
- * Cmd+Z (or Ctrl+Z) restores the last delete — the keyboard's route to what the
- * UndoToast offers. Text fields keep their own undo: with one focused, the
- * event is left alone. Best-effort on macOS: the native Edit menu's Undo item
- * may take the shortcut before the webview sees it, so the toast's button is
- * the path that always works.
+ * The keyboard's route to the shell's undo log. Best-effort on macOS: the native
+ * Edit menu's Undo item may take the shortcut before the webview sees it, so the
+ * toast's button is the path that always works.
  */
 export function startUndoShortcut(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== 'z') return;
-    if (inEditable(e.target)) return;
-    if (!boardStore.getState().lastDelete) return;
+    const step = boardUndoKey(e);
+    if (!step) return;
     e.preventDefault();
-    boardStore.getState().undoLastDelete();
+    boardStore.getState()[step]();
   };
   window.addEventListener('keydown', onKeyDown);
   return () => window.removeEventListener('keydown', onKeyDown);

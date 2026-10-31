@@ -358,6 +358,21 @@ pub struct Card {
   pub grade: Option<Grade>,
 }
 
+impl Card {
+  /// Must list the same fields as `cardMediaEntries` (`src/lib/media.ts`): a field left
+  /// out here has its file swept by `gc_media`.
+  pub fn media_files(&self) -> impl Iterator<Item = &str> {
+    let email = self.email.as_ref();
+    self
+      .image_file
+      .iter()
+      .chain(email.and_then(|e| e.eml_file.as_ref()))
+      .chain(email.into_iter().flat_map(|e| e.attachments.iter().filter_map(|a| a.file.as_ref())))
+      .chain(self.document.as_ref().and_then(|d| d.file.as_ref()))
+      .map(String::as_str)
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]

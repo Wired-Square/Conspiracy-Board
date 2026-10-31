@@ -1,8 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/board';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
-import { withoutMembership } from '../lib/clusters';
-import { touches } from '../lib/connections';
 import { setLocalCallingCode } from '../lib/phone';
 import { eventFor } from '../lib/events';
 import { DEFAULT_KIND, isBoardKind, isRecordKind, viewFor } from '../lib/kinds';
@@ -14,25 +12,17 @@ import { buildManifest } from '../data/bundle';
 import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
+import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocChanged, type Edit } from '../platform/document';
 import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
+import { drafts } from '../lib/drafts';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
 
-/**
- * What the last delete removed, so undoLastDelete can put exactly that back:
- * the card with only the string that touched it, or the cluster with its place
- * in the list and each member card's previous memberships (so a deleted
- * primary restores as primary). Single level — each delete replaces this — and
- * only the affected slices, never the whole board, so holding one is bytes.
- */
-export type DeleteSnapshot =
-  | { kind: 'card'; card: Card; connections: Connection[] }
-  | { kind: 'cluster'; cluster: Cluster; index: number; memberships: Map<string, string[]> };
-
-const AUTOSAVE_MS = 500;
+/** A card or cluster just deleted, while that delete is still the last edit. */
+export type Deleted = { kind: 'card' | 'cluster'; id: string; label: string };
 
 // Sorts after any ISO timestamp, so undated drafts land at the end of a batch.
 const UNDATED_SORTS_LAST = '￿';
@@ -65,9 +55,46 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
   };
 }
 
+/** A cluster in the next palette colour after `clusters`. */
+export function newCluster(label: string | undefined, clusters: Cluster[]): Cluster {
+  return {
+    id: newClusterId(),
+    label: label ?? 'New cluster',
+    color: CLUSTER_PALETTE[clusters.length % CLUSTER_PALETTE.length],
+    visible: true,
+  };
+}
+
+function newConnection(source: string, target: string, label?: string): Connection {
+  const trimmed = label?.trim();
+  return { id: newEdgeId(), source, target, kind: 'red-string', ...(trimmed ? { label: trimmed } : {}) };
+}
+
+/**
+ * `rows` with `upserts` laid in (a known id replaced in place, a new one appended) and
+ * `removed` dropped, then put in `order` when an undo or redo gives one.
+ */
+function patchRows<T extends { id: string }>(rows: T[], upserts: T[], removed: string[], order?: string[]): T[] {
+  if (!upserts.length && !removed.length) return rows;
+  const gone = new Set(removed);
+  const fresh = new Map(upserts.map((r) => [r.id, r]));
+  const kept = rows
+    .filter((r) => !gone.has(r.id))
+    .map((r) => {
+      const next = fresh.get(r.id);
+      fresh.delete(r.id);
+      return next ?? r;
+    });
+  const next = [...kept, ...fresh.values()];
+  if (!order) return next;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return next.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+}
+
 export type BoardState = {
-  // Canonical content (authoritative for everything except a drag in flight;
-  // see the canvas's flowAdapter).
+  // The open board as the shell last reported it (see applyDocChanged). Actions
+  // send commands and wait for the change to come back, except a settled drag,
+  // which moves its cards at once (see arrangeCards).
   meta: Board['meta'];
   clusters: Cluster[];
   cards: Card[];
@@ -109,7 +136,7 @@ export type BoardState = {
    * True whenever the library is empty — no boards at all — whether on first run
    * or after deleting the last board. The app then shows the welcome dialog to
    * pick a way in rather than silently seeding a board; adopting one clears it
-   * (see adoptBoard, init, deleteBoard).
+   * (see adoptBoards, init, deleteBoard).
    */
   firstRun: boolean;
   /**
@@ -118,8 +145,6 @@ export type BoardState = {
    * `import:progress` events refine it to "media x of y" (see startImportProgress).
    */
   importStatus: string | null;
-  /** An autosave is pending or a save is in flight; the shell holds a quit on it. */
-  savePending: boolean;
 
   // Lifecycle.
   init: () => Promise<void>;
@@ -142,8 +167,14 @@ export type BoardState = {
 
   // Editing.
   addCard: (init?: CardDraft) => string;
-  /** Bulk append (email import). Returns the ids actually added. */
-  addCards: (drafts: CardDraft[], opts?: { clusterId?: string | null }) => string[];
+  /**
+   * Bulk append (email import), with `alongside`'s clusters and card patches in the
+   * same edit. Returns the cards actually added or completed, as sent.
+   */
+  addCards: (
+    drafts: CardDraft[],
+    opts?: { clusterId?: string | null; alongside?: Pick<Edit, 'clusters' | 'cardUpdates'> },
+  ) => Pick<Card, 'id' | 'kind'>[];
   /**
    * Place the cards the shell made from imported pictures and documents, and go to
    * them: one is opened, several show where they landed.
@@ -167,13 +198,12 @@ export type BoardState = {
    */
   adoptOrphan: (file: string) => Promise<void>;
   /**
-   * Reposition many cards in one pass (Tidy, or a settled drag). One set and one
-   * autosave for the whole board, where looping updateCard would re-schedule a
-   * save per card. Only a moved card gets a new identity, so unmoved chips and
-   * rows keep theirs.
+   * Reposition many cards in one command (Tidy, or a settled drag). The cards move
+   * at once rather than a round trip later, and move back if the shell refuses.
+   * Only a moved card gets a new identity, so unmoved chips and rows keep theirs.
    */
   arrangeCards: (positions: Map<string, Vec2>) => void;
-  updateCard: (id: string, patch: Partial<Omit<Card, 'id'>>) => void;
+  updateCard: (id: string, patch: CardPatch) => void;
   /**
    * Mark a card as an event, or unmark it. Ticking it on spawns a graded `event` card
    * carrying the source's moment, strung to it ("evidences"); ticking off removes that
@@ -183,35 +213,27 @@ export type BoardState = {
    * that isn't itself an event.
    */
   setIsEvent: (cardId: string, on: boolean) => void;
-  /** Remove a card, and every piece of string tied to it. Undoable — once. */
+  /** Remove a card, and every piece of string tied to it. */
   deleteCard: (id: string) => void;
-  /**
-   * The last deletion, restorable until the next delete or a board switch.
-   * The toast offers it and Cmd+Z takes it (see startUndoShortcut); hiding the
-   * toast does not clear it.
-   */
-  lastDelete: DeleteSnapshot | null;
-  /** Put back what the last delete removed. See DeleteSnapshot. */
-  undoLastDelete: () => void;
+  /** What the toast offers to undo; cleared by the next content edit. */
+  lastDeleted: Deleted | null;
+  /** The shell's undo log for the open board (session.rs), as its last change reported it. */
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Commit any pending text draft, then step the shell's log back or forward. */
+  undo: () => void;
+  redo: () => void;
   toggleCluster: (id: string) => void;
   addCluster: (label?: string) => string;
-  updateCluster: (id: string, patch: Partial<Omit<Cluster, 'id'>>) => void;
+  updateCluster: (id: string, patch: ClusterPatch) => void;
   deleteCluster: (id: string) => void;
   addConnection: (source: string, target: string, label?: string) => void;
-  updateConnection: (id: string, patch: Partial<Omit<Connection, 'id'>>) => void;
+  updateConnection: (id: string, patch: ConnectionPatch) => void;
   deleteConnection: (id: string) => void;
+  /** Patch the open board with an edit the shell has committed, whoever made it. */
+  applyDocChanged: (change: DocChanged) => void;
 
-  // Persistence.
-  /**
-   * Assemble the canonical board. Restamps `meta.updatedAt` by default — the
-   * board is being written out, which is what recency means. Pass false for a
-   * write that must not touch recency (a viewport-only autosave), so merely
-   * looking around never reorders the library.
-   */
-  toBoard: (restamp?: boolean) => Board;
-  save: () => Promise<void>;
-  /** Save any pending edit now and wait for every queued save to land. */
-  flushSaves: () => Promise<void>;
+  // Library files.
   /** Bundle the given library boards (by id) and save to a chosen file; false if cancelled. */
   exportBundle: (ids: string[]) => Promise<boolean>;
   /** Pick a bundle (or legacy board file) and open the select/rename import dialog. */
@@ -220,22 +242,6 @@ export type BoardState = {
   adoptBundle: (selected: { board: Board; title: string }[]) => Promise<void>;
 };
 
-let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
-
-// Saves are chained, never raced: a fresh autosave can fire while a slow write
-// is still in flight, and two saves interleaving would race the adapter's
-// row-diff cache (each would diff against the same "last saved" and write it
-// back out of order). The chain serialises them; each save snapshots the board
-// when its turn comes, so the later save writes the later state.
-let saveChain: Promise<void> = Promise.resolve();
-let savesInFlight = 0;
-
-// Whether anything *content* has changed since the last save. setViewport
-// schedules a save without setting it, so a pan/zoom persists the camera
-// without restamping updatedAt — merely looking around must not reorder the
-// library by recency (the same reasoning openBoard documents).
-let contentDirty = false;
-
 // init() must be idempotent: StrictMode double-invokes effects in dev, and two
 // concurrent inits would both see an empty library and both seed it, leaving the
 // user with two identical boards. Sharing one promise makes the second call
@@ -243,60 +249,29 @@ let contentDirty = false;
 let initPromise: Promise<void> | undefined;
 
 export const boardStore = createStore<BoardState>()((set, get) => {
-  const syncSavePending = () => {
-    const pending = autosaveTimer !== undefined || savesInFlight > 0;
-    if (get().savePending !== pending) set({ savePending: pending });
-  };
-
-  const scheduleSave = () => {
-    if (autosaveTimer) clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => {
-      // Clearing the handle here is what lets flushAutosave tell "pending" from
-      // "already ran".
-      autosaveTimer = undefined;
-      void get().save();
-    }, AUTOSAVE_MS);
-    syncSavePending();
-  };
-
-  /** A content edit: mark the board dirty, then debounce a save. */
-  const scheduleAutosave = () => {
-    contentDirty = true;
-    scheduleSave();
-  };
-
-  const doSave = async () => {
-    // Snapshot id and board here — when this save's turn in the chain comes,
-    // not when it was requested. Tauri does real async IO; without this, a
-    // slow write in flight during a board switch would land this board's
-    // bytes under the next board's id.
+  /** Send an edit for the open board; a refusal lands in lastError, as nothing else awaits it. */
+  const send = (command: (boardId: string) => Promise<void>, onError?: () => void) => {
     const id = get().currentBoardId;
     if (!id) return;
-    const dirty = contentDirty;
-    contentDirty = false;
-    // A viewport-only save keeps the stored updatedAt, so the adapter can see
-    // the summary is unchanged and skip rewriting the index.
-    const board = get().toBoard(dirty);
-    if (dirty) set({ meta: board.meta });
-
-    try {
-      await storage.saveBoard(id, board);
-      if (get().lastError) set({ lastError: null });
-    } catch (err) {
-      // A failed content save stays dirty, so the retry restamps.
-      if (dirty) contentDirty = true;
-      // Autosave runs from a debounced timer with no caller to catch this, so
-      // the error has to land in state or it is lost entirely.
-      set({ lastError: errorMessage(err) });
-    }
+    command(id).then(
+      () => {
+        if (get().lastError) set({ lastError: null });
+      },
+      (err) => {
+        onError?.();
+        set({ lastError: errorMessage(err) });
+      },
+    );
   };
 
-  /** Write any pending edits before leaving the current board behind. */
-  const flushAutosave = async () => {
-    if (!autosaveTimer) return;
-    clearTimeout(autosaveTimer);
-    autosaveTimer = undefined;
-    await get().save();
+  /** Send a card patch, unless the card is gone or already says so. */
+  const patchCard = (id: string, patch: CardPatch, command: typeof doc.updateCard) => {
+    // A no-op for a card that is gone: the editor's title/notes commits are
+    // debounced, so one can land after deleteCard took the card away.
+    const current = get().cards.find((c) => c.id === id);
+    if (!current) return;
+    if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
+    send((board) => command(board, id, patch));
   };
 
   const hydrate = (board: Board) => {
@@ -310,8 +285,10 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       connections: board.connections,
       viewport: board.viewport,
       selectedCardId: null,
-      // A snapshot from one board must not be restorable into another.
-      lastDelete: null,
+      // A fresh session starts a fresh log.
+      lastDeleted: null,
+      canUndo: false,
+      canRedo: false,
       // A new board opens on the board, whatever the last one was showing.
       view: 'board',
       // The toolbar isn't remounted on a board switch, so a stale query would
@@ -329,30 +306,32 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     hydrate(board);
     set({ currentBoardId: id, lastError: null });
     await storage.setCurrentBoardId(id);
+    void localiseMedia(id, board);
   };
 
   /**
-   * Load a board for opening, or null if it could not be read *this time*.
+   * Open a board's session, or null if it could not be read *this time*.
    *
-   * A failed load is NEVER taken to mean the board is gone: the entry is left
+   * A failed open is NEVER taken to mean the board is gone: the entry is left
    * exactly as it was, so a transient unreadability — a file still syncing in, a
-   * read that lost a race with the 500ms autosave, a parse off a half-written byte
-   * — costs a retry, not the board. A board's file is deleted only when the user
-   * asks (`deleteBoard`); inferring "delete it" from one bad read is how a whole
-   * board, and then its media to the GC sweep, was lost. So this never deletes: a
-   * genuinely dangling entry just fails to open with a message, which is recoverable
-   * where a deletion is not.
-   *
-   * A legacy board's inline pictures are moved out to the media library here, and
-   * the board rewritten once if that changed anything — so the base64 is paid off
-   * a single time rather than re-serialised on every autosave from now on.
+   * parse off a half-written byte — costs a retry, not the board. A board's file is
+   * deleted only when the user asks (`deleteBoard`); inferring "delete it" from one
+   * bad read is how a whole board, and then its media to the GC sweep, was lost. So
+   * this never deletes: a genuinely dangling entry just fails to open with a
+   * message, which is recoverable where a deletion is not. (A legacy JSON board
+   * becomes its `.sqlite` in the shell, on this first open.)
    */
-  const loadBoardForOpen = async (id: string): Promise<Board | null> => {
-    const board = await storage.loadBoard(id);
-    if (!board) return null;
+  const openSession = (id: string): Promise<Board | null> => doc.open(id).catch(() => null);
+
+  /** Move a legacy board's inline or linked pictures into the media library, card by card. */
+  const localiseMedia = async (id: string, board: Board) => {
     const { board: migrated, changed } = await migrateBoardMedia(board);
-    if (changed) await storage.saveBoard(id, migrated);
-    return migrated;
+    if (!changed) return;
+    migrated.cards.forEach((card, i) => {
+      if (card === board.cards[i]) return;
+      // Housekeeping: a board switched away from meanwhile converts on its next open.
+      doc.refreshCard(id, card.id, { imageFile: card.imageFile, imageUrl: null }).catch(() => {});
+    });
   };
 
   /**
@@ -361,31 +340,30 @@ export const boardStore = createStore<BoardState>()((set, get) => {
    * any board's refs are unknown, so an unreadable board never costs its media.
    */
   const gcMedia = async () => {
-    // Flush first, so the open board's just-added media is in its recorded refs.
-    // (The shell also spares very fresh files, as a backstop.)
-    await flushAutosave();
     // Housekeeping: a failed sweep just leaves orphans for next time.
     await storage.gcMedia().catch(() => {});
   };
 
   /**
-   * Take a board that isn't in the library yet, give it an id, and switch to it.
-   * Shared by New and Import — both are additive; neither disturbs the board
-   * they replace on screen.
+   * Take boards that aren't in the library yet, give each an id, write them all in
+   * one call, and switch to the last. Shared by New and Import — both are additive;
+   * neither disturbs the board they replace on screen.
    */
-  const adoptBoard = async (board: Board) => {
-    await flushAutosave();
-    const id = newBoardId();
-    hydrate(board);
-    set({ currentBoardId: id, lastError: null, firstRun: false });
-    // Saved before the pointer is persisted: a reload in between would
-    // otherwise dangle currentId at a board that was never written.
-    await get().save();
-    await storage.setCurrentBoardId(id);
+  const adoptBoards = async (boards: Board[]) => {
+    const fresh = boards.map((board) => ({ id: newBoardId(), board }));
+    const last = fresh.at(-1);
+    if (!last) return;
+    try {
+      await storage.createBoards(fresh);
+      await enterBoard(last.id, await doc.open(last.id));
+      set({ firstRun: false });
+    } catch (err) {
+      set({ lastError: errorMessage(err) });
+    }
   };
 
   /**
-   * The mirror of adoptBoard: go to the empty-library state, where the welcome
+   * The mirror of adoptBoards: go to the empty-library state, where the welcome
    * dialog offers a way in (see firstRun). Used on a genuinely empty library at
    * init and after the last board is deleted. Clears the hydrated content too, so
    * a just-deleted board isn't left sitting in memory behind the dialog.
@@ -400,13 +378,14 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     viewport: undefined,
     currentBoardId: null,
     selectedCardId: null,
-    lastDelete: null,
+    lastDeleted: null,
+    canUndo: false,
+    canRedo: false,
     view: 'board',
     searchQuery: '',
     lastError: null,
     firstRun: false,
     importStatus: null,
-    savePending: false,
 
     setView(view) {
       set({ view });
@@ -424,6 +403,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       initPromise ??= (async () => {
         const load = async () => {
           await storage.init();
+          await doc.listen((change) => get().applyDocChanged(change));
           const entries = await storage.listBoards();
 
           // Empty library — first run. Never seed anything on our own; ask what
@@ -443,7 +423,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
             : ids;
 
           for (const id of ordered) {
-            const board = await loadBoardForOpen(id);
+            const board = await openSession(id);
             if (!board) continue;
             await enterBoard(id, board);
             return;
@@ -465,27 +445,22 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       const board = emptyBoard();
       const name = title?.trim();
       if (name) board.meta.title = name;
-      await adoptBoard(board);
+      await adoptBoards([board]);
     },
 
     async installExampleBoard() {
-      await adoptBoard(await storage.seedBoard());
+      await adoptBoards([await storage.seedBoard()]);
     },
 
     async openBoard(id) {
       if (id === get().currentBoardId) return;
-      await flushAutosave();
-
-      const board = await loadBoardForOpen(id);
+      const board = await openSession(id);
       if (!board) {
         // Stay put. Minting a blank board under this id would be data loss
         // wearing a disguise.
         set({ lastError: 'That board could not be loaded.' });
         return;
       }
-
-      // Deliberately no autosave: toBoard() restamps updatedAt, so merely
-      // opening a board would reorder the library by recency.
       await enterBoard(id, board);
     },
 
@@ -505,24 +480,17 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     setTitle(title) {
-      set({ meta: { ...get().meta, title } });
-      // The library entry is derived from board.meta on save, so the rename
-      // reaches the index on the next autosave with no extra call.
-      scheduleAutosave();
+      send((board) => doc.setMeta(board, { title }));
     },
 
     setCountryCode(code) {
       // Store what the user typed; lib/phone normalises it (e.g. `61` → `+61`).
-      set({ meta: { ...get().meta, countryCode: code } });
-      setLocalCallingCode(code);
-      scheduleAutosave();
+      send((board) => doc.setMeta(board, { countryCode: code }));
     },
 
     setViewport(vp) {
       set({ viewport: vp });
-      // Persist the camera, but don't mark content dirty: panning must not
-      // restamp updatedAt (see contentDirty above).
-      scheduleSave();
+      send((board) => doc.setViewport(board, vp));
     },
 
     selectCard(id) {
@@ -545,14 +513,13 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       const first = get().clusters[0];
       const card = blankCard(id, { clusterIds: first ? [first.id] : [], ...init, position });
       set({
-        cards: [...get().cards, card],
         selectedCardId: id,
         // Go to wherever it went. + Add > Document and a message dropped from
         // Mail both make a card the board does not draw; without this they make
         // one that appears nowhere at all.
         view: viewFor(card.kind),
       });
-      scheduleAutosave();
+      send((board) => doc.edit(board, { cards: [card] }));
       return id;
     },
 
@@ -563,7 +530,8 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // lands.
       const byMessageId = emailCardsByMessageId(get().cards);
       const fresh: CardDraft[] = [];
-      const completedIds: string[] = [];
+      const completions: NonNullable<Edit['cardUpdates']> = [];
+      const completed: Pick<Card, 'id' | 'kind'>[] = [];
       const seen = new Set<string>();
 
       for (const d of drafts) {
@@ -578,19 +546,17 @@ export const boardStore = createStore<BoardState>()((set, get) => {
           // Fill the card a Mail drag left waiting — in place, so its position,
           // cluster and connections survive. Provenance survives too: the
           // message is still the one sitting in the user's Mail.
-          get().updateCard(match.card.id, {
-            ...d,
-            email: { ...d.email!, source: match.card.email?.source },
+          completions.push({
+            id: match.card.id,
+            patch: { ...d, email: { ...d.email!, source: match.card.email?.source } },
           });
-          completedIds.push(match.card.id);
+          completed.push({ id: match.card.id, kind: d.kind ?? match.card.kind });
           continue;
         }
 
         if (id) seen.add(id);
         fresh.push(d);
       }
-
-      if (!fresh.length) return completedIds;
 
       // Lay the block out oldest-first so the board itself reads chronologically
       // left-to-right, not just the timeline. Undated drafts sort to the end.
@@ -619,22 +585,23 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         }),
       );
 
-      set({ cards: [...get().cards, ...added] });
-      scheduleAutosave();
-      return [...completedIds, ...added.map((c) => c.id)];
+      const { clusters = [], cardUpdates = [] } = opts?.alongside ?? {};
+      const edit = { clusters, cards: added, cardUpdates: [...completions, ...cardUpdates] };
+      if (clusters.length || added.length || edit.cardUpdates.length) send((board) => doc.edit(board, edit));
+      return [...completed, ...added];
     },
 
     addImportedMedia(drafts) {
       if (!drafts.length) return;
-      const ids = get().addCards(drafts);
+      const ids = get().addCards(drafts).map((c) => c.id);
       if (!ids.length) return;
       // One file: open it, so its picture/metadata is right there. Several: just go
-      // to where they landed — the board unless every one is a record card.
-      if (ids.length === 1) {
-        get().selectCard(ids[0]);
-      } else {
-        set({ view: drafts.some((d) => isBoardKind(d.kind)) ? 'board' : 'record' });
-      }
+      // to where they landed — the board unless every one is a record card. Read
+      // from the drafts: a new card isn't on the board until the shell says so.
+      set({
+        view: drafts.some((d) => isBoardKind(d.kind)) ? 'board' : 'record',
+        ...(ids.length === 1 ? { selectedCardId: ids[0] } : {}),
+      });
     },
 
     async reprocessCard(id) {
@@ -644,7 +611,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       // Email: re-parse the .eml for attachments the import may have dropped.
       if (card.email?.emlFile) {
         const patch = await recoverCardAttachments(card);
-        if (patch) get().updateCard(id, patch);
+        if (patch) patchCard(id, patch, doc.refreshCard);
         return;
       }
 
@@ -656,7 +623,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         if (!draft) return;
         const patch: Partial<Card> = { imageMeta: draft.imageMeta ?? null };
         if (!card.notes.trim() && draft.notes) patch.notes = draft.notes;
-        get().updateCard(id, patch);
+        patchCard(id, patch, doc.refreshCard);
         return;
       }
 
@@ -666,13 +633,13 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         const read = (await storage.mediaCardDraft(card.document.file))?.document;
         if (!read) return;
         const { file: _file, name: _name, mime: _mime, ...props } = read;
-        get().updateCard(id, { document: { ...card.document, ...props } });
+        patchCard(id, { document: { ...card.document, ...props } }, doc.refreshCard);
       }
     },
 
     async reprocessAll() {
       // One at a time: reading many large files (a 17MB .eml, a full-res photo) at
-      // once would spike memory, and updateCard's debounced autosave collapses to one.
+      // once would spike memory.
       const ids = get()
         .cards.filter((c) => cardMediaEntries(c).length > 0)
         .map((c) => c.id);
@@ -698,30 +665,26 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     arrangeCards(positions) {
-      let moved = false;
+      const moved = new Map<Card, Card>();
       const cards = get().cards.map((card) => {
         const p = positions.get(card.id);
         if (!p || (p.x === card.position.x && p.y === card.position.y)) return card;
-        moved = true;
-        return { ...card, position: p };
+        const next = { ...card, position: p };
+        moved.set(next, card);
+        return next;
       });
-      if (!moved) return;
+      if (!moved.size) return;
       set({ cards });
-      scheduleAutosave();
+      const moves = [...moved.keys()].map(({ id, position }) => ({ id, position }));
+      send(
+        (board) => doc.moveCards(board, moves),
+        // Back where they were, unless the shell has since sent the card anew.
+        () => set({ cards: get().cards.map((c) => moved.get(c) ?? c) }),
+      );
     },
 
     updateCard(id, patch) {
-      // A no-op for a card that is gone: the editor's title/notes commits are
-      // debounced now, so one can land after deleteCard took the card away.
-      // This is the most-called mutator, so one indexed scan, not three.
-      const i = get().cards.findIndex((c) => c.id === id);
-      if (i === -1) return;
-      const current = get().cards[i];
-      if ((Object.keys(patch) as (keyof typeof patch)[]).every((k) => patch[k] === current[k])) return;
-      const cards = [...get().cards];
-      cards[i] = { ...cards[i], ...patch };
-      set({ cards });
-      scheduleAutosave();
+      patchCard(id, patch, doc.updateCard);
     },
 
     setIsEvent(cardId, on) {
@@ -731,8 +694,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
 
       if (on) {
         if (existing) return; // already marked — the checkbox is derived from this
-        const id = newCardId();
-        const event = blankCard(id, {
+        const event = blankCard(newCardId(), {
           // Named after the source so the milestone reads as the thing that happened;
           // the user can rename it. Beside the source, so it lands sensibly when the
           // source is drawn (a record isn't, but an evidence source is).
@@ -744,129 +706,61 @@ export const boardStore = createStore<BoardState>()((set, get) => {
           occurredAtPrecision: source.occurredAtPrecision,
           event: { sourceCardId: cardId },
         });
-        set({ cards: [...get().cards, event] });
-        scheduleAutosave();
-        // The string from the source to the event it evidences.
-        get().addConnection(cardId, id, 'evidences');
+        // With the string from the source to the event it evidences, in one edit.
+        send((board) => doc.edit(board, { cards: [event], connections: [newConnection(cardId, event.id, 'evidences')] }));
       } else if (existing) {
-        // Takes its string with it (deleteCard cascades) and saves.
+        // Takes its string with it (deleteCard cascades).
         get().deleteCard(existing.id);
       }
     },
 
     deleteCard(id) {
-      // The string goes with the card. A connection is drawn between two cards;
-      // one of them gone, it is not a claim any more, it is a dangling id — and
-      // nothing in the schema would catch it, so it would persist and quietly
-      // fail to draw. The editor counts these first (see touches) so the user is
-      // told what they are about to lose rather than finding out later.
-      const { cards, connections, selectedCardId } = get();
+      // The string goes with the card (the shell cascades it). A connection is
+      // drawn between two cards; one of them gone, it is not a claim any more. The
+      // editor counts these first (see touches) so the user is told what they are
+      // about to lose rather than finding out later.
+      const { cards, selectedCardId } = get();
       const card = cards.find((c) => c.id === id);
       if (!card) return;
-      // One partition: what stays on the board, and what the undo snapshot takes.
-      const kept: Connection[] = [];
-      const taken: Connection[] = [];
-      for (const c of connections) (touches(c, id) ? taken : kept).push(c);
       set({
-        cards: cards.filter((c) => c.id !== id),
-        connections: kept,
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
-        // The card and exactly the string it took with it, for undo.
-        lastDelete: { kind: 'card', card, connections: taken },
+        lastDeleted: { kind: 'card', id, label: card.title },
       });
-      scheduleAutosave();
+      send((board) => doc.deleteCards(board, [id]));
     },
 
-    undoLastDelete() {
-      const snap = get().lastDelete;
-      if (!snap) return;
+    undo() {
+      drafts.flushAll();
+      send(doc.undo);
+    },
 
-      if (snap.kind === 'card') {
-        // The board may have moved on since the delete: a cluster it was in may
-        // be gone, and so may the card at a string's far end. Restore what
-        // still holds and drop the rest, rather than resurrecting dangling ids.
-        const clusterIds = new Set(get().clusters.map((c) => c.id));
-        const card = {
-          ...snap.card,
-          clusterIds: snap.card.clusterIds.filter((x) => clusterIds.has(x)),
-        };
-        const present = new Set([...get().cards.map((c) => c.id), card.id]);
-        const connections = snap.connections.filter(
-          (c) => present.has(c.source) && present.has(c.target),
-        );
-        set({
-          cards: [...get().cards, card],
-          connections: [...get().connections, ...connections],
-          lastDelete: null,
-        });
-      } else {
-        // Memberships restore as they were at deletion — an edit made in
-        // between is overwritten. Acceptable for a single-level undo.
-        const clusters = [...get().clusters];
-        clusters.splice(Math.min(snap.index, clusters.length), 0, snap.cluster);
-        set({
-          clusters,
-          cards: get().cards.map((c) => {
-            const was = snap.memberships.get(c.id);
-            return was ? { ...c, clusterIds: was } : c;
-          }),
-          lastDelete: null,
-        });
-      }
-      scheduleAutosave();
+    redo() {
+      drafts.flushAll();
+      send(doc.redo);
     },
 
     toggleCluster(id) {
-      set({
-        clusters: get().clusters.map((c) =>
-          c.id === id ? { ...c, visible: !c.visible } : c,
-        ),
-      });
-      scheduleAutosave();
+      const cluster = get().clusters.find((c) => c.id === id);
+      if (cluster) get().updateCluster(id, { visible: !cluster.visible });
     },
 
     addCluster(label) {
-      const id = newClusterId();
-      const cluster: Cluster = {
-        id,
-        label: label ?? 'New cluster',
-        color: CLUSTER_PALETTE[get().clusters.length % CLUSTER_PALETTE.length],
-        visible: true,
-      };
-      set({ clusters: [...get().clusters, cluster] });
-      scheduleAutosave();
-      return id;
+      const cluster = newCluster(label, get().clusters);
+      send((board) => doc.edit(board, { clusters: [cluster] }));
+      return cluster.id;
     },
 
     updateCluster(id, patch) {
-      set({
-        clusters: get().clusters.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-      });
-      scheduleAutosave();
+      send((board) => doc.updateCluster(board, id, patch));
     },
 
     deleteCluster(id) {
-      const index = get().clusters.findIndex((c) => c.id === id);
-      if (index === -1) return;
-      const cluster = get().clusters[index];
-      // One pass over the cards: keep them, just drop their membership of the
-      // deleted cluster (untouched cards keep their identity; deleting a
-      // card's primary promotes its next membership) — while collecting each
-      // member's previous memberships, order included, for undo.
-      const memberships = new Map<string, string[]>();
-      const cards = get().cards.map((c) => {
-        if (!c.clusterIds.includes(id)) return c;
-        memberships.set(c.id, c.clusterIds);
-        return { ...c, clusterIds: withoutMembership(c.clusterIds, id) };
-      });
-      set({
-        clusters: get().clusters.filter((c) => c.id !== id),
-        cards,
-        lastDelete: { kind: 'cluster', cluster, index, memberships },
-      });
-      scheduleAutosave();
+      const cluster = get().clusters.find((c) => c.id === id);
+      if (!cluster) return;
+      set({ lastDeleted: { kind: 'cluster', id, label: cluster.label } });
+      send((board) => doc.deleteCluster(board, id));
     },
 
     addConnection(source, target, label) {
@@ -875,70 +769,45 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         (c) => c.source === source && c.target === target,
       );
       if (exists) return;
-      const trimmed = label?.trim();
-      const connection: Connection = {
-        id: newEdgeId(),
-        source,
-        target,
-        kind: 'red-string',
-        ...(trimmed ? { label: trimmed } : {}),
-      };
-      set({ connections: [...get().connections, connection] });
-      scheduleAutosave();
+      send((board) => doc.edit(board, { connections: [newConnection(source, target, label)] }));
     },
 
     updateConnection(id, patch) {
-      set({ connections: get().connections.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
-      scheduleAutosave();
+      send((board) => doc.updateConnection(board, id, patch));
     },
 
     deleteConnection(id) {
-      set({ connections: get().connections.filter((c) => c.id !== id) });
-      scheduleAutosave();
+      send((board) => doc.deleteConnections(board, [id]));
     },
 
-    toBoard(restamp = true) {
-      // Canonical state is kept current as the user edits (a drag's positions are
-      // folded in when it settles), so the board can be assembled directly.
-      const { meta, clusters, cards, connections, viewport } = get();
-      return {
-        version: 4,
-        meta: restamp ? { ...meta, updatedAt: new Date().toISOString() } : meta,
-        clusters,
-        cards,
-        connections,
-        viewport,
-      };
-    },
-
-    save() {
-      // Chained, never raced — see saveChain above. doSave never throws, so a
-      // failed save cannot wedge the chain.
-      savesInFlight++;
-      syncSavePending();
-      saveChain = saveChain.then(doSave).finally(() => {
-        savesInFlight--;
-        syncSavePending();
+    applyDocChanged(change) {
+      const s = get();
+      if (change.boardId !== s.currentBoardId) return;
+      if (change.meta) setLocalCallingCode(change.meta.countryCode ?? '+61');
+      const deleted = s.lastDeleted;
+      const stillLast =
+        !deleted || !change.meta || [...change.removedCards, ...change.removedClusters].includes(deleted.id);
+      set({
+        cards: patchRows(s.cards, change.cards, change.removedCards, change.cardOrder),
+        connections: patchRows(s.connections, change.connections, change.removedConnections, change.connectionOrder),
+        clusters: patchRows(s.clusters, change.clusters, change.removedClusters, change.clusterOrder),
+        canUndo: change.canUndo,
+        canRedo: change.canRedo,
+        ...(stillLast ? {} : { lastDeleted: null }),
+        ...(change.meta ? { meta: change.meta } : {}),
+        ...(change.viewport ? { viewport: change.viewport } : {}),
+        ...(s.selectedCardId && change.removedCards.includes(s.selectedCardId) ? { selectedCardId: null } : {}),
       });
-      return saveChain;
-    },
-
-    async flushSaves() {
-      await flushAutosave();
-      await saveChain;
     },
 
     async exportBundle(ids) {
-      // Flush any pending edit so the library on disk and its index are current,
-      // then gather each board: the open one from live state (its unsaved edits and
-      // a fresh updatedAt), every other from disk. A board that won't load is
-      // dropped rather than failing the whole export.
-      await flushAutosave();
-      const currentId = get().currentBoardId;
+      // Every edit is already on disk, the open board's included, so each board is
+      // read from there. A board that won't load is dropped rather than failing the
+      // whole export.
       const gathered = (
         await Promise.all(
           ids.map(async (id) => {
-            const board = id === currentId ? get().toBoard() : await storage.loadBoard(id);
+            const board = await storage.loadBoard(id);
             return board ? { id, board } : null;
           }),
         )
@@ -986,12 +855,9 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     },
 
     async adoptBundle(selected) {
-      // Additive: each board is adopted under a fresh id (adoptBoard mints one), so
-      // a renamed import lands beside the board it is a new version of rather than
-      // replacing it. The last one adopted is left current.
-      for (const { board, title } of selected) {
-        await adoptBoard({ ...board, meta: { ...board.meta, title } });
-      }
+      // Additive: each board is adopted under a fresh id, so a renamed import lands
+      // beside the board it is a new version of rather than replacing it.
+      await adoptBoards(selected.map(({ board, title }) => ({ ...board, meta: { ...board.meta, title } })));
       // Media for boards left unselected was stored when the bundle was read and is
       // now unreferenced; the sweep reclaims it (after its min-age grace).
       void gcMedia();

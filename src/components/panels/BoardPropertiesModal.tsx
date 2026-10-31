@@ -6,38 +6,41 @@ import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import { storage } from '../../storage';
 import { reactStyle } from '../ui/reactStyle';
 import { useBoardStore } from '../../hooks/useStores';
+import { useDraft } from '../../hooks/useDraft';
 
 export function BoardPropertiesModal({ onClose }: { onClose: () => void }) {
-  const title = useBoardStore((s) => s.meta.title);
-  const updatedAt = useBoardStore((s) => s.meta.updatedAt);
-  const setTitle = useBoardStore((s) => s.setTitle);
-  const countryCode = useBoardStore((s) => s.meta.countryCode);
-  const setCountryCode = useBoardStore((s) => s.setCountryCode);
+  const meta = useBoardStore((s) => s.meta);
+  const [title, setTitle, flushTitle] = useDraft(meta.title, useBoardStore((s) => s.setTitle));
+  const [countryCode, setCountryCode, flushCountryCode] = useDraft(
+    meta.countryCode ?? '',
+    useBoardStore((s) => s.setCountryCode),
+  );
 
   return (
     <Modal title="Board properties" onClose={onClose}>
       <label className="field">
         <span>Title</span>
-        {/* Straight to the store, like the cluster label input — autosave
-            persists it and the library entry is derived from it on save, so
-            there is no OK/Cancel semantic to invent. */}
+        {/* Saved as typed, like the cluster label, so there is no OK/Cancel
+            semantic to invent. */}
         <input
           autoFocus
           value={title}
           placeholder={DEFAULT_BOARD_TITLE}
           onChange={(e) => setTitle(e.target.value)}
+          onBlur={flushTitle}
         />
       </label>
-      <p className="hint">Last saved {formatOccurredAt(updatedAt, 'minute')}.</p>
+      <p className="hint">Last saved {formatOccurredAt(meta.updatedAt, 'minute')}.</p>
 
       <label className="field">
         <span>Local country code</span>
-        {/* Straight to the store like Title; lib/phone normalises it. What a leading
+        {/* Saved as typed like Title; lib/phone normalises it. What a leading
             national 0 folds to when matching and showing numbers. */}
         <input
-          value={countryCode ?? ''}
+          value={countryCode}
           placeholder="+61"
           onChange={(e) => setCountryCode(e.target.value)}
+          onBlur={flushCountryCode}
         />
         <span className="field__hint">
           A leading 0 in a phone number folds to this, so 0403… matches +61 403…. Defaults to Australia.
@@ -115,7 +118,7 @@ function BoardFile() {
         {path}
       </button>
       <span className="field__hint">
-        Saved here automatically, 500ms after every edit. Click to show it in Finder.
+        Saved here as you edit. Click to show it in Finder.
       </span>
     </div>
   );

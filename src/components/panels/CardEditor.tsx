@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { openDialog } from '../../store/dialogStore';
 import { strungNote } from '../../lib/connections';
 import { MarkdownView } from '../ui/MarkdownView';
@@ -31,6 +31,7 @@ import { imageFacts } from '../../lib/mediaFacts';
 import type { Card, CardKind } from '../../types/board';
 import { reactStyle } from '../ui/reactStyle';
 import { useBoardStore } from '../../hooks/useStores';
+import { useDraft } from '../../hooks/useDraft';
 import { cx } from '@wired-square/kit/core';
 
 export function CardEditor() {
@@ -50,46 +51,15 @@ export function CardEditor() {
   );
 }
 
-/** How long typing in title/notes may pause before the draft commits. */
-const DRAFT_COMMIT_MS = 300;
-
 function CardEditorForm({ card }: { card: Card }) {
   const clusters = useBoardStore((s) => s.clusters);
   const updateCard = useBoardStore((s) => s.updateCard);
   const setView = useBoardStore((s) => s.setView);
 
-  // Title and notes are the fields that are *typed* into, and each keystroke
-  // used to write through to the store — which rebuilds the card's node and
-  // re-derives the roster and the participant edges per character. So the two
-  // edit a local draft here and commit on a typing pause, on blur, and on
-  // unmount. Deliberate trade, worth a note: an external change to them while
-  // the editor is open (reprocessCard filling notes from OCR) won't refresh an
-  // open draft. Every other field is a discrete control and writes through.
-  const [title, setTitle] = useState(card.title);
-  const [notes, setNotes] = useState(card.notes);
-  const pending = useRef<Partial<Pick<Card, 'title' | 'notes'>>>({});
-  const commitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const flush = useCallback(() => {
-    if (commitTimer.current) {
-      clearTimeout(commitTimer.current);
-      commitTimer.current = undefined;
-    }
-    const patch = pending.current;
-    pending.current = {};
-    // updateCard is a no-op if the card was deleted under a pending commit.
-    if (patch.title !== undefined || patch.notes !== undefined) updateCard(card.id, patch);
-  }, [card.id, updateCard]);
-
-  const stage = (patch: Partial<Pick<Card, 'title' | 'notes'>>) => {
-    pending.current = { ...pending.current, ...patch };
-    if (commitTimer.current) clearTimeout(commitTimer.current);
-    commitTimer.current = setTimeout(flush, DRAFT_COMMIT_MS);
-  };
-
-  // Closing the editor or moving the selection unmounts this (it is keyed by
-  // card id) — commit whatever is still pending on the way out.
-  useEffect(() => flush, [flush]);
+  // Title and notes are typed into; every other field is a discrete control and
+  // writes through.
+  const [title, setTitle, flushTitle] = useDraft(card.title, (title) => updateCard(card.id, { title }));
+  const [notes, setNotes, flushNotes] = useDraft(card.notes, (notes) => updateCard(card.id, { notes }));
 
   // Changing a card's kind can move it: an evidence card switched to email
   // leaves the board for the record. Follow it, or the card the user is editing
@@ -108,11 +78,8 @@ function CardEditorForm({ card }: { card: Card }) {
         <span>Title</span>
         <input
           value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            stage({ title: e.target.value });
-          }}
-          onBlur={flush}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={flushTitle}
         />
       </label>
 
@@ -254,11 +221,8 @@ function CardEditorForm({ card }: { card: Card }) {
         <span>Notes (markdown)</span>
         <textarea
           value={notes}
-          onChange={(e) => {
-            setNotes(e.target.value);
-            stage({ notes: e.target.value });
-          }}
-          onBlur={flush}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={flushNotes}
           rows={8}
         />
       </label>
@@ -308,8 +272,8 @@ function EventToggle({ card }: { card: Card }) {
 }
 
 /**
- * Delete, confirmed in place. There is a single-level undo behind it now (the
- * toast, and Cmd+Z — see undoLastDelete), but one chance is still worth a
+ * Delete, confirmed in place. There is an undo behind it now (the toast, and
+ * Cmd+Z — see startUndoShortcut), but one chance is still worth a
  * confirm on the only destructive control on the panel.
  *
  * The confirm counts the string first. Deleting a card takes its connections

@@ -7,6 +7,7 @@ import {
   toLocalInputValue,
 } from '../../lib/dates';
 import { useBoardStore } from '../../hooks/useStores';
+import { useDraft } from '../../hooks/useDraft';
 
 type WhenMode = 'none' | DatePrecision;
 
@@ -61,24 +62,32 @@ export function WhenField({ card, locked = false }: { card: Card; locked?: boole
         </select>
 
         {card.occurredAt && (
-          <input
-            type={card.occurredAtPrecision === 'day' ? 'date' : 'datetime-local'}
-            value={toLocalInputValue(card.occurredAt, card.occurredAtPrecision)}
-            onChange={(e) => {
-              const next = fromLocalInputValue(
-                e.target.value,
-                card.occurredAtPrecision,
-              );
-              // A cleared or half-typed input parses to null; keep the stored
-              // value until the user commits something valid.
-              if (next) updateCard(card.id, { occurredAt: next });
-            }}
-          />
+          <WhenInput key={card.occurredAtPrecision} card={card} occurredAt={card.occurredAt} />
         )}
       </div>
       {!card.occurredAt && (
         <p className="hint">Undated cards stay off the timeline.</p>
       )}
     </div>
+  );
+}
+
+function WhenInput({ card, occurredAt }: { card: Card; occurredAt: string }) {
+  const updateCard = useBoardStore((s) => s.updateCard);
+  const precision = card.occurredAtPrecision;
+  const [text, setText, flush] = useDraft(toLocalInputValue(occurredAt, precision), (text) => {
+    // A cleared or half-typed input parses to null; keep the stored value until
+    // the user commits something valid.
+    const next = fromLocalInputValue(text, precision);
+    if (next) updateCard(card.id, { occurredAt: next });
+  });
+
+  return (
+    <input
+      type={precision === 'day' ? 'date' : 'datetime-local'}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={flush}
+    />
   );
 }

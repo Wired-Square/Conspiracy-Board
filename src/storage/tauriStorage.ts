@@ -8,11 +8,9 @@ import type { EmailParse } from '../bindings/EmailParse';
 import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 import type { GcOutcome } from '../bindings/GcOutcome';
 import type { LibraryRefs } from '../bindings/LibraryRefs';
-import type { LoadedBoard } from '../bindings/LoadedBoard';
 import type { MediaDraft } from '../bindings/MediaDraft';
 import type { MediaEntry } from '../bindings/MediaEntry';
 import type { MediaMeta } from '../bindings/MediaMeta';
-import type { SaveBoardPayload } from '../bindings/SaveBoardPayload';
 import { bytesToB64 } from '../lib/base64';
 import { boardMediaRefs } from '../lib/media';
 import { setMediaDir } from './media';
@@ -26,37 +24,6 @@ import type { StorageAdapter } from './StorageAdapter';
 // Picked files go to the shell by path, through the dialog plugin's open and save
 // panels, so their bytes never cross the IPC boundary — a bundle, an email, a
 // picture or a document alike.
-
-// What the board's .sqlite last held, per board id: each entity's JSON, keyed by id.
-// Seeded on load and set to exactly what was written on each save, so a save can send
-// only the rows whose JSON changed (the diff) while still handing the shell the
-// complete id lists it needs to delete and reorder.
-type EntityBodies = {
-  cards: Map<string, string>;
-  connections: Map<string, string>;
-  clusters: Map<string, string>;
-};
-const lastSaved = new Map<string, EntityBodies>();
-
-// Serialised JSON per entity, keyed by object identity. The store replaces an
-// entity object on every mutation — updateCard, arrangeCards,
-// deleteCluster, updateCluster, updateConnection all spread a fresh object —
-// so an unchanged reference always means unchanged JSON, and a save only pays
-// for stringifying the entities that actually changed since the last one.
-// That replace-don't-mutate discipline is load-bearing here: an in-place
-// mutation anywhere in the store would serve stale JSON from this cache.
-const bodyCache = new WeakMap<object, string>();
-const bodyJson = (x: { id: string }): string => {
-  let s = bodyCache.get(x);
-  if (s === undefined) {
-    s = JSON.stringify(x);
-    bodyCache.set(x, s);
-  }
-  return s;
-};
-
-const bodyMap = (xs: { id: string }[]): Map<string, string> =>
-  new Map(xs.map((x) => [x.id, bodyJson(x)]));
 
 // The shell vouches only for boards whose media refs it has recorded, and names the
 // rest. A board saved before refs were recorded is read here, where the media refs are
@@ -73,12 +40,6 @@ async function withRefsRecorded<T extends { unknown: string[] }>(ask: () => Prom
   return ask();
 }
 
-const boardBodies = (board: Board): EntityBodies => ({
-  cards: bodyMap(board.cards),
-  connections: bodyMap(board.connections),
-  clusters: bodyMap(board.clusters),
-});
-
 export const tauriStorage: StorageAdapter = {
   async init() {
     // Bring the library up: create its directories, then cache the media directory
@@ -93,63 +54,23 @@ export const tauriStorage: StorageAdapter = {
     return invoke<BoardSummary[]>('list_boards');
   },
 
-  async loadBoard(id) {
+  loadBoard(id) {
     // A corrupt, invalid or locked board reads as "unreadable this time", never a
-    // throw: the load paths (loadBoardForOpen, withRefsRecorded) treat a null load as
-    // "leave it be", never as a board to delete.
-    const res = await invoke<LoadedBoard>('load_board', { id }).catch(() => null);
-    const board = res?.board;
-    if (!board) return null;
-    if (res.legacy) {
-      // First open of a pre-SQLite board: write its .sqlite through the normal save
-      // path, then drop the old boards/<id>.json — only once the shell confirms the
-      // database reassembles. The empty cache makes that first save write every row.
-      lastSaved.delete(id);
-      await this.saveBoard(id, board);
-      await invoke('retire_legacy_board', { id }).catch(() => {});
-    } else {
-      lastSaved.set(id, boardBodies(board));
-    }
-    return board;
+    // throw: its callers treat a null load as "leave it be", never as a board to
+    // delete.
+    return invoke<Board | null>('load_board', { id }).catch(() => null);
   },
 
   seedBoard() {
     return invoke<Board>('seed_board');
   },
 
-  async saveBoard(id, board) {
-    const prev = lastSaved.get(id);
-    // Serialise each entity once: this map is both the diff input and the next save's
-    // cache, so nothing is stringified twice on the autosave hot path. Only the rows
-    // whose JSON changed are sent as bodies; the `*Ids` lists are always complete, so
-    // the shell deletes and reorders from them regardless. A drifted cache can at worst
-    // cost a redundant or a missed body upsert — never a wrong delete — and it is
-    // rebuilt from ground truth on every load. On a migrating save `prev` is absent, so
-    // every row is sent (a full write), which materialises a board's first .sqlite.
-    const next = boardBodies(board);
-    const changed = (now: Map<string, string>, was: Map<string, string> | undefined) =>
-      [...now].filter(([k, json]) => was?.get(k) !== json).map(([k, json]) => ({ id: k, json }));
-    const payload: SaveBoardPayload = {
-      version: board.version,
-      meta: board.meta,
-      viewport: board.viewport ?? null,
-      cards: changed(next.cards, prev?.cards),
-      cardIds: board.cards.map((c) => c.id),
-      connections: changed(next.connections, prev?.connections),
-      connectionIds: board.connections.map((c) => c.id),
-      clusters: changed(next.clusters, prev?.clusters),
-      clusterIds: board.clusters.map((c) => c.id),
-      mediaRefs: boardMediaRefs(board),
-    };
-    await invoke('save_board', { id, payload });
-    // Only after the write lands, so a failed save leaves the cache stale and the next
-    // save re-sends rather than assuming the shell has what it does not.
-    lastSaved.set(id, next);
+  async createBoards(boards) {
+    await invoke('create_boards', { boards });
   },
 
-  async deleteBoard(id) {
-    await invoke('delete_board', { id });
-    lastSaved.delete(id);
+  deleteBoard(id) {
+    return invoke('delete_board', { id });
   },
 
   getCurrentBoardId() {
