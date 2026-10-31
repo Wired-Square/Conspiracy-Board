@@ -8,8 +8,6 @@ use ts_rs::TS;
 
 fn export_all(dir: &Path) -> Result<(), ts_rs::ExportError> {
   crate::schema::Board::export_all_to(dir)?;
-  crate::board_store::board_db::LoadedBoard::export_all_to(dir)?;
-  crate::board_store::board_db::SaveBoardPayload::export_all_to(dir)?;
   crate::board_store::board_db::LibraryRefs::export_all_to(dir)?;
   crate::board_store::board_index::BoardSummary::export_all_to(dir)?;
   crate::board_store::session::DocChanged::export_all_to(dir)?;

@@ -25,7 +25,7 @@ pub fn run() {
     // The native open and save panels for a bundle, which the shell reads and
     // writes by path so a large `.zip` never crosses IPC.
     .plugin(tauri_plugin_dialog::init())
-    .manage(quit::Busy::default())
+    .manage(quit::InFlight::default())
     .manage(board_store::session::OpenBoard::default())
     .plugin(wslib_tauri::quit_guard::init(quit::is_busy))
     .invoke_handler(tauri::generate_handler![
@@ -35,8 +35,7 @@ pub fn run() {
       board_store::board_index::set_current_board_id,
       board_store::board_db::load_board,
       board_store::board_db::seed_board,
-      board_store::board_db::save_board,
-      board_store::board_db::retire_legacy_board,
+      board_store::board_db::create_board,
       board_store::board_db::delete_board,
       board_store::board_db::board_location,
       board_store::board_db::reveal_board,
@@ -51,7 +50,8 @@ pub fn run() {
       board_store::session::add_connections,
       board_store::session::update_connection,
       board_store::session::delete_connections,
-      board_store::session::set_cluster,
+      board_store::session::add_cluster,
+      board_store::session::update_cluster,
       board_store::session::delete_cluster,
       board_store::session::set_meta,
       board_store::session::set_viewport,
@@ -78,7 +78,6 @@ pub fn run() {
       library_index::jobs_pending,
       library_index::index_statuses,
       menu::set_board_menu,
-      quit::set_busy,
     ])
     .on_menu_event(menu::on_event)
     .setup(|app| {

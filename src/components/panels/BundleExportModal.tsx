@@ -15,7 +15,6 @@ import { useBoardStore } from '../../hooks/useStores';
 export function BundleExportModal() {
   const close = () => closeDialog('bundleExport');
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
-  // The current board's live title can lead the index by an autosave, so prefer it.
   const currentTitle = useBoardStore((s) => s.meta.title);
   const exportBundle = useBoardStore((s) => s.exportBundle);
 

@@ -19,8 +19,6 @@ type ViewMenuEvent = { view: View };
 async function syncMenu() {
   const { currentBoardId, meta, view } = boardStore.getState();
   const summaries = await storage.listBoards();
-  // The index lags a rename by the 500ms autosave, and the current board is the
-  // only one renamable from the menu — so show its live title straight away.
   const boards = summaries.map((b) => ({
     id: b.id,
     title: b.id === currentBoardId ? meta.title : b.title,

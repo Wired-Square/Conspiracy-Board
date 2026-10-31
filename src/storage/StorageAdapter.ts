@@ -50,12 +50,8 @@ export interface StorageAdapter {
   loadBoard(id: string): Promise<Board | null>;
   /** The bundled example board. */
   seedBoard(): Promise<Board>;
-  /**
-   * Persist a board, with its library summary derived from `board.meta` in the same
-   * call, so the list cannot drift from the board. Throws with a user-facing message
-   * if storage is full.
-   */
-  saveBoard(id: string, board: Board): Promise<void>;
+  /** Write a board new to the library, and list it. Refuses an id already in use. */
+  createBoard(id: string, board: Board): Promise<void>;
   /** Remove a board. Does not touch the current-board pointer; that is policy. */
   deleteBoard(id: string): Promise<void>;
 

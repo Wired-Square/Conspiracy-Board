@@ -1522,7 +1522,7 @@ button:disabled {
   border-radius: 8px;
 }
 
-/* A failed autosave is otherwise invisible until the user reloads and finds
+/* A failed save is otherwise invisible until the user reloads and finds
    their work gone, so it gets a loud strip rather than a console message. */
 .toolbar__error {
   margin-top: 0.5rem;

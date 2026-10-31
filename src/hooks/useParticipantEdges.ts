@@ -17,7 +17,7 @@ const NONE: StringEdge[] = [];
  * (see buildRoster).
  *
  * These edges cannot reach disk. They are built here, at render, and never enter
- * `boardStore.connections` — which is what `toBoard()` persists.
+ * `boardStore.connections`, the shell's board.
  *
  * They are not selectable, focusable or deletable: a suggestion is not a thing
  * you can grade, label or cut. To assert one, the user draws a real Connection,

@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, State};
 
 use super::board_db::{
-  board_db_file, change_media_refs, delete_rows, from_value, reassemble_board, to_json, upsert_meta, upsert_rows,
+  board_db, change_media_refs, delete_rows, from_value, reassemble_board, to_json, upsert_meta, upsert_rows,
 };
 use super::board_index::upsert_summary;
 use crate::library_index::LibraryDb;
@@ -117,14 +117,13 @@ pub struct Session {
 type Outcome = Result<Option<DocChanged>, String>;
 
 impl Session {
-  /// Reads only: the database must already exist, and opening it writes nothing, so a
-  /// session can sit beside the webview's `save_board` without disturbing it.
+  /// Reads only: the database must already exist, and opening it writes nothing.
   fn open(path: &Path, board_id: String) -> Result<Self, String> {
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let conn = rusqlite::Connection::open_with_flags(path, flags)
       .map_err(|e| format!("Could not open the board database: {e}"))?;
-    // FULL rather than save_board's NORMAL plus a checkpoint: a commit is durable
-    // without folding the WAL back after every edit.
+    // FULL rather than NORMAL plus a checkpoint: a commit is durable without folding
+    // the WAL back after every edit.
     conn
       .execute_batch("PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;")
       .map_err(|e| format!("Could not prepare the board database: {e}"))?;
@@ -209,13 +208,17 @@ impl Session {
     self.commit(DocChanged { removed_connections, ..Default::default() })
   }
 
-  /// Adds the cluster, or replaces the one with its id.
-  fn set_cluster(&mut self, cluster: Cluster) -> Outcome {
-    let clusters = match self.board.clusters.iter().find(|c| c.id == cluster.id) {
-      Some(current) => changed(current, cluster),
-      None => vec![cluster],
-    };
-    self.commit(DocChanged { clusters, ..Default::default() })
+  fn add_cluster(&mut self, cluster: Cluster) -> Outcome {
+    if self.board.clusters.iter().any(|c| c.id == cluster.id) {
+      return Err(format!("The board already has a cluster {:?}.", cluster.id));
+    }
+    self.commit(DocChanged { clusters: vec![cluster], ..Default::default() })
+  }
+
+  fn update_cluster(&mut self, id: &str, patch: Map<String, Value>) -> Outcome {
+    let Some(cluster) = self.board.clusters.iter().find(|c| c.id == id) else { return Ok(None) };
+    let next = patched(cluster, patch, from_value)?;
+    self.commit(DocChanged { clusters: changed(cluster, next), ..Default::default() })
   }
 
   /// Member cards stay, losing only this membership.
@@ -365,7 +368,7 @@ fn now_utc() -> String {
 
 /// Runs `edit` on the open board if it is `board_id`, then lists a content change in
 /// the board list and broadcasts it. The lock is held throughout, so events go out in
-/// commit order.
+/// commit order, and a quit waits while any edit is queued or running.
 fn edit(
   app: &AppHandle,
   open: &OpenBoard,
@@ -373,6 +376,7 @@ fn edit(
   board_id: &str,
   edit: impl FnOnce(&mut Session) -> Outcome,
 ) -> Result<(), String> {
+  let _held = crate::quit::hold(app);
   let mut guard = open.lock()?;
   let session = guard.as_mut().filter(|s| s.board_id == board_id).ok_or("That board isn't open.")?;
   let Some(change) = edit(session)? else { return Ok(()) };
@@ -385,7 +389,8 @@ fn edit(
 
 #[tauri::command(async)]
 pub fn open_board_session(app: AppHandle, open: State<OpenBoard>, board_id: String) -> Result<Board, String> {
-  let session = Session::open(&board_db_file(&app, &board_id)?, board_id)?;
+  let path = board_db(&app, &board_id)?.ok_or("That board has no file.")?;
+  let session = Session::open(&path, board_id)?;
   let board = session.board.clone();
   *open.lock()? = Some(session);
   Ok(board)
@@ -477,14 +482,26 @@ pub fn delete_connections(
 }
 
 #[tauri::command(async)]
-pub fn set_cluster(
+pub fn add_cluster(
   app: AppHandle,
   open: State<OpenBoard>,
   library: State<LibraryDb>,
   board_id: String,
   cluster: Cluster,
 ) -> Result<(), String> {
-  edit(&app, &open, &library, &board_id, |s| s.set_cluster(cluster))
+  edit(&app, &open, &library, &board_id, |s| s.add_cluster(cluster))
+}
+
+#[tauri::command(async)]
+pub fn update_cluster(
+  app: AppHandle,
+  open: State<OpenBoard>,
+  library: State<LibraryDb>,
+  board_id: String,
+  id: String,
+  patch: Map<String, Value>,
+) -> Result<(), String> {
+  edit(&app, &open, &library, &board_id, |s| s.update_cluster(&id, patch))
 }
 
 #[tauri::command(async)]

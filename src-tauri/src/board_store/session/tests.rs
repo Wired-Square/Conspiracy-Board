@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use super::*;
-use crate::board_store::board_db::write_board_file;
+use crate::board_store::board_db::create_board_db;
 use crate::board_store::temp_dir_for;
 use crate::schema::parse_board;
 
@@ -42,7 +42,7 @@ impl Fixture {
   fn new(name: &str) -> Self {
     let dir = temp_dir_for(&format!("session-{name}"));
     let path = dir.join("brd_test.sqlite");
-    write_board_file(&path, &fixture());
+    create_board_db(&path, &fixture()).unwrap();
     let session = Session::open(&path, "brd_test".into()).unwrap();
     Self { dir, path, session }
   }
@@ -89,7 +89,7 @@ fn link(id: &str, source: &str, target: &str) -> Connection {
 fn opening_a_session_writes_nothing() {
   let dir = temp_dir_for("session-open");
   let path = dir.join("brd_test.sqlite");
-  write_board_file(&path, &fixture());
+  create_board_db(&path, &fixture()).unwrap();
   let before = std::fs::read(&path).unwrap();
   let session = Session::open(&path, "brd_test".into()).unwrap();
   assert_eq!(session.conn.total_changes(), 0);
@@ -133,7 +133,8 @@ fn an_edit_that_changes_nothing_neither_stamps_nor_emits() {
   assert_eq!(f.session.update_card("a", patch(json!({ "title": "A" }))).unwrap(), None);
   assert_eq!(f.session.update_card("gone", patch(json!({ "title": "X" }))).unwrap(), None);
   assert_eq!(f.session.move_cards(&[CardMove { id: "a".into(), position: Vec2 { x: 0.0, y: 0.0 } }]).unwrap(), None);
-  assert_eq!(f.session.set_cluster(fixture().clusters[0].clone()).unwrap(), None);
+  assert_eq!(f.session.update_cluster("g1", patch(json!({ "label": "One" }))).unwrap(), None);
+  assert_eq!(f.session.update_cluster("gone", patch(json!({ "label": "X" }))).unwrap(), None);
   assert_eq!(f.session.set_meta(MetaPatch { title: Some("Case".into()), country_code: None }).unwrap(), None);
   assert_eq!(f.session.set_viewport(Viewport { x: 0.0, y: 0.0, zoom: 1.0 }).unwrap(), None);
   assert_eq!(f.session.delete_cards(&["gone".into()]).unwrap(), None);
@@ -153,6 +154,14 @@ fn the_viewport_persists_without_restamping() {
   let disk = f.on_disk();
   assert_eq!(disk.viewport, Some(viewport));
   assert_eq!(disk.meta.updated_at, STAMPED_BEFORE);
+}
+
+#[test]
+fn a_pan_after_an_edit_keeps_the_edit_stamp() {
+  let mut f = Fixture::new("pan-after-edit");
+  let edit = f.session.update_card("a", patch(json!({ "title": "Renamed" }))).unwrap().unwrap();
+  f.session.set_viewport(Viewport { x: 5.0, y: 6.0, zoom: 2.0 }).unwrap();
+  assert_eq!(f.on_disk().meta.updated_at, edit.meta.unwrap().updated_at);
 }
 
 #[test]
@@ -223,15 +232,28 @@ fn deleting_a_cluster_keeps_its_cards_without_the_membership() {
 }
 
 #[test]
-fn set_cluster_replaces_in_place_or_appends() {
-  let mut f = Fixture::new("set-cluster");
-  let hidden = Cluster { visible: false, ..fixture().clusters[0].clone() };
-  f.session.set_cluster(hidden).unwrap().unwrap();
+fn add_cluster_appends_and_refuses_an_id_in_use() {
+  let mut f = Fixture::new("add-cluster");
   let added = Cluster { id: "g3".into(), label: "Three".into(), color: "#f00".into(), visible: true };
-  f.session.set_cluster(added).unwrap().unwrap();
+  f.session.add_cluster(added.clone()).unwrap().unwrap();
+  assert!(f.session.add_cluster(Cluster { label: "Again".into(), ..added }).is_err());
   let disk = f.on_disk();
   assert_eq!(ids(&disk.clusters), ["g1", "g2", "g3"]);
-  assert!(!disk.clusters[0].visible);
+  assert_eq!(disk.clusters[2].label, "Three");
+}
+
+#[test]
+fn update_cluster_patches_only_the_fields_it_names() {
+  let mut f = Fixture::new("update-cluster");
+  f.session.update_cluster("g1", patch(json!({ "label": "Renamed" }))).unwrap().unwrap();
+  let change = f.session.update_cluster("g1", patch(json!({ "color": "#123456" }))).unwrap().unwrap();
+  assert!(change.meta.as_ref().unwrap().updated_at != STAMPED_BEFORE);
+  let g1 = &f.on_disk().clusters[0];
+  assert_eq!((g1.label.as_str(), g1.color.as_str(), g1.visible), ("Renamed", "#123456", true));
+  let writes = f.writes();
+  assert!(f.session.update_cluster("g1", patch(json!({ "id": "g9" }))).is_err());
+  assert!(f.session.update_cluster("g1", patch(json!({ "visible": "yes" }))).is_err());
+  assert_eq!(f.writes(), writes);
 }
 
 #[test]
