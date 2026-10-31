@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Component } from 'solid-js';
 import { BoardCanvas } from './components/BoardCanvas';
 import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
-import { ObjectView } from './components/maintenance/ObjectView';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
 import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
@@ -18,6 +17,7 @@ import { Toolbar } from './solid/panels/Toolbar';
 import { ClusterPanel } from './solid/panels/ClusterPanel';
 import { TimelineDrawer } from './solid/timeline/TimelineDrawer';
 import { RecordView } from './solid/record/RecordView';
+import { ObjectView } from './solid/maintenance/ObjectView';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -106,7 +106,7 @@ export default function App() {
                 pan-to-card survive a view switch — they would not across an
                 unmount, and the viewport would snap back on every toggle. */}
             {view === 'record' && <SolidIsland key={`record-${currentBoardId}`} component={RecordView} />}
-            {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
+            {view === 'object' && <SolidIsland key={`object-${currentBoardId}`} component={ObjectView} />}
             <CanvasPanel position="top-left">
               <CameraIsland component={Toolbar} />
             </CanvasPanel>

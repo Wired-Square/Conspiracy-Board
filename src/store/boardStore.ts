@@ -122,7 +122,7 @@ export type BoardState = {
    * numbers — see cardMatchesEntity) that the board dims by and the record drops by.
    * One query so it follows you across the Board/Record toggle. Transient like the
    * selection, never persisted, cleared when a board opens (see hydrate). The timeline
-   * runs its own full-text search (see useDocHits), not this one.
+   * runs its own full-text search (see createDocHits), not this one.
    */
   searchQuery: string;
   setSearchQuery: (q: string) => void;
