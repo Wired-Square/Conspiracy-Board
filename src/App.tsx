@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Component } from 'solid-js';
 import { BoardCanvas } from './components/BoardCanvas';
 import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
-import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
@@ -18,6 +17,7 @@ import { CardEditor } from './solid/panels/CardEditor';
 import { Toolbar } from './solid/panels/Toolbar';
 import { ClusterPanel } from './solid/panels/ClusterPanel';
 import { TimelineDrawer } from './solid/timeline/TimelineDrawer';
+import { RecordView } from './solid/record/RecordView';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -105,13 +105,13 @@ export default function App() {
                 stays mounted and measured, so the camera and the timeline's
                 pan-to-card survive a view switch — they would not across an
                 unmount, and the viewport would snap back on every toggle. */}
-            {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
+            {view === 'record' && <SolidIsland key={`record-${currentBoardId}`} component={RecordView} />}
             {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
             <CanvasPanel position="top-left">
               <CameraIsland component={Toolbar} />
             </CanvasPanel>
             {/* Shown over board and record: a cluster hides its cards wherever they
-                are, and the record reads visibility through the same useVisibleCards
+                are, and the record reads visibility through the same visibleCards
                 the timeline does. The Objects view has no clusters — it shows its own
                 Maintenance dropdown in this corner instead. */}
             {view !== 'object' && (
