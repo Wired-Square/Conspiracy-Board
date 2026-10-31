@@ -4,6 +4,7 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,7 +32,7 @@ pub(crate) mod lifecycle;
 
 pub(crate) const PORT: u16 = 8793;
 
-pub(crate) fn start(library: PathBuf, port: u16, token: String) -> Result<CancellationToken, String> {
+pub(crate) fn start(library: PathBuf, port: u16, token: String) -> Result<Listening, String> {
   let tools = LibraryTools { library };
   let router = Arc::new(LibraryTools::router());
   let identity = LibraryTools::identity();
@@ -43,7 +44,7 @@ pub(crate) fn serve_loopback<S: ServerHandler + Send + 'static>(
   port: u16,
   token: String,
   factory: impl Fn() -> S + Send + Sync + 'static,
-) -> Result<CancellationToken, String> {
+) -> Result<Listening, String> {
   let listener = http::bind_with_retry(SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_secs(2))
     .map_err(|e| e.to_string())?;
   let config = HttpConfig {
@@ -55,12 +56,29 @@ pub(crate) fn serve_loopback<S: ServerHandler + Send + 'static>(
   };
   let cancel = CancellationToken::new();
   let stop = cancel.clone();
+  let (served, stopped) = mpsc::channel::<()>();
   tauri::async_runtime::spawn(async move {
+    let _served = served;
     if let Err(e) = http::serve(listener, factory, config, stop).await {
       log::warn!("[mcp] server on {port} stopped: {e}");
     }
   });
-  Ok(cancel)
+  Ok(Listening { cancel, stopped })
+}
+
+/// Dropping one leaves the server running.
+pub(crate) struct Listening {
+  cancel: CancellationToken,
+  stopped: mpsc::Receiver<()>,
+}
+
+impl Listening {
+  /// Whether the server let go of its port and closed its connections within `wait`.
+  /// Call it off the async workers: blocking the one that cancelled starves the shutdown.
+  pub(crate) fn stop(self, wait: Duration) -> bool {
+    self.cancel.cancel();
+    self.stopped.recv_timeout(wait) != Err(RecvTimeoutError::Timeout)
+  }
 }
 
 pub(crate) fn random_token() -> Result<String, String> {
