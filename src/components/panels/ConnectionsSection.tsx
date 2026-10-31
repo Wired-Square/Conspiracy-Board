@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { touches } from '../../lib/connections';
 import { KIND_META } from '../../lib/kinds';
 import { GradeField } from './GradeField';
-import { EntityPickerDialog } from './EntityPickerDialog';
+import { EntityPickerDialog } from '../../solid/panels/EntityPickerDialog';
+import { SolidIsland } from '../SolidIsland';
 import { useBoardStore } from '../../hooks/useStores';
 
 export function ConnectionsSection({ cardId }: { cardId: string }) {
@@ -74,7 +75,8 @@ export function ConnectionsSection({ cardId }: { cardId: string }) {
       )}
 
       {picking && (
-        <EntityPickerDialog
+        <SolidIsland
+          component={EntityPickerDialog}
           excludeId={cardId}
           onPick={(value) => addConnection(cardId, value)}
           onClose={() => setPicking(false)}

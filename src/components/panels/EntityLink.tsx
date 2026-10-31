@@ -4,7 +4,8 @@ import { useRoster } from '../../hooks/useRoster';
 import type { AddressMatch, Roster } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
-import { EntityPickerDialog, type PickerCreateOption } from './EntityPickerDialog';
+import { EntityPickerDialog, type PickerCreateOption } from '../../solid/panels/EntityPickerDialog';
+import { SolidIsland } from '../SolidIsland';
 import { reactStyle } from '../ui/reactStyle';
 import { useBoardStore } from '../../hooks/useStores';
 
@@ -139,7 +140,8 @@ export function ParticipantLine({ party, ctx }: { party: EmailAddress; ctx: Link
         </button>
       )}
       {picking && (
-        <EntityPickerDialog
+        <SolidIsland
+          component={EntityPickerDialog}
           kinds={kinds}
           createOptions={createOptions}
           onPick={(v) => ctx.onLink(party, v)}
