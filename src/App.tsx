@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Component } from 'solid-js';
 import { BoardCanvas } from './components/BoardCanvas';
 import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
-import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
 import { BusyOverlay } from './components/ui/BusyOverlay';
@@ -18,6 +17,7 @@ import { ImageEditorModal } from './solid/panels/ImageEditorModal';
 import { CardEditor } from './solid/panels/CardEditor';
 import { Toolbar } from './solid/panels/Toolbar';
 import { ClusterPanel } from './solid/panels/ClusterPanel';
+import { TimelineDrawer } from './solid/timeline/TimelineDrawer';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -120,7 +120,7 @@ export default function App() {
               </CanvasPanel>
             )}
           </div>
-          <TimelineDrawer key={currentBoardId} />
+          <CameraIsland key={currentBoardId} component={TimelineDrawer} />
         </div>
         <SolidIsland component={CardEditor} />
         {/* All three sit outside the canvas — nested in the pane, its
