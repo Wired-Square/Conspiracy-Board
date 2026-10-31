@@ -336,6 +336,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
     // A viewport-only save keeps the stored updatedAt, so the adapter can see
     // the summary is unchanged and skip rewriting the index.
     const board = get().toBoard(dirty);
+    if (dirty) set({ meta: board.meta });
 
     try {
       await storage.saveBoard(id, board);
