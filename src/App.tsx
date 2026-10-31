@@ -101,8 +101,8 @@ export default function App() {
                 stays mounted and measured, so the camera and the timeline's
                 pan-to-card survive a view switch — they would not across an
                 unmount, and the viewport would snap back on every toggle. */}
-            {view === 'record' && <RecordView key={currentBoardId} />}
-            {view === 'object' && <ObjectView key={currentBoardId} />}
+            {view === 'record' && <RecordView key={`record-${currentBoardId}`} />}
+            {view === 'object' && <ObjectView key={`object-${currentBoardId}`} />}
             <Panel position="top-left">
               <Toolbar />
             </Panel>
