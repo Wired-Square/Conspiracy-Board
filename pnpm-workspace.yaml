@@ -3,3 +3,4 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - '@wired-square/kit@0.3.4'
+  - '@wired-square/canvas@0.1.0'

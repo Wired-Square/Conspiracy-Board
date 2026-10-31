@@ -15,8 +15,8 @@ importers:
         specifier: ^2.0.0
         version: 2.7.1
       '@wired-square/canvas':
-        specifier: file:../wslib-ts-canvas/packages/canvas
-        version: file:../wslib-ts-canvas/packages/canvas(solid-js@1.9.18)
+        specifier: 0.1.0
+        version: 0.1.0(solid-js@1.9.18)
       '@wired-square/kit':
         specifier: 0.3.4
         version: 0.3.4(solid-js@1.9.18)(vitest@4.1.10(vite@7.3.5))
@@ -644,8 +644,8 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
-  '@wired-square/canvas@file:../wslib-ts-canvas/packages/canvas':
-    resolution: {directory: ../wslib-ts-canvas/packages/canvas, type: directory}
+  '@wired-square/canvas@0.1.0':
+    resolution: {integrity: sha512-kkwbayn6uO5KDAgBnNhrm/2dn/VPDipu1sdFNfb3hlmSFhYe6eG4OaNNlmNJ9fZXfWiNRYWHstHpH3QwhuxPbw==}
     peerDependencies:
       solid-js: ^1.9.11
     peerDependenciesMeta:
@@ -1729,7 +1729,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@wired-square/canvas@file:../wslib-ts-canvas/packages/canvas(solid-js@1.9.18)':
+  '@wired-square/canvas@0.1.0(solid-js@1.9.18)':
     optionalDependencies:
       solid-js: 1.9.18
 
