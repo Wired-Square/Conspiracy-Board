@@ -8,15 +8,15 @@ import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
 import { EmailImportModal } from './components/panels/EmailImportModal';
-import { BoardPropertiesModal } from './components/panels/BoardPropertiesModal';
 import { ImageEditorModal } from './components/panels/ImageEditorModal';
 import { BundleExportModal } from './components/panels/BundleExportModal';
 import { BundleImportModal } from './components/panels/BundleImportModal';
-import { FirstRunModal } from './components/panels/FirstRunModal';
-import { ManageModal } from './components/panels/ManageModal';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
 import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
+import { FirstRunModal } from './solid/panels/FirstRunModal';
+import { BoardPropertiesModal } from './solid/panels/BoardPropertiesModal';
+import { ManageModal } from './solid/panels/ManageModal';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -75,7 +75,7 @@ export default function App() {
   if (firstRun) {
     return (
       <>
-        <FirstRunModal />
+        <SolidIsland component={FirstRunModal} />
         {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         <ImportOverlay />
       </>
@@ -125,11 +125,11 @@ export default function App() {
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
         {emailImportOpen && <EmailImportModal />}
-        {propertiesOpen && <BoardPropertiesModal onClose={() => closeDialog('properties')} />}
+        {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
         {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
         {bundleExportOpen && <BundleExportModal />}
         {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
-        {manageOpen && <ManageModal />}
+        {manageOpen && <SolidIsland component={ManageModal} />}
         <ImportOverlay />
         <SolidIsland component={BackgroundTaskIndicator} />
         <UndoToast />

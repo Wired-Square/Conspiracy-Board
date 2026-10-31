@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { drafts } from '../lib/drafts';
-
-const DRAFT_COMMIT_MS = 300;
+import { DRAFT_COMMIT_MS, drafts } from '../lib/drafts';
 
 /**
  * A typed field's local copy of `value`, so a keystroke never crosses to the shell:

@@ -1,3 +1,5 @@
+export const DRAFT_COMMIT_MS = 300;
+
 const pending = new Set<() => void>();
 
 /** Text drafts waiting to commit (see useDraft), so a board undo can commit them first. */

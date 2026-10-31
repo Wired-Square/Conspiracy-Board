@@ -18,8 +18,8 @@ export default defineConfig({
   clearScreen: false,
   // Agents' worktrees live under .claude/; without this, their edits reload the app.
   server: { port: 1420, strictPort: true, watch: { ignored: ['**/.claude/**'] } },
-  // Only the pure logic is unit-tested (dates, mbox splitting, schema
-  // migration) — no DOM needed, so no jsdom.
+  // Node by default: most tests are pure logic. One that needs a DOM opts into
+  // jsdom with a `// @vitest-environment jsdom` first line.
   // css: the stylesheet is stubbed to '' by default, which would quietly empty
   // the `?raw` import grades.test.ts reads --string out of. Processing it costs
   // one file: nothing else in the suite imports CSS.
