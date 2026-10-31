@@ -9,6 +9,7 @@ import { BundleExportModal } from './components/panels/BundleExportModal';
 import { BundleImportModal } from './components/panels/BundleImportModal';
 import { EmailImportModal } from './components/panels/EmailImportModal';
 import { ImageEditorModal } from './components/panels/ImageEditorModal';
+import { LibraryMcpModal } from './components/panels/LibraryMcpModal';
 import { CardEditor } from './components/panels/CardEditor';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
@@ -125,6 +126,9 @@ export default function App() {
           {bundleImport()}
           <Show when={dialogs().manage}>
             <ManageModal />
+          </Show>
+          <Show when={dialogs().libraryMcp}>
+            <LibraryMcpModal />
           </Show>
           <BusyOverlay />
           <BackgroundTaskIndicator />
