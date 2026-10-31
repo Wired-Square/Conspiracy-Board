@@ -52,7 +52,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # Imported email is untrusted MIME in any charset; full_encoding adds the multi-byte
 # ones through encoding_rs, which lopdf already brings.
 mail-parser = { version = "1.0", features = ["full_encoding"] }
-wslib-file-atomic ={ version = "0.1.8", registry = "wired-square" }
+wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
 wslib-tauri = { version = "0.1.1", registry = "wired-square" }
 # The dev-only MCP harness (src/mcp.rs): a loopback server that reads and drives the
 # window for a Claude session. getrandom is already in the tree through tauri.
