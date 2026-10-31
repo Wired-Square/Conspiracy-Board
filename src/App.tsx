@@ -23,6 +23,7 @@ import { startInbox } from './platform/inbox';
 import { startUndoShortcut } from './platform/undoShortcut';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
+import { startJobProgress } from './platform/jobProgress';
 import { startQuitGuard } from './platform/quitGuard';
 import { closeDialog } from './store/dialogStore';
 import { useBoardStore, useDialogStore, useEmailImportStore } from './hooks/useStores';
@@ -60,6 +61,8 @@ export default function App() {
   useStart(startBoardMenu);
   // Refines the import busy-overlay text as the shell stores a bundle's media.
   useStart(startImportProgress);
+  // Keeps the indexing badge on the shell's extraction queue.
+  useStart(startJobProgress);
   // Holds Cmd+Q until a pending autosave has landed.
   useStart(startQuitGuard);
 

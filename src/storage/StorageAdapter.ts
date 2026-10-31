@@ -89,7 +89,8 @@ export interface StorageAdapter {
   loadBoard(id: string): Promise<Board | null>;
   /**
    * Persist a board, with its library summary derived from `board.meta` in the same
-   * call, so the list cannot drift from the board.
+   * call, so the list cannot drift from the board. Throws with a user-facing message
+   * if storage is full.
    */
   saveBoard(id: string, board: Board): Promise<void>;
   /** Remove a board. Does not touch the current-board pointer; that is policy. */
@@ -150,30 +151,22 @@ export interface StorageAdapter {
   /**
    * The library-wide full-text search index over document bodies (library.sqlite in
    * the shell). A rebuildable projection of the media store — never a source of truth
-   * — populated in the background so a search can find a card by words inside the file
-   * it carries, not only the fields typed onto it. Keyed by media name, so extraction
-   * is deduped across boards; the webview maps a hit's name back to a card.
+   * — populated in the background as each file is stored, so a search can find a
+   * card by words inside the file it carries, not only the fields typed onto it. Keyed
+   * by media name, so extraction is deduped across boards; the webview maps a hit's
+   * name back to a card.
    */
-  /**
-   * Read and index a stored file's body text — PDF and Office bodies, plain text and
-   * `.eml`, or a screenshot's text via OCR. Idempotent by content hash; `force`
-   * re-reads a file already indexed (a manual reindex, or a newer extractor). Returns
-   * the terminal status; best-effort, so it records rather than throws on a bad file.
-   */
-  processMedia(name: string, force: boolean): Promise<DocStatus>;
   /**
    * Search indexed document bodies. Each hit carries the media name (to map back to a
    * card), a snippet with the match marked, and a rank. An empty query returns nothing.
    */
   searchDocuments(query: string, limit: number): Promise<DocHit[]>;
-  /**
-   * The media still needing extraction — never indexed, or indexed under an older
-   * extractor. The background queue asks for this at startup, so a crash mid-batch
-   * simply resumes where it left off.
-   */
-  pendingMedia(): Promise<string[]>;
-  /** Empty the search index — the recovery path if it ever drifts; the queue rebuilds. */
-  rebuildIndex(): Promise<void>;
+  /** Read these files into the index again, even if already indexed. */
+  reindexMedia(names: string[]): Promise<void>;
+  /** Read every media file into the index again. */
+  reindexAll(): Promise<void>;
+  /** Files the shell's workers have queued or are reading; `jobs:progress` after. */
+  jobsPending(): Promise<number>;
   /** Every indexed file's name and status, for the Objects view to badge each file. */
   indexStatuses(): Promise<DocStatus[]>;
 

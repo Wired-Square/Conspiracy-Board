@@ -2,7 +2,7 @@ import { useStore, type StoreApi } from 'zustand';
 import { boardStore } from '../store/boardStore';
 import { dialogStore } from '../store/dialogStore';
 import { emailImportStore } from '../store/emailImportStore';
-import { jobQueueStore } from '../store/jobQueueStore';
+import { jobsStore } from '../store/jobsStore';
 import { mediaAuditStore } from '../store/mediaAuditStore';
 import { promptStore } from '../store/promptStore';
 
@@ -15,6 +15,6 @@ const bind =
 export const useBoardStore = bind(boardStore);
 export const useDialogStore = bind(dialogStore);
 export const useEmailImportStore = bind(emailImportStore);
-export const useJobQueueStore = bind(jobQueueStore);
+export const useJobsStore = bind(jobsStore);
 export const useMediaAuditStore = bind(mediaAuditStore);
 export const usePromptStore = bind(promptStore);

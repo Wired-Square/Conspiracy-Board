@@ -7,21 +7,21 @@
 //!
 //! The board list shares the file (`board_store::board_index`); the rest of this
 //! module is a *derived index*, never a source of truth: the media files and the
-//! extractors are authoritative, and this can be dropped and rebuilt from them at any
-//! time (`rebuild_index`, then re-pump `pending_media`). It is board-agnostic — it
-//! knows media names and text, never a board id or a card field — which is what keeps
-//! the shell free of the card schema and cross-board search a later no-op. The webview
-//! orchestrates: a background worker asks `pending_media` what still needs reading and
-//! calls `process_media` per file (see src/store/jobQueueStore.ts).
+//! extractors are authoritative, and this can be rebuilt from them at any time
+//! (`reindex_all`). It is board-agnostic — it knows media names and text, never a
+//! board id or a card field — which is what keeps the shell free of the card schema
+//! and cross-board search a later no-op. A pool of workers (`start_worker`) reads
+//! each file as it is stored, and at startup whatever `pending_media` says is unread.
 
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::board_store::library_dir;
 use crate::board_store::media::{media_ext, media_file, media_names};
 use crate::extract::{extract_text, ExtractOutcome};
+use crate::jobs::Jobs;
 
 /// The extractors and their versions. Bump it when an extractor changes (a better OCR
 /// engine, say) and `pending_media` re-enqueues every file indexed under an older
@@ -32,14 +32,18 @@ const ENGINE: &str = "pdf:lopdf-0.34;ooxml;ocr:vision-1;plain;v1";
 /// alone. A manual reindex (force) always tries again regardless.
 const MAX_ATTEMPTS: i64 = 3;
 
+/// How many files are read at once. Small: extraction is CPU-bound, and the point is
+/// to stay out of the way, not to saturate the machine.
+const WORKERS: usize = 3;
+
 /// The one connection to library.sqlite, behind a mutex. Extraction runs *before* the
-/// lock is taken, so files read in parallel on the command threads and only the short
+/// lock is taken, so files read in parallel on the worker threads and only the short
 /// writes serialise; WAL keeps a search responsive meanwhile.
 pub struct LibraryDb(pub Mutex<Connection>);
 
 impl LibraryDb {
   pub(crate) fn lock_db(&self) -> Result<MutexGuard<'_, Connection>, String> {
-    self.0.lock().map_err(|_| "The search index is unavailable.".to_string())
+    self.0.lock().map_err(|_| "The library database is unavailable.".to_string())
   }
 }
 
@@ -83,7 +87,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
     .map_err(|e| format!("Could not prepare the search schema: {e}"))
 }
 
-/// The status of one file after `process_media`, handed back to the worker.
+/// One file's place in the index, for the Objects view's badge.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocStatus {
@@ -101,18 +105,44 @@ pub struct DocHit {
   rank: f64,
 }
 
+/// Start the extraction workers, and queue whatever a previous run left unread.
+pub fn start_worker(app: &AppHandle) -> Arc<Jobs> {
+  let (run_app, report_app) = (app.clone(), app.clone());
+  let jobs = Jobs::start(
+    WORKERS,
+    move |name, force| {
+      if let Err(e) = index_media(&run_app, &run_app.state::<LibraryDb>(), name, force) {
+        log::warn!("Could not index {name}: {e}");
+      }
+    },
+    move |pending| {
+      let _ = report_app.emit("jobs:progress", JobsProgress { pending });
+    },
+  );
+  let (resume, app) = (jobs.clone(), app.clone());
+  std::thread::spawn(move || match pending_media(&app, &app.state::<LibraryDb>()) {
+    Ok(names) => resume.enqueue(names, false),
+    Err(e) => log::warn!("Could not resume indexing: {e}"),
+  });
+  jobs
+}
+
+#[derive(Clone, serde::Serialize)]
+struct JobsProgress {
+  pending: usize,
+}
+
 /// Read a file's text and index it. Idempotent: an unchanged file already indexed
 /// under the current engine is a no-op unless `force`. Extraction happens outside the
 /// lock; the two writes (documents + doc_fts) commit together so they can't drift.
-#[tauri::command(async)]
-pub fn process_media(app: AppHandle, db: State<LibraryDb>, name: String, force: bool) -> Result<DocStatus, String> {
-  let path = media_file(&app, &name)?; // guards the name against traversal
+fn index_media(app: &AppHandle, db: &LibraryDb, name: &str, force: bool) -> Result<(), String> {
+  let path = media_file(app, name)?; // guards the name against traversal
   let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
 
   if !force {
     let conn = db.lock_db()?;
     let existing: Option<(String, Option<String>, i64)> = conn
-      .query_row("SELECT status, engine, size FROM documents WHERE name=?1", [&name], |r| {
+      .query_row("SELECT status, engine, size FROM documents WHERE name=?1", [name], |r| {
         Ok((r.get(0)?, r.get(1)?, r.get(2)?))
       })
       .optional()
@@ -121,19 +151,37 @@ pub fn process_media(app: AppHandle, db: State<LibraryDb>, name: String, force: 
       let current = engine.as_deref() == Some(ENGINE);
       // Already settled with this engine, on the same bytes: nothing to do.
       if current && (status == "indexed" || status == "unsupported") && prev_size as u64 == size {
-        return Ok(DocStatus { name, status });
+        return Ok(());
       }
     }
   }
 
   let bytes = std::fs::read(&path).map_err(|e| format!("Could not read media: {e}"))?;
-  let outcome = extract_text(&bytes, media_ext(&name));
+  let outcome = extract_text(&bytes, media_ext(name));
 
   let mut guard = db.lock_db()?;
   let tx = guard.transaction().map_err(|e| format!("Could not write the index: {e}"))?;
-  let status = write_outcome(&tx, &name, size, &outcome)?;
-  tx.commit().map_err(|e| format!("Could not write the index: {e}"))?;
-  Ok(DocStatus { name, status })
+  write_outcome(&tx, name, size, &outcome)?;
+  tx.commit().map_err(|e| format!("Could not write the index: {e}"))
+}
+
+/// Read these files again even if indexed: the Objects view's per-file reindex.
+#[tauri::command]
+pub fn reindex_media(jobs: State<Arc<Jobs>>, names: Vec<String>) {
+  jobs.enqueue(names, true);
+}
+
+/// Read every media file again, for the Objects view's "rebuild".
+#[tauri::command(async)]
+pub fn reindex_all(app: AppHandle, jobs: State<Arc<Jobs>>) -> Result<(), String> {
+  jobs.enqueue(media_names(&app)?, true);
+  Ok(())
+}
+
+/// Files queued or being read, for the badge before its first `jobs:progress`.
+#[tauri::command]
+pub fn jobs_pending(jobs: State<Arc<Jobs>>) -> usize {
+  jobs.pending()
 }
 
 /// Upsert the document row and replace its full-text row, in one transaction. Returns
@@ -213,9 +261,8 @@ fn fts_query(raw: &str) -> String {
 /// The files still needing extraction: everything on disk with no row, or a
 /// non-terminal row, or one indexed under an older engine, or a failure not yet at its
 /// retry cap. The worker asks for this at startup, so a crash mid-batch just resumes.
-#[tauri::command(async)]
-pub fn pending_media(app: AppHandle, db: State<LibraryDb>) -> Result<Vec<String>, String> {
-  let on_disk = media_names(&app)?;
+fn pending_media(app: &AppHandle, db: &LibraryDb) -> Result<Vec<String>, String> {
+  let on_disk = media_names(app)?;
   let conn = db.lock_db()?;
   let mut stmt = conn
     .prepare("SELECT status, engine, attempts FROM documents WHERE name=?1")
@@ -273,16 +320,6 @@ pub(crate) fn prune_documents(app: &AppHandle, db: &LibraryDb) -> Result<u32, St
   }
   tx.commit().map_err(|e| format!("Could not prune the index: {e}"))?;
   Ok(removed)
-}
-
-/// Empty the index — the recovery path if it ever drifts. The worker then re-pumps
-/// `pending_media` (now the whole library) to rebuild it from `media/`.
-#[tauri::command(async)]
-pub fn rebuild_index(db: State<LibraryDb>) -> Result<(), String> {
-  let conn = db.lock_db()?;
-  conn
-    .execute_batch("DELETE FROM documents; DELETE FROM doc_fts;")
-    .map_err(|e| format!("Could not clear the index: {e}"))
 }
 
 /// Every document's name and status, for the Objects view to badge each file. Absent

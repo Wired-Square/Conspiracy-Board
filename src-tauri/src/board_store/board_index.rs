@@ -93,7 +93,7 @@ fn import_index_json(conn: &Connection, library: &Path) -> Result<(), String> {
 fn freshest(entries: Vec<BoardSummary>) -> Vec<BoardSummary> {
   let mut best: HashMap<String, BoardSummary> = HashMap::new();
   for e in entries.into_iter().filter(|e| valid_board_id(&e.id)) {
-    if best.get(&e.id).map_or(true, |prev| e.updated_at > prev.updated_at) {
+    if best.get(&e.id).is_none_or(|prev| e.updated_at > prev.updated_at) {
       best.insert(e.id.clone(), e);
     }
   }

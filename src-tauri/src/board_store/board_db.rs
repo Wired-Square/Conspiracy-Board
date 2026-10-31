@@ -31,10 +31,11 @@ use crate::library_index::LibraryDb;
 
 /// Whether an id is safe to reach the filesystem as a filename. Ids are generated
 /// as `brd_<hex>` (`src/lib/ids.ts`), so this rejects nothing legitimate; it exists
-/// because an id arrives as a filename from `index.json` (an ordinary file a user
-/// can hand-edit) or a bundle's `boards/<id>.json` entry name — without it, an id of
-/// `../../../etc/something` would be honoured. `board_file` and the bundle reader
-/// both go through it, so one rule covers every path an id takes to disk.
+/// because an id arrives from the webview, the imported `index.json` (an ordinary
+/// file a user can hand-edit) or a bundle's `boards/<id>.json` entry name — without
+/// it, an id of `../../../etc/something` would be honoured. `board_file`, the bundle
+/// reader and the board list all go through it, so one rule covers every path an id
+/// takes to disk.
 pub(super) fn valid_board_id(id: &str) -> bool {
   !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
@@ -157,7 +158,12 @@ pub fn load_board(app: AppHandle, id: String) -> Result<LoadedBoard, String> {
 /// The board's rows, then its summary in the board list: a board is never listed
 /// before it can be opened. Two files, so two commits.
 #[tauri::command(async)]
-pub fn save_board(app: AppHandle, db: State<LibraryDb>, id: String, payload: SaveBoardPayload) -> Result<(), String> {
+pub fn save_board(
+  app: AppHandle,
+  db: State<LibraryDb>,
+  id: String,
+  payload: SaveBoardPayload,
+) -> Result<(), String> {
   let mut conn = open_board_db(&board_db_file(&app, &id)?)?;
   let tx = conn
     .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -261,18 +267,23 @@ fn recorded_refs(conn: &Connection) -> rusqlite::Result<Option<Vec<String>>> {
 #[derive(Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryRefs {
-  pub names: HashSet<String>,
-  pub unknown: Vec<String>,
+  pub(crate) names: HashSet<String>,
+  pub(crate) unknown: Vec<String>,
 }
 
 /// A board in the list with no file on disk is unknown too: it may only be unreachable
 /// for now.
-pub(crate) fn library_media_refs(boards: &Path, listed: &[String], except: Option<&str>) -> Result<LibraryRefs, String> {
+pub(crate) fn library_media_refs(
+  boards: &Path,
+  listed: &[String],
+  except: Option<&str>,
+) -> Result<LibraryRefs, String> {
   let entries = std::fs::read_dir(boards).map_err(|e| format!("Could not read the boards directory: {e}"))?;
   let mut refs = LibraryRefs::default();
   for id in listed {
     let file = boards.join(id);
-    if Some(id.as_str()) != except && !file.with_extension("sqlite").exists() && !file.with_extension("json").exists() {
+    let on_disk = file.with_extension("sqlite").exists() || file.with_extension("json").exists();
+    if !on_disk && Some(id.as_str()) != except {
       refs.unknown.push(id.clone());
     }
   }
@@ -302,7 +313,8 @@ pub(crate) fn library_media_refs(boards: &Path, listed: &[String], except: Optio
 /// A board's recorded refs, opened without creating anything: a file gone since the
 /// listing, or one that won't read, is simply unknown.
 fn read_refs(path: &Path) -> Option<Vec<String>> {
-  let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX).ok()?;
+  let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+  let conn = Connection::open_with_flags(path, flags).ok()?;
   conn.busy_timeout(std::time::Duration::from_secs(5)).ok()?;
   recorded_refs(&conn).ok().flatten()
 }
@@ -498,6 +510,7 @@ pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
 /// Deleting something already gone is a success — the caller wanted it absent. Takes
 /// the database and its `-wal`/`-shm` sidecars, plus any legacy `boards/<id>.json`
 /// left from before this board was migrated.
+///
 /// The files first, then the board list: a listed board whose file is gone would open
 /// as null, where an unlisted file is merely invisible.
 #[tauri::command(async)]

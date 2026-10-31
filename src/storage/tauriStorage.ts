@@ -212,20 +212,20 @@ export const tauriStorage: StorageAdapter = {
     return invoke('open_media_dir');
   },
 
-  processMedia(name, force) {
-    return invokeChecked('process_media', docStatusSchema, { name, force });
-  },
-
   searchDocuments(query, limit) {
     return invokeChecked('search_documents', z.array(docHitSchema), { query, limit });
   },
 
-  pendingMedia() {
-    return invokeChecked('pending_media', z.array(z.string()));
+  async reindexMedia(names) {
+    await invoke('reindex_media', { names });
   },
 
-  rebuildIndex() {
-    return invoke('rebuild_index');
+  async reindexAll() {
+    await invoke('reindex_all');
+  },
+
+  jobsPending() {
+    return invokeChecked('jobs_pending', z.number());
   },
 
   indexStatuses() {

@@ -4,8 +4,9 @@
 use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -14,6 +15,7 @@ use sha2::{Digest, Sha256};
 use super::board_db::library_media_refs;
 use super::board_index::listed_ids;
 use super::{boards_dir, media_dir, run_open, write_atomic};
+use crate::jobs::Jobs;
 use crate::library_index::{prune_documents, LibraryDb};
 use crate::extract::meta::{read_meta, MediaMeta};
 
@@ -88,7 +90,8 @@ pub(crate) fn media_ext(name: &str) -> &str {
 
 /// Store bytes under their content hash, writing only when the file is not
 /// already there — the name is proof the content is byte-identical, so a second
-/// import of the same file is a no-op. Returns the name to link from the board.
+/// import of the same file is a no-op — and queue it for the search index. Returns
+/// the name to link from the board.
 /// Shared by `save_media` (webview bytes) and the Apple Mail drop (which already
 /// has the .eml bytes in hand, so there is no second write to the webview).
 pub(crate) fn store_media_bytes(app: &AppHandle, bytes: &[u8], ext: &str) -> Result<String, String> {
@@ -96,6 +99,9 @@ pub(crate) fn store_media_bytes(app: &AppHandle, bytes: &[u8], ext: &str) -> Res
   let path = media_file(app, &name)?;
   if !path.exists() {
     write_atomic(&path, bytes)?;
+  }
+  if let Some(jobs) = app.try_state::<Arc<Jobs>>() {
+    jobs.enqueue([name.clone()], false);
   }
   Ok(name)
 }

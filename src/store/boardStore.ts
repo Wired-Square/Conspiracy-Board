@@ -18,7 +18,6 @@ import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
 import { openDialog } from './dialogStore';
-import { jobQueueStore } from './jobQueueStore';
 import type { MediaMeta, PickedFile } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
@@ -514,12 +513,8 @@ export const boardStore = createStore<BoardState>()((set, get) => {
 
         await load();
         // The app is up; tidy media no board points at any more. Not awaited —
-        // it reads every board, and first paint must not wait on housekeeping.
+        // first paint must not wait on housekeeping.
         void gcMedia();
-        // Pick up indexing where a previous run left off: extract text for any media
-        // not yet in the search index (a crash mid-batch, or files from before the
-        // index existed). A background projection, so first paint doesn't wait on it.
-        void jobQueueStore.getState().resume();
       })();
       return initPromise;
     },
@@ -699,12 +694,6 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       if (!drafts.length) return;
       const ids = get().addCards(drafts);
       if (!ids.length) return;
-      // Index the just-saved files' text in the background, so a search finds words
-      // inside them (not only the fields on the card). Idempotent, so re-imports and
-      // the startup resume() never double-work.
-      jobQueueStore.getState().enqueue(
-        drafts.flatMap((d) => [d.imageFile, d.document?.file].filter((n): n is string => !!n)),
-      );
       // One file: open it, so its picture/metadata is right there. Several: just go
       // to where they landed — the board unless every one is a record card.
       if (ids.length === 1) {

@@ -53,8 +53,8 @@ export const mediaAuditStore = createStore<MediaAuditState>()((set) => ({
         })),
       );
 
-      // The disk listing has no dependency on the board reads, so start it now and
-      // let it run alongside them rather than after.
+      // The disk listing has no dependency on the refs, so start it now and let it
+      // run alongside them rather than after.
       const diskP = storage.listMedia();
 
       // Every *other* board's references, to tell an orphan (no board wants it) from a

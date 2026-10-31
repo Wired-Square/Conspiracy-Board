@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel } from '@xyflow/react';
-import { jobsPending } from '../../store/jobQueueStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
@@ -12,7 +11,7 @@ import { mediaIconFor } from '../../lib/mediaIcon';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
-import { useBoardStore, useJobQueueStore, useMediaAuditStore } from '../../hooks/useStores';
+import { useBoardStore, useJobsStore, useMediaAuditStore } from '../../hooks/useStores';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
 // what the boards reference, plus a way to re-run the processing that first read
@@ -40,9 +39,7 @@ export function ObjectView() {
   const reprocessCard = useBoardStore((s) => s.reprocessCard);
   const reprocessAll = useBoardStore((s) => s.reprocessAll);
   const adoptOrphan = useBoardStore((s) => s.adoptOrphan);
-  const reindexAll = useJobQueueStore((s) => s.reindexAll);
-  const enqueue = useJobQueueStore((s) => s.enqueue);
-  const indexing = useJobQueueStore(jobsPending);
+  const indexing = useJobsStore((s) => s.pending);
 
   // The audit lives in a store so the toolbar badge can read the count; the status line
   // it writes is what the badge shows during a bulk op. The view re-audits on mount —
@@ -70,7 +67,7 @@ export function ObjectView() {
     if (indexing === 0) void loadIndexStatus();
   }, [indexing, loadIndexStatus]);
 
-  const reindex = useCallback((file: string) => enqueue([file], { force: true }), [enqueue]);
+  const reindex = useCallback((file: string) => void storage.reindexMedia([file]), []);
 
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [checks, setChecks] = useState<Record<string, Check>>({});
@@ -162,7 +159,7 @@ export function ObjectView() {
     { label: 'Reprocess all', onSelect: reprocessEverything, disabled: busy },
     {
       label: indexing > 0 ? `Indexing ${indexing}…` : 'Rebuild search index',
-      onSelect: () => void reindexAll(),
+      onSelect: () => void storage.reindexAll(),
       disabled: indexing > 0,
     },
     { label: 'Verify all', onSelect: () => void verifyEverything(), disabled: busy },

@@ -8,7 +8,6 @@ import { isBoardKind } from '../lib/kinds';
 import type { OfferPlan } from '../lib/importOffer';
 import type { PickedFile } from '../storage/StorageAdapter';
 import { boardStore, type CardDraft } from './boardStore';
-import { jobQueueStore } from './jobQueueStore';
 
 // Staged drafts are not board content, so they don't belong in boardStore —
 // which is deliberately the canonical board plus one scalar of UI state. Keeping
@@ -121,16 +120,6 @@ export const emailImportStore = createStore<EmailImportState>()((set, get) => {
       // on what is derived from the addresses themselves (see lib/roster.ts), and
       // only the user draws a connection.
       const addedIds = board.addCards([...emailDrafts, ...entityDrafts], { clusterId: cid });
-
-      // Index each message's .eml and attachments in the background, so a search finds
-      // words in the mail itself, not only the subject/addresses on the card.
-      jobQueueStore.getState().enqueue(
-        emailDrafts.flatMap((d) =>
-          [d.email?.emlFile, ...(d.email?.attachments ?? []).map((a) => a.file)].filter(
-            (n): n is string => !!n,
-          ),
-        ),
-      );
 
       // A message already on the board is part of this thread too. With a cluster
       // chosen, add it in rather than leaving it outside the group the rest joined

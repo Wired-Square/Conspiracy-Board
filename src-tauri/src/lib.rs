@@ -1,5 +1,6 @@
 mod board_store;
 mod extract;
+mod jobs;
 mod library_index;
 mod menu;
 mod quit;
@@ -41,10 +42,10 @@ pub fn run() {
       board_store::media::open_media_dir,
       board_store::bundle::write_bundle,
       board_store::bundle::read_bundle,
-      library_index::process_media,
       library_index::search_documents,
-      library_index::pending_media,
-      library_index::rebuild_index,
+      library_index::reindex_media,
+      library_index::reindex_all,
+      library_index::jobs_pending,
       library_index::index_statuses,
       menu::set_board_menu,
       quit::set_busy,
@@ -80,6 +81,7 @@ pub fn run() {
         }
         Err(e) => return Err(e.into()),
       }
+      app.manage(library_index::start_worker(app.handle()));
 
       // Watch the Inbox drop-folder — the one automatic way in. Mail dragged to
       // Finder becomes one .eml per message, which this hands to the importer;
