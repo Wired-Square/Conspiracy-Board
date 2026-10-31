@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react';
 import { BoardCanvas } from './components/BoardCanvas';
-import { CameraProvider, CanvasPanel } from './components/canvas/Canvas';
+import { CameraProvider, CanvasPanel, useCamera } from './components/canvas/Canvas';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
 import { CardEditor } from './components/panels/CardEditor';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
-import { EmailImportModal } from './components/panels/EmailImportModal';
 import { ImageEditorModal } from './components/panels/ImageEditorModal';
-import { BundleExportModal } from './components/panels/BundleExportModal';
-import { BundleImportModal } from './components/panels/BundleImportModal';
 import { BusyOverlay } from './components/ui/BusyOverlay';
 import { SolidIsland } from './components/SolidIsland';
 import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
 import { FirstRunModal } from './solid/panels/FirstRunModal';
 import { BoardPropertiesModal } from './solid/panels/BoardPropertiesModal';
 import { ManageModal } from './solid/panels/ManageModal';
+import { BundleExportModal } from './solid/panels/BundleExportModal';
+import { BundleImportModal } from './solid/panels/BundleImportModal';
+import { EmailImportModal } from './solid/panels/EmailImportModal';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -33,6 +33,11 @@ import { useBoardStore, useDialogStore, useEmailImportStore } from './hooks/useS
 function ImportOverlay() {
   const status = useBoardStore((s) => s.importStatus);
   return status ? <BusyOverlay status={status} /> : null;
+}
+
+// The camera is React context, which an island can't read, so it is handed in.
+function EmailImportIsland() {
+  return <SolidIsland component={EmailImportModal} camera={useCamera()} />;
 }
 
 export default function App() {
@@ -76,7 +81,7 @@ export default function App() {
     return (
       <>
         <SolidIsland component={FirstRunModal} />
-        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
+        {bundleImportBoards && <SolidIsland component={BundleImportModal} boards={bundleImportBoards} />}
         <ImportOverlay />
       </>
     );
@@ -124,11 +129,11 @@ export default function App() {
             would paint against CardEditor incorrectly.
             Mounted only while open, so their local state (a half-typed paste, a
             pending delete confirm) doesn't outlive the dialog. */}
-        {emailImportOpen && <EmailImportModal />}
+        {emailImportOpen && <EmailImportIsland />}
         {propertiesOpen && <SolidIsland component={BoardPropertiesModal} onClose={() => closeDialog('properties')} />}
         {imageEditorCardId && <ImageEditorModal key={imageEditorCardId} cardId={imageEditorCardId} />}
-        {bundleExportOpen && <BundleExportModal />}
-        {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
+        {bundleExportOpen && <SolidIsland component={BundleExportModal} />}
+        {bundleImportBoards && <SolidIsland component={BundleImportModal} boards={bundleImportBoards} />}
         {manageOpen && <SolidIsland component={ManageModal} />}
         <ImportOverlay />
         <SolidIsland component={BackgroundTaskIndicator} />
