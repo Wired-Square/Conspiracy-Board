@@ -54,6 +54,14 @@ imagesize = "0.13"
 rusqlite = { version = "0.32", features = ["bundled"] }
 wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
 wslib-tauri = { version = "0.1.1", registry = "wired-square" }
+# The dev-only MCP harness (src/mcp.rs): a loopback server that reads and drives the
+# window for a Claude session. getrandom is already in the tree through tauri.
+wslib-mcp = { version = "0.2.1", registry = "wired-square", features = ["http", "dom", "tauri-bridge"], optional = true }
+getrandom = { version = "0.3", optional = true }
+
+[features]
+# `pnpm dev` turns it on; a release build refuses it (lib.rs).
+mcp = ["dep:wslib-mcp", "dep:getrandom"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pinned to exactly what tauri/wry already resolve to. A different minor here

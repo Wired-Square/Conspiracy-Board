@@ -39,6 +39,24 @@ the shell, so `invoke` throws, `init()` never resolves and the app sits on
 degrading, which is worth knowing before you spend ten minutes on why. `pnpm dev`
 is the way to run it.
 
+### Driving it from Claude Code
+
+`pnpm dev` also starts an MCP server on `127.0.0.1:8792`, loopback only, for a
+Claude session to read and drive the window (`query`, `click`, `type`,
+`board_summary`, `jobs_pending` and the rest). It needs a bearer token. Set a
+fixed one so that the registration survives a restart:
+
+```sh
+export CONSPIRACY_MCP_TOKEN=$(openssl rand -hex 24)   # in your shell profile
+claude mcp add --transport http conspiracy http://127.0.0.1:8792/mcp \
+  --header "Authorization: Bearer $CONSPIRACY_MCP_TOKEN"
+```
+
+Without the variable, each launch picks a fresh token and writes it to
+`src-tauri/target/mcp.json`. A release build has none of this: the shell's `mcp`
+feature refuses to compile without `debug_assertions`, and the page loads the
+bridge only under `import.meta.env.DEV`.
+
 ## What's on a board
 
 - **Cards** — the only entity. A card has a title, markdown notes, an optional

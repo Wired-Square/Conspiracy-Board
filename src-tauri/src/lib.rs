@@ -2,8 +2,13 @@ mod board_store;
 mod extract;
 mod jobs;
 mod library_index;
+#[cfg(feature = "mcp")]
+mod mcp;
 mod menu;
 mod quit;
+
+#[cfg(all(feature = "mcp", not(debug_assertions)))]
+compile_error!("the `mcp` feature is for development builds only");
 
 #[cfg(target_os = "macos")]
 mod ocr;
@@ -87,6 +92,9 @@ pub fn run() {
       // Finder becomes one .eml per message, which this hands to the importer;
       // images and documents dropped there import the same way.
       board_store::inbox::start_inbox_watcher(app.handle().clone());
+
+      #[cfg(feature = "mcp")]
+      mcp::start(app.handle());
 
       Ok(())
     })
