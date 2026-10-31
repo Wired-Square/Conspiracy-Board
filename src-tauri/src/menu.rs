@@ -73,6 +73,7 @@ fn file_submenu(
     .item(&MenuItem::with_id(app, "board.export", "Export Bundle", true, None::<&str>)?)
     .separator()
     .item(&MenuItem::with_id(app, "inbox.reveal", "Show Inbox Folder", true, None::<&str>)?)
+    .item(&MenuItem::with_id(app, "library.mcp", "Library MCP…", true, None::<&str>)?)
     .separator()
     // Keep the one item the stock File menu had, since we replace it wholesale.
     .item(&PredefinedMenuItem::close_window(app, None)?)
@@ -192,6 +193,7 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
       "board.import" => "import",
       "board.export" => "export",
       "board.properties" => "properties",
+      "library.mcp" => "libraryMcp",
       _ => return,
     };
     BoardMenuEvent { action: action.into(), id: None }

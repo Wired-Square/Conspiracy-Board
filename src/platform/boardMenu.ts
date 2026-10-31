@@ -55,6 +55,9 @@ async function handle(event: BoardMenuEvent) {
     case 'properties':
       openDialog({ properties: true });
       break;
+    case 'libraryMcp':
+      openDialog({ libraryMcp: true });
+      break;
   }
 }
 
