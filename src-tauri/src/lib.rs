@@ -6,6 +6,7 @@ mod file_types;
 mod import;
 mod jobs;
 mod library_index;
+mod library_mcp;
 mod mail;
 #[cfg(feature = "mcp")]
 mod mcp;

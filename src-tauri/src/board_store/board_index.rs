@@ -16,7 +16,7 @@ use crate::library_index::LibraryDb;
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSummary {
-  id: String,
+  pub(crate) id: String,
   title: String,
   updated_at: String,
 }
@@ -101,7 +101,7 @@ fn freshest(entries: Vec<BoardSummary>) -> Vec<BoardSummary> {
   best.into_values().collect()
 }
 
-pub(super) fn upsert_summary(conn: &Connection, id: &str, title: &str, updated_at: &str) -> Result<(), String> {
+pub(crate) fn upsert_summary(conn: &Connection, id: &str, title: &str, updated_at: &str) -> Result<(), String> {
   upsert(conn, &BoardSummary { id: id.into(), title: title.into(), updated_at: updated_at.into() })
 }
 
@@ -128,7 +128,7 @@ pub(crate) fn listed_ids(conn: &Connection) -> Result<Vec<String>, String> {
 }
 
 /// Newest first, the order the Open dialog lists boards in.
-fn summaries(conn: &Connection) -> Result<Vec<BoardSummary>, String> {
+pub(crate) fn summaries(conn: &Connection) -> Result<Vec<BoardSummary>, String> {
   let mut stmt = conn
     .prepare("SELECT id, title, updated_at FROM boards ORDER BY updated_at DESC")
     .map_err(|e| format!("Could not read the board list: {e}"))?;

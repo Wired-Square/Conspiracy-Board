@@ -13,6 +13,7 @@
 //! cross-board search a later no-op. A pool of workers (`start_worker`) reads
 //! each file as it is stored, and at startup whatever `pending_media` says is unread.
 
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
@@ -49,8 +50,11 @@ impl LibraryDb {
 
 /// Open (creating if absent) library.sqlite with its tables. Called once at setup.
 pub fn open(app: &AppHandle) -> Result<LibraryDb, String> {
-  let dir = library_dir(app)?;
-  std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make the library: {e}"))?;
+  open_at(&library_dir(app)?)
+}
+
+pub(crate) fn open_at(dir: &Path) -> Result<LibraryDb, String> {
+  std::fs::create_dir_all(dir).map_err(|e| format!("Could not make the library: {e}"))?;
   let conn = Connection::open(dir.join("library.sqlite"))
     .map_err(|e| format!("Could not open the search index: {e}"))?;
   conn
@@ -61,7 +65,7 @@ pub fn open(app: &AppHandle) -> Result<LibraryDb, String> {
     )
     .map_err(|e| format!("Could not prepare the search index: {e}"))?;
   init_schema(&conn)?;
-  crate::board_store::board_index::init(&conn, &dir)?;
+  crate::board_store::board_index::init(&conn, dir)?;
   Ok(LibraryDb(Mutex::new(conn)))
 }
 
@@ -102,7 +106,7 @@ pub struct DocStatus {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct DocHit {
-  name: String,
+  pub(crate) name: String,
   snippet: String,
   rank: f64,
 }
@@ -188,7 +192,7 @@ pub fn jobs_pending(jobs: State<Arc<Jobs>>) -> usize {
 
 /// Upsert the document row and replace its full-text row, in one transaction. Returns
 /// the terminal status recorded.
-fn write_outcome(tx: &Transaction, name: &str, size: u64, outcome: &ExtractOutcome) -> Result<String, String> {
+pub(crate) fn write_outcome(tx: &Transaction, name: &str, size: u64, outcome: &ExtractOutcome) -> Result<String, String> {
   let (status, error): (&str, Option<&str>) = match outcome {
     ExtractOutcome::Text(_) => ("indexed", None),
     ExtractOutcome::Unsupported => ("unsupported", None),
@@ -228,7 +232,7 @@ pub fn search_documents(db: State<LibraryDb>, query: String, limit: u32) -> Resu
   run_search(&conn, &query, limit)
 }
 
-fn run_search(conn: &Connection, query: &str, limit: u32) -> Result<Vec<DocHit>, String> {
+pub(crate) fn run_search(conn: &Connection, query: &str, limit: u32) -> Result<Vec<DocHit>, String> {
   let match_query = fts_query(query);
   if match_query.is_empty() {
     return Ok(Vec::new());

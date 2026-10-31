@@ -54,14 +54,15 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 mail-parser = { version = "1.0", features = ["full_encoding"] }
 wslib-file-atomic = { version = "0.1.8", registry = "wired-square" }
 wslib-tauri = { version = "0.1.1", registry = "wired-square" }
-# The dev-only MCP harness (src/mcp.rs): a loopback server that reads and drives the
-# window for a Claude session. getrandom is already in the tree through tauri.
-wslib-mcp = { version = "0.2.1", registry = "wired-square", features = ["http", "dom", "tauri-bridge"], optional = true }
-getrandom = { version = "0.3", optional = true }
+# The library MCP (src/library_mcp.rs): a read-only loopback server over the library,
+# in every build. The dev harness (src/mcp.rs) adds the DOM tools and the webview bridge.
+# getrandom is already in the tree through tauri.
+wslib-mcp = { version = "0.2.1", registry = "wired-square", features = ["http"] }
+getrandom = "0.3"
 
 [features]
 # `pnpm dev` turns it on; a release build refuses it (lib.rs).
-mcp = ["dep:wslib-mcp", "dep:getrandom"]
+mcp = ["wslib-mcp/dom", "wslib-mcp/tauri-bridge"]
 
 [dev-dependencies]
 # The webview's types are generated from the Rust ones by a test (src/bindings.rs), so
