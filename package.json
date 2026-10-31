@@ -21,6 +21,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@wired-square/kit": "0.3.3",
     "@xyflow/react": "^12.11.0",
     "d3-force": "^3.0.0",
     "postal-mime": "^2.7.5",
@@ -28,6 +29,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",
     "remark-gfm": "^4.0.0",
+    "solid-js": "^1.9.18",
     "zod": "^4.0.0",
     "zustand": "^4.5.0"
   },

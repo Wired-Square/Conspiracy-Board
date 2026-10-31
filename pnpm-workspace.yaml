@@ -1,3 +1,5 @@
 # esbuild's postinstall links its platform-native binary; Vite cannot run without it.
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@wired-square/kit@0.3.3'

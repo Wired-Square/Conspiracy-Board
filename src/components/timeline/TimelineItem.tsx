@@ -4,6 +4,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { mediaIconForKind } from '../../lib/mediaIcon';
 import { MediaIcon } from '../ui/MediaIcon';
 import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
+import { cx } from '@wired-square/kit/core';
 
 type Props = {
   card: Card;
@@ -25,7 +26,7 @@ function TimelineItemImpl({ card, clusterColor, selected, onPick, sincePrevEvent
   const glyphType = mediaIconForKind(card.kind);
   return (
     <button
-      className={`timeline-item${isEvent ? ' timeline-item--event' : ''}${selected ? ' is-selected' : ''}${measureMark ? ' is-measured' : ''}`}
+      className={cx('timeline-item', isEvent && 'timeline-item--event', selected && 'is-selected', measureMark && 'is-measured')}
       style={{ ['--accent' as string]: clusterColor ?? NO_CLUSTER_ACCENT }}
       data-card-id={card.id}
       onClick={() => onPick(card.id)}

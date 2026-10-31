@@ -11,6 +11,7 @@ import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
 import { reactStyle } from '../ui/reactStyle';
 import { useBoardStore } from '../../hooks/useStores';
+import { cx } from '@wired-square/kit/core';
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox
 // would bury the argument under two hundred cards of post — so it is here, in
@@ -102,7 +103,7 @@ function RecordRowImpl({ card, loose, clusterColor, selected, onPick }: RowProps
   return (
     <li>
       <button
-        className={`record-row${selected ? ' is-selected' : ''}${loose ? ' is-loose' : ''}`}
+        className={cx('record-row', selected && 'is-selected', loose && 'is-loose')}
         style={{ ['--accent' as string]: clusterColor ?? NO_CLUSTER_ACCENT }}
         onClick={() => onPick(card.id)}
         title={card.title}

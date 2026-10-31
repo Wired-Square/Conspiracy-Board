@@ -20,6 +20,7 @@ import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
 import { useBoardStore } from '../../hooks/useStores';
+import { cx } from '@wired-square/kit/core';
 
 /**
  * A chronological strip under the board.
@@ -223,7 +224,7 @@ export function TimelineDrawer() {
   const marks = useMemo(() => measureMarks(measurement, picks), [measurement, picks]);
 
   return (
-    <section className={`timeline${open ? ' is-open' : ''}`}>
+    <section className={cx('timeline', open && 'is-open')}>
       <header className="timeline__bar">
         <button
           className="timeline__toggle"
@@ -279,7 +280,7 @@ export function TimelineDrawer() {
         {dated.length >= 2 && (
           <div className="timeline__tools">
             <button
-              className={`timeline__measure-toggle${measuring ? ' is-active' : ''}`}
+              className={cx('timeline__measure-toggle', measuring && 'is-active')}
               aria-pressed={measuring}
               onClick={toggleMeasure}
               title="Measure the days between two cards"

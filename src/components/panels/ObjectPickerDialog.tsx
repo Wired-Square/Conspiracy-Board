@@ -4,6 +4,7 @@ import { CARD_KINDS, KIND_META } from '../../lib/kinds';
 import { cardMatches, normaliseQuery } from '../../lib/search';
 import { formatOccurredAt, dayKey } from '../../lib/dates';
 import { Modal } from '../ui/Modal';
+import { cx } from '@wired-square/kit/core';
 
 /** One reusable picture and every card that uses it — pictures are content-addressed,
  *  so a shared image (a group photo) lists all its objects. `cards[0]` is the
@@ -112,7 +113,7 @@ export function ObjectPickerDialog({ objects, onPick, onClose }: Props) {
               key={t.key}
               role="tab"
               aria-selected={t.key === active}
-              className={`entity-picker__tab${t.key === active ? ' is-active' : ''}`}
+              className={cx('entity-picker__tab', t.key === active && 'is-active')}
               onClick={() => setActive(t.key)}
             >
               {t.icon && <span className="entity-picker__tab-icon">{t.icon}</span>}
@@ -139,7 +140,7 @@ export function ObjectPickerDialog({ objects, onPick, onClose }: Props) {
                   <button
                     key={o.file}
                     type="button"
-                    className={`image-picker__item${o.file === current.file ? ' is-active' : ''}`}
+                    className={cx('image-picker__item', o.file === current.file && 'is-active')}
                     title={rest.length ? `${first.title || 'Untitled'} +${rest.length}` : first.title || 'Untitled'}
                     aria-pressed={o.file === current.file}
                     onClick={() => setSelected(o.file)}

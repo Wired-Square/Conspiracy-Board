@@ -31,6 +31,7 @@ import { imageFacts } from '../../lib/mediaFacts';
 import type { Card, CardKind } from '../../types/board';
 import { reactStyle } from '../ui/reactStyle';
 import { useBoardStore } from '../../hooks/useStores';
+import { cx } from '@wired-square/kit/core';
 
 export function CardEditor() {
   const selectedId = useBoardStore((s) => s.selectedCardId);
@@ -224,7 +225,7 @@ function CardEditorForm({ card }: { card: Card }) {
       <div className="field">
         <span>Picture</span>
         {imageSrc && (
-          <div className={`card-editor__preview${card.imageCrop ? ' is-cropped' : ''}`}>
+          <div className={cx('card-editor__preview', card.imageCrop && 'is-cropped')}>
             <img src={imageSrc} alt="" style={reactStyle(cardImageStyle(card))} />
           </div>
         )}
