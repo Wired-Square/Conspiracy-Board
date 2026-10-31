@@ -93,7 +93,7 @@ export function EmailImportModal() {
     // Only what is drawn, though: an all-email import — the ordinary case — has
     // nothing on the board to frame.
     if (drawnIds.length) {
-      void camera?.fitView({ ids: drawnIds, duration: 500, padding: 0.4, maxZoom: 1 });
+      camera?.fitWhenDrawn({ ids: drawnIds, duration: 500, padding: 0.4, maxZoom: 1 });
     } else if (addedIds.length) {
       // It all went to the record — the ordinary case, an mbox with nobody
       // ticked. Nothing moves on the board, so say where it went instead.

@@ -180,7 +180,7 @@ export function TimelineDrawer() {
       }
       selectCard(id);
       const n = camera?.getNode(id);
-      if (!camera || !n) return; // Filtered out by cluster visibility.
+      if (!camera || !n) return; // Not drawn: a record kind, or in a hidden cluster.
       const w = n.size?.width ?? CARD_W;
       const h = n.size?.height ?? CARD_H;
       void camera.setCentre(n.x + w / 2, n.y + h / 2, {
