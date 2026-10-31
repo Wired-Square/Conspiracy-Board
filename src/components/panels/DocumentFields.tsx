@@ -1,10 +1,5 @@
-import { useRef } from 'react';
 import type { Card } from '../../types/board';
 import { storage } from '../../storage';
-import type { MediaMeta } from '../../storage/StorageAdapter';
-import { saveFile } from '../../storage/media';
-import { documentMime } from '../../lib/fileTypes';
-import { pickDocumentMeta } from '../../lib/import/meta';
 import { documentFacts } from '../../lib/mediaFacts';
 import { MetaList } from '../ui/MetaList';
 import { useBoardStore } from '../../hooks/useStores';
@@ -20,20 +15,19 @@ import { useBoardStore } from '../../hooks/useStores';
  */
 export function DocumentFields({ card }: { card: Card }) {
   const updateCard = useBoardStore((s) => s.updateCard);
-  const fileRef = useRef<HTMLInputElement>(null);
   const doc = card.document ?? {};
 
-  const onPick = async (file: File | undefined) => {
-    if (!file) return;
+  const onPick = async () => {
+    const [path] = await storage.pickPaths();
+    if (!path) return;
     // A previous file is left for the sweep — content-addressed media may be
     // shared, so it is not ours to delete the moment this card replaces it. The
-    // same read the drop-import does, so an attached file carries its metadata too.
-    const stored = await saveFile(file);
-    const meta = await storage.extractMediaMeta(stored).catch(() => ({}) as MediaMeta);
+    // same read an import does, so an attached file carries its metadata too.
+    const { document, occurredAt } = await storage.attachDocument(path);
     updateCard(card.id, {
-      document: { file: stored, name: file.name, mime: file.type || documentMime(file.name), ...pickDocumentMeta(meta) },
+      document,
       // Land it on the timeline by its own date, unless the card is already dated.
-      ...(meta.created && !card.occurredAt ? { occurredAt: meta.created } : {}),
+      ...(occurredAt && !card.occurredAt ? { occurredAt } : {}),
     });
   };
 
@@ -43,7 +37,7 @@ export function DocumentFields({ card }: { card: Card }) {
       {doc.file ? (
         <div className="field__row">
           <button onClick={() => void storage.openMedia(doc.file!)}>Open {doc.name ?? 'file'}</button>
-          <button className="link-button" onClick={() => fileRef.current?.click()}>
+          <button className="link-button" onClick={() => void onPick()}>
             Replace
           </button>
           <button className="link-button" onClick={() => updateCard(card.id, { document: {} })}>
@@ -52,15 +46,9 @@ export function DocumentFields({ card }: { card: Card }) {
         </div>
       ) : (
         <div className="field__row">
-          <button onClick={() => fileRef.current?.click()}>Attach file</button>
+          <button onClick={() => void onPick()}>Attach file</button>
         </div>
       )}
-      <input
-        ref={fileRef}
-        type="file"
-        hidden
-        onChange={(e) => void onPick(e.target.files?.[0])}
-      />
       <MetaList facts={documentFacts(doc)} />
       <span className="field__hint">
         Kept in the library and opened in the app it belongs to. The card is a note; this

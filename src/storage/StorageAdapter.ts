@@ -3,17 +3,15 @@ import type { BoardSummary } from '../bindings/BoardSummary';
 import type { DocHit } from '../bindings/DocHit';
 import type { DocStatus } from '../bindings/DocStatus';
 import type { EmailParse } from '../bindings/EmailParse';
+import type { MediaDraft } from '../bindings/MediaDraft';
 import type { MediaEntry } from '../bindings/MediaEntry';
 import type { MediaMeta } from '../bindings/MediaMeta';
 import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 
-export type { BoardSummary, DocHit, DocStatus, MediaEntry, MediaMeta };
+export type { BoardSummary, DocHit, DocStatus, MediaDraft, MediaEntry, MediaMeta };
 
 /** A native open panel's filter: a label and the extensions it shows. */
 export type FileFilter = { name: string; extensions: string[] };
-
-/** A file chosen by the user, as raw bytes. */
-export type PickedFile = { name: string; bytes: ArrayBuffer };
 
 /**
  * The parts of a bundle the caller hands the shell to package: each board's id and
@@ -26,13 +24,6 @@ export type BundleExport = {
   manifest: string;
   filename: string;
 };
-
-/** Read DOM Files into the byte form the adapter and parsers trade in. */
-export function toPickedFiles(files: File[]): Promise<PickedFile[]> {
-  return Promise.all(
-    files.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })),
-  );
-}
 
 /**
  * The IO seam. `tauriStorage` is the only implementation — one SQLite database
@@ -77,16 +68,18 @@ export interface StorageAdapter {
    * content-addressed files beside the boards, referenced from the JSON by name.
    * The shell owns the filesystem: these hand bytes across and get names back.
    */
-  /** Store bytes, named by their content hash; returns the filename to link. */
-  saveMedia(bytes: ArrayBuffer, ext: string): Promise<string>;
   /**
-   * Download a remote image in the shell and store it, returning the filename to
-   * link. The webview cannot fetch it itself — its CSP forbids fetching arbitrary
-   * hosts, and a cross-origin image drawn to a canvas to crop would taint it.
+   * Store bytes, named by their content hash, with the extension the shell takes from
+   * the file's name or media type; returns the filename to link.
+   */
+  saveMedia(bytes: ArrayBuffer, from: { name?: string; mime?: string }): Promise<string>;
+  /**
+   * Bring a picture URL into the library, returning the filename to link: a remote
+   * one downloaded by the shell (the webview's CSP forbids fetching arbitrary hosts,
+   * and a cross-origin image drawn to a canvas to crop would taint it), a `data:`
+   * one decoded.
    */
   downloadImage(url: string): Promise<string>;
-  /** Read a media file's bytes back (used to re-inline pictures on export). */
-  readMedia(name: string): Promise<ArrayBuffer>;
   /**
    * Read what metadata a stored file carries — a PDF's or Office file's properties,
    * a photo's dimensions and EXIF. Best-effort in the shell (the parsers have no
@@ -94,12 +87,15 @@ export interface StorageAdapter {
    */
   extractMediaMeta(name: string): Promise<MediaMeta>;
   /**
-   * Recognise the text in a stored image (a text-message screenshot, chiefly), so
-   * a picture of a conversation can be carried as searchable words. Best-effort in
-   * the shell (macOS Vision, on-device); empty when there is nothing to read or the
-   * platform has no OCR.
+   * The cards picked pictures and documents make: the shell stores each file, reads
+   * its metadata and a picture's text (macOS Vision), and queues it for the search
+   * index. A file that won't read or store drops out.
    */
-  ocrImage(name: string): Promise<string>;
+  importMediaFiles(paths: string[]): Promise<MediaDraft[]>;
+  /** The card a stored media file makes, read again (to adopt or reprocess it). */
+  mediaCardDraft(name: string): Promise<MediaDraft | null>;
+  /** Any picked file, stored as a document card's file, with what could be read of it. */
+  attachDocument(path: string): Promise<MediaDraft>;
   /** Open a media file in the OS default app — Preview for a PDF, and so on. */
   openMedia(name: string): Promise<void>;
   /**
@@ -181,14 +177,8 @@ export interface StorageAdapter {
    * picker is open — so a caller can show progress only for the work, not the wait.
    */
   importFile(onReadStart?: () => void): Promise<Board[] | null>;
-  /**
-   * Read user-chosen files as raw bytes; empty if cancelled. Bytes rather than
-   * text because email must be decoded with its own declared charset, which is
-   * only possible while the original bytes survive.
-   */
-  pickFiles(accept: string, multiple?: boolean): Promise<PickedFile[]>;
   /** The native open panel, for files the shell then reads itself; empty if cancelled. */
-  pickPaths(filter: FileFilter, multiple?: boolean): Promise<string[]>;
+  pickPaths(filter?: FileFilter, multiple?: boolean): Promise<string[]>;
 
   /**
    * Parse picked email files (.eml, mbox, or a .txt that is either) or pasted text into

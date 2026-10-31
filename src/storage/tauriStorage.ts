@@ -9,23 +9,23 @@ import type { RecoveredEmail } from '../bindings/RecoveredEmail';
 import type { GcOutcome } from '../bindings/GcOutcome';
 import type { LibraryRefs } from '../bindings/LibraryRefs';
 import type { LoadedBoard } from '../bindings/LoadedBoard';
+import type { MediaDraft } from '../bindings/MediaDraft';
 import type { MediaEntry } from '../bindings/MediaEntry';
 import type { MediaMeta } from '../bindings/MediaMeta';
 import type { SaveBoardPayload } from '../bindings/SaveBoardPayload';
-import { bytesToB64, b64ToBytes } from '../lib/base64';
+import { bytesToB64 } from '../lib/base64';
 import { boardMediaRefs } from '../lib/media';
 import { setMediaDir } from './media';
-import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAdapter';
+import type { StorageAdapter } from './StorageAdapter';
 
 // Boards as files, under the app's data directory (see src-tauri/src/board_store.rs
 // for the layout). The shell owns the schema: it validates and migrates every board
 // it reads and every row it is asked to write, and the payload types are generated
 // from its own (src/bindings).
 //
-// The media picker is left to the webview: `<input type="file">` opens the real
-// macOS picker. A bundle is the exception both ways — the shell writes and reads it
-// by path, so a large `.zip` never crosses the IPC boundary — which is what the
-// dialog plugin's open and save panels are for.
+// Picked files go to the shell by path, through the dialog plugin's open and save
+// panels, so their bytes never cross the IPC boundary — a bundle, an email, a
+// picture or a document alike.
 
 // What the board's .sqlite last held, per board id: each entity's JSON, keyed by id.
 // Seeded on load and set to exactly what was written on each save, so a save can send
@@ -160,24 +160,28 @@ export const tauriStorage: StorageAdapter = {
     await invoke('set_current_board_id', { id });
   },
 
-  saveMedia(bytes, ext) {
-    return invoke<string>('save_media', { ext, b64: bytesToB64(bytes) });
+  saveMedia(bytes, { name, mime }) {
+    return invoke<string>('save_media', { b64: bytesToB64(bytes), name, mime });
   },
 
   downloadImage(url) {
     return invoke<string>('download_image', { url });
   },
 
-  async readMedia(name) {
-    return b64ToBytes(await invoke<string>('read_media', { name }));
-  },
-
   extractMediaMeta(name) {
     return invoke<MediaMeta>('extract_media_meta', { name });
   },
 
-  ocrImage(name) {
-    return invoke<string>('ocr_image', { name });
+  importMediaFiles(paths) {
+    return invoke<MediaDraft[]>('import_media_files', { paths });
+  },
+
+  mediaCardDraft(name) {
+    return invoke<MediaDraft | null>('media_card_draft', { name });
+  },
+
+  attachDocument(path) {
+    return invoke<MediaDraft>('attach_document', { path });
   },
 
   openMedia(name) {
@@ -260,7 +264,7 @@ export const tauriStorage: StorageAdapter = {
   },
 
   async pickPaths(filter, multiple = false) {
-    const picked = await open({ multiple, filters: [filter] });
+    const picked = await open({ multiple, filters: filter && [filter] });
     return picked === null ? [] : Array.isArray(picked) ? picked : [picked];
   },
 
@@ -276,17 +280,4 @@ export const tauriStorage: StorageAdapter = {
     return invoke<RecoveredEmail | null>('recover_email_attachments', { eml, keepPicture });
   },
 
-  pickFiles(accept, multiple = false) {
-    return new Promise<PickedFile[]>((resolve) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = accept;
-      input.multiple = multiple;
-      input.onchange = async () => {
-        resolve(await toPickedFiles(Array.from(input.files ?? [])));
-      };
-      input.addEventListener('cancel', () => resolve([]));
-      input.click();
-    });
-  },
 };

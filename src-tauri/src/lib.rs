@@ -3,6 +3,7 @@ mod bindings;
 mod board_store;
 mod extract;
 mod file_types;
+mod import;
 mod jobs;
 mod library_index;
 mod mail;
@@ -43,9 +44,7 @@ pub fn run() {
       board_store::media::media_dir_path,
       board_store::media::save_media,
       board_store::media::download_image,
-      board_store::media::read_media,
       board_store::media::extract_media_meta,
-      board_store::media::ocr_image,
       board_store::media::gc_media,
       board_store::media::open_media,
       board_store::media::list_media,
@@ -53,6 +52,9 @@ pub fn run() {
       board_store::media::open_media_dir,
       board_store::bundle::write_bundle,
       board_store::bundle::read_bundle,
+      import::attach_document,
+      import::import_media_files,
+      import::media_card_draft,
       mail::parse_email_files,
       mail::parse_email_text,
       mail::recover_email_attachments,

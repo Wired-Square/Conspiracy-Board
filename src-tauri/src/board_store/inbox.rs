@@ -14,54 +14,26 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine as _;
-
+use super::media::media_store;
 use super::{inbox_dir, run_open};
+use crate::file_types::{is_importable, kind_of, FileKind};
+use crate::import::{app_media_draft, MediaDraft};
 use crate::mail::{self, EmailParse};
 
 /// How often the folder is swept. Slow enough to cost nothing, quick enough that a
 /// dropped thread shows up while the user is still looking at the window.
 const INBOX_POLL: Duration = Duration::from_millis(1500);
 
-/// One file waiting in the Inbox, on its way to the importer.
-#[derive(Clone, serde::Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-struct InboxFile {
-  name: String,
-  b64: String,
-}
-
-/// What one sweep found: the images and documents, and the email already parsed, its
-/// media kept, with how many files it came from (a thread of several is grouped).
-#[derive(Clone, serde::Serialize)]
+/// What one sweep found, every file already stored: the cards its images and
+/// documents make, and its email parsed, with how many files that came from (a
+/// thread of several is grouped).
+#[derive(Clone, Default, serde::Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct InboxBatch {
-  files: Vec<InboxFile>,
+  cards: Vec<MediaDraft>,
   emails: EmailParse,
   email_files: usize,
-}
-
-fn is_email_file(name: &str) -> bool {
-  let n = name.to_ascii_lowercase();
-  n.ends_with(".eml") || n.ends_with(".mbox")
-}
-
-/// The files the Inbox imports: email that opens the import preview, plus the
-/// images and documents the board's own drop target already turns into cards
-/// (see `isMediaFile` in `src/lib/fileTypes.ts`, the canonical extension
-/// list this mirrors). Anything else — a stray note — is left in the folder
-/// rather than mis-imported.
-fn is_inbox_file(name: &str) -> bool {
-  let n = name.to_ascii_lowercase();
-  const EXT: &[&str] = &[
-    ".eml", ".mbox", // email
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tif", ".tiff", ".bmp", ".avif",
-    ".svg", // images
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", // documents
-  ];
-  EXT.iter().any(|e| n.ends_with(e))
 }
 
 /// A path in `dir` for `name` that doesn't clobber a file already there — two
@@ -98,11 +70,11 @@ pub fn start_inbox_watcher(app: AppHandle) {
       };
 
       let mut seen: HashMap<PathBuf, u64> = HashMap::new();
-      let mut batch = InboxBatch { files: Vec::new(), emails: EmailParse::default(), email_files: 0 };
+      let mut batch = InboxBatch::default();
       for entry in entries.flatten() {
         let Ok(meta) = entry.metadata() else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !meta.is_file() || !is_inbox_file(&name) {
+        if !meta.is_file() || !is_importable(&name) {
           continue;
         }
         let path = entry.path();
@@ -110,13 +82,13 @@ pub fn start_inbox_watcher(app: AppHandle) {
         if len > 0 && last.get(&path) == Some(&len) {
           match std::fs::read(&path) {
             Ok(bytes) => {
-              if is_email_file(&name) {
-                let parsed = mail::parse_file(&name, &bytes, &mut mail::media_store(&app), &mut |_, _| {});
+              if kind_of(&name) == Some(FileKind::Email) {
+                let parsed = mail::parse_file(&name, &bytes, &mut media_store(&app), &mut |_, _| {});
                 batch.emails.drafts.extend(parsed.drafts);
                 batch.emails.errors.extend(parsed.errors);
                 batch.email_files += 1;
               } else {
-                batch.files.push(InboxFile { name: name.clone(), b64: STANDARD.encode(bytes) });
+                batch.cards.extend(app_media_draft(&app, &name, &bytes));
               }
               // Move it out of the way so it is not offered again. Best-effort:
               // if the move fails, deleting still stops a re-import, and the
@@ -133,8 +105,8 @@ pub fn start_inbox_watcher(app: AppHandle) {
       }
       last = seen;
 
-      if !batch.files.is_empty() || batch.email_files > 0 {
-        log::info!("Inbox: importing {} file(s)", batch.files.len() + batch.email_files);
+      if !batch.cards.is_empty() || batch.email_files > 0 {
+        log::info!("Inbox: importing {} card(s) and {} email file(s)", batch.cards.len(), batch.email_files);
         let _ = app.emit("inbox-files", batch);
       }
     }
@@ -148,24 +120,4 @@ pub fn open_inbox(app: &AppHandle) -> Result<(), String> {
   let dir = inbox_dir(app)?;
   std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make the Inbox: {e}"))?;
   run_open(&[dir.as_os_str()], "Could not open the Inbox", "The Inbox folder wouldn't open.")
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn is_inbox_file_takes_email_images_and_documents() {
-    // Email — the original set.
-    assert!(is_inbox_file("thread.eml"));
-    assert!(is_inbox_file("Archive.mbox"));
-    // Images (a screenshot to OCR) and documents, matched case-insensitively.
-    assert!(is_inbox_file("IMG_1234.PNG"));
-    assert!(is_inbox_file("chat.jpeg"));
-    assert!(is_inbox_file("brief.pdf"));
-    assert!(is_inbox_file("Report.DOCX"));
-    // A stray note is still left alone.
-    assert!(!is_inbox_file("notes.md"));
-    assert!(!is_inbox_file("readme"));
-  }
 }

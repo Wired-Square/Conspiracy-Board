@@ -1,9 +1,6 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { extOf } from '../lib/fileTypes';
-import { storage } from './index';
 
-// Media files by name: resolving one for an <img> or a link, and saving a picked
-// File into the library.
+// Media files by name: resolving one for an <img> or a link.
 //
 // Media lives in a directory the webview cannot know the path of — it is the
 // shell's to decide (see src-tauri/src/board_store/media.rs). The shell tells us once,
@@ -36,13 +33,4 @@ export function cardImageSrc(card: {
   imageUrl: string | null;
 }): string | null {
   return card.imageFile ? mediaSrc(card.imageFile) : card.imageUrl;
-}
-
-/**
- * Save a picked browser File to the media library, returning its content-hash
- * name to link from a card. The one place the File → (bytes, ext) → saveMedia
- * composition lives, so every "attach a file" affordance is a single call.
- */
-export function saveFile(file: File): Promise<string> {
-  return file.arrayBuffer().then((bytes) => storage.saveMedia(bytes, extOf(file.name, file.type)));
 }

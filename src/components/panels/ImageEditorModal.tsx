@@ -4,7 +4,6 @@ import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
-import { extOf } from '../../lib/fileTypes';
 import {
   clampView,
   initialView,
@@ -20,7 +19,7 @@ import { useBoardStore } from '../../hooks/useStores';
 // What Save will store as the media file. An existing library file is kept and
 // only re-cropped; a picked file or a fetched URL is written from the held Blob on
 // Save; a remote URL the migration hasn't localised yet is downloaded then.
-type Persist = { existingFile?: string; blob?: Blob; ext?: string; remoteUrl?: string };
+type Persist = { existingFile?: string; blob?: Blob; name?: string; remoteUrl?: string };
 
 // The loaded image and how Save will persist it — always set together, so one bit
 // of state rather than two kept in step.
@@ -120,7 +119,7 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     try {
       // A File is already a Blob: display and persist it directly, no byte copy.
       const img = await loadImage(swapObjectUrl(file));
-      show(img, { blob: file, ext: extOf(file.name, file.type) }, null);
+      show(img, { blob: file, name: file.name }, null);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
@@ -194,8 +193,12 @@ export function ImageEditorModal({ cardId }: { cardId: string }) {
     setError(null);
     try {
       let imageFile = persist.existingFile ?? null;
-      if (!imageFile && persist.blob) imageFile = await storage.saveMedia(await persist.blob.arrayBuffer(), persist.ext ?? 'bin');
-      else if (!imageFile && persist.remoteUrl) imageFile = await storage.downloadImage(persist.remoteUrl);
+      if (!imageFile && persist.blob) {
+        const { blob, name } = persist;
+        imageFile = await storage.saveMedia(await blob.arrayBuffer(), { name, mime: blob.type });
+      } else if (!imageFile && persist.remoteUrl) {
+        imageFile = await storage.downloadImage(persist.remoteUrl);
+      }
       if (!imageFile) throw new Error('There is no image to save.');
       updateCard(card.id, { imageFile, imageUrl: null, imageCrop: crop });
       close();

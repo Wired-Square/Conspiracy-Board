@@ -9,16 +9,13 @@ import { DEFAULT_KIND, isBoardKind, isRecordKind, viewFor } from '../lib/kinds';
 import { gridPositions } from '../lib/layout';
 import type { View } from '../types/view';
 import { emailCardsByMessageId, matchDraft } from '../lib/email/meta';
-import { documentMime, extOf, isDocumentFile, isImageFile } from '../lib/fileTypes';
-import { pickDocumentMeta, pickImageMeta } from '../lib/import/meta';
-import { ocrTitle, usableOcr } from '../lib/import/ocr';
 import { emptyBoard } from '../data/emptyBoard';
 import { buildManifest } from '../data/bundle';
 import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
 import { openDialog } from './dialogStore';
-import type { MediaMeta, PickedFile } from '../storage/StorageAdapter';
+import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
@@ -45,61 +42,6 @@ const CLUSTER_PALETTE = [
   '#e23b3b', '#3b7de2', '#e2a13b', '#3bd17a', '#b06be0', '#e06ba8', // red, blue, amber, green, purple, pink
   '#3bd1c4', '#e2673b', '#6b6be0', '#9bd13b', '#d13bb0', '#d9cf3b', // teal, orange, indigo, lime, magenta, gold
 ];
-
-/** A filename without its directory or extension, for a card's title. */
-function baseName(name: string): string {
-  const cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  const base = cut >= 0 ? name.slice(cut + 1) : name;
-  const dot = base.lastIndexOf('.');
-  return dot > 0 ? base.slice(0, dot) : base;
-}
-
-/**
- * Turn one imported file into the card to make from it: an image becomes an evidence
- * card whose picture it is; a document becomes a document card. The file is stored
- * (content-addressed) and its metadata read in the shell; both a date (taken/created)
- * and a title flow onto the card. Best-effort — a file that will not even store is
- * dropped (returns null), and extraction that fails just leaves the extra fields off.
- */
-async function buildMediaDraft(file: PickedFile): Promise<CardDraft | null> {
-  const image = isImageFile(file.name);
-  if (!image && !isDocumentFile(file.name)) return null;
-
-  let mediaFile: string;
-  try {
-    mediaFile = await storage.saveMedia(file.bytes, extOf(file.name));
-  } catch {
-    return null;
-  }
-
-  // Metadata for either kind; started before the image branch so it reads
-  // alongside OCR there rather than after it.
-  const metaP = storage.extractMediaMeta(mediaFile).catch(() => ({}) as MediaMeta);
-
-  if (image) {
-    // A text-message screenshot's words become the card's notes, and its first
-    // line the title — recognised while the metadata is still being read.
-    const [meta, ocr] = await Promise.all([metaP, storage.ocrImage(mediaFile).catch(() => '')]);
-    const text = usableOcr(ocr) ? ocr : '';
-    return {
-      kind: 'evidence',
-      title: text ? ocrTitle(text) : baseName(file.name),
-      notes: text,
-      imageFile: mediaFile,
-      imageCrop: null,
-      imageMeta: pickImageMeta(meta),
-      occurredAt: meta.takenAt ?? null,
-    };
-  }
-
-  const meta = await metaP;
-  return {
-    kind: 'document',
-    title: meta.title?.trim() || baseName(file.name),
-    occurredAt: meta.created ?? null,
-    document: { file: mediaFile, name: file.name, mime: documentMime(file.name), ...pickDocumentMeta(meta) },
-  };
-}
 
 /**
  * A card with every field at its default, overridden by `over` — which must at least
@@ -203,11 +145,10 @@ export type BoardState = {
   /** Bulk append (email import). Returns the ids actually added. */
   addCards: (drafts: CardDraft[], opts?: { clusterId?: string | null }) => string[];
   /**
-   * Import dropped or picked files: images become evidence cards with the picture,
-   * documents become document cards, each with metadata read from the file. Saves
-   * the bytes and extracts in the shell; non-media files are ignored.
+   * Place the cards the shell made from imported pictures and documents, and go to
+   * them: one is opened, several show where they landed.
    */
-  addImportedMedia: (files: PickedFile[]) => Promise<void>;
+  addImportedMedia: (drafts: MediaDraft[]) => void;
   /**
    * Re-run a card's media processing against its already-stored file — re-scan an
    * email's .eml for attachments, re-read a photo's EXIF and OCR, re-read a
@@ -683,12 +624,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       return [...completedIds, ...added.map((c) => c.id)];
     },
 
-    async addImportedMedia(files) {
-      // Save + extract every file at once; a bad one drops out rather than sinking
-      // the batch. Order is preserved so the grid follows the drop/pick order.
-      const drafts = (await Promise.all(files.map(buildMediaDraft))).filter(
-        (d): d is CardDraft => d !== null,
-      );
+    addImportedMedia(drafts) {
       if (!drafts.length) return;
       const ids = get().addCards(drafts);
       if (!ids.length) return;
@@ -697,7 +633,7 @@ export const boardStore = createStore<BoardState>()((set, get) => {
       if (ids.length === 1) {
         get().selectCard(ids[0]);
       } else {
-        set({ view: drafts.some((d) => isBoardKind(d.kind ?? DEFAULT_KIND)) ? 'board' : 'record' });
+        set({ view: drafts.some((d) => isBoardKind(d.kind)) ? 'board' : 'record' });
       }
     },
 
@@ -712,26 +648,25 @@ export const boardStore = createStore<BoardState>()((set, get) => {
         return;
       }
 
-      // Image: re-read EXIF and re-OCR the stored file (mirrors buildMediaDraft's
-      // image branch). Only fills notes from OCR when there are none — a reprocess
-      // must not overwrite what the user has written, or their date.
+      // Image: re-read EXIF and re-OCR the stored file. Only fills notes from OCR when
+      // there are none — a reprocess must not overwrite what the user has written, or
+      // their date.
       if (card.imageFile) {
-        const [meta, ocr] = await Promise.all([
-          storage.extractMediaMeta(card.imageFile).catch(() => ({}) as MediaMeta),
-          storage.ocrImage(card.imageFile).catch(() => ''),
-        ]);
-        const patch: Partial<Card> = { imageMeta: pickImageMeta(meta) };
-        if (!card.notes.trim() && usableOcr(ocr)) patch.notes = ocr;
+        const draft = await storage.mediaCardDraft(card.imageFile);
+        if (!draft) return;
+        const patch: Partial<Card> = { imageMeta: draft.imageMeta ?? null };
+        if (!card.notes.trim() && draft.notes) patch.notes = draft.notes;
         get().updateCard(id, patch);
         return;
       }
 
-      // Document: re-read the file's properties into the document payload.
+      // Document: re-read the file's properties into the document payload, keeping
+      // what the card calls it.
       if (card.document?.file) {
-        const meta = await storage
-          .extractMediaMeta(card.document.file)
-          .catch(() => ({}) as MediaMeta);
-        get().updateCard(id, { document: { ...card.document, ...pickDocumentMeta(meta) } });
+        const read = (await storage.mediaCardDraft(card.document.file))?.document;
+        if (!read) return;
+        const { file: _file, name: _name, mime: _mime, ...props } = read;
+        get().updateCard(id, { document: { ...card.document, ...props } });
       }
     },
 
@@ -755,11 +690,10 @@ export const boardStore = createStore<BoardState>()((set, get) => {
 
     async adoptOrphan(file) {
       // Turn an unreferenced media file into a card, where it already lives — no
-      // re-import dialog and no second copy (buildMediaDraft's saveMedia is
-      // idempotent by content hash). addCards, not addImportedMedia, so it lands
-      // without pulling the user out of the maintenance view onto the new card.
-      const bytes = await storage.readMedia(file);
-      const draft = await buildMediaDraft({ name: file, bytes });
+      // re-import dialog and no second copy (storing is idempotent by content hash).
+      // addCards, not addImportedMedia, so it lands without pulling the user out of
+      // the maintenance view onto the new card.
+      const draft = await storage.mediaCardDraft(file);
       if (draft) get().addCards([draft]);
     },
 

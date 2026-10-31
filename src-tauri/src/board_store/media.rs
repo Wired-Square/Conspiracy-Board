@@ -18,6 +18,7 @@ use super::{boards_dir, media_dir, run_open, write_atomic};
 use crate::jobs::Jobs;
 use crate::library_index::{prune_documents, LibraryDb};
 use crate::extract::meta::{read_meta, MediaMeta};
+use crate::file_types::ext_of;
 
 /// A media file younger than this is never swept by `gc_media`: it may have just
 /// been written and the board that references it not yet saved.
@@ -92,8 +93,6 @@ pub(crate) fn media_ext(name: &str) -> &str {
 /// already there — the name is proof the content is byte-identical, so a second
 /// import of the same file is a no-op — and queue it for the search index. Returns
 /// the name to link from the board.
-/// Shared by `save_media` (webview bytes) and the Apple Mail drop (which already
-/// has the .eml bytes in hand, so there is no second write to the webview).
 pub(crate) fn store_media_bytes(app: &AppHandle, bytes: &[u8], ext: &str) -> Result<String, String> {
   let name = media_name(bytes, ext);
   let path = media_file(app, &name)?;
@@ -113,14 +112,30 @@ pub fn media_dir_path(app: AppHandle) -> Result<String, String> {
   Ok(media_dir(&app)?.to_string_lossy().into_owned())
 }
 
+/// Where imported bytes go: the media name they were kept under, or None if they
+/// couldn't be, which degrades what referenced them rather than failing the import.
+pub(crate) trait Store: FnMut(&[u8], &str) -> Option<String> {}
+impl<F: FnMut(&[u8], &str) -> Option<String>> Store for F {}
+
+pub(crate) fn media_store(app: &AppHandle) -> impl Store + '_ {
+  move |bytes: &[u8], ext: &str| match store_media_bytes(app, bytes, ext) {
+    Ok(name) => Some(name),
+    Err(e) => {
+      log::warn!("Could not keep imported media: {e}");
+      None
+    }
+  }
+}
+
 /// Store raw bytes (base64 over the IPC boundary, as a Tauri command is JSON) as
 /// an atomic media file, named by content hash, returning the name to link from
-/// the board. The caller supplies only the extension; the name is derived from
-/// the bytes, so it cannot be steered anywhere but into the media directory.
+/// the board. The extension comes from the file's name or media type; the name is
+/// derived from the bytes, so it cannot be steered anywhere but into the media
+/// directory.
 #[tauri::command(async)]
-pub fn save_media(app: AppHandle, ext: String, b64: String) -> Result<String, String> {
+pub fn save_media(app: AppHandle, b64: String, name: Option<String>, mime: Option<String>) -> Result<String, String> {
   let bytes = STANDARD.decode(b64.as_bytes()).map_err(|e| format!("Media was not valid base64: {e}"))?;
-  store_media_bytes(&app, &bytes, &ext)
+  store_media_bytes(&app, &bytes, &ext_of(name.as_deref(), mime.as_deref()))
 }
 
 /// The most bytes we will pull down for one image. A pasted URL is trusted no more
@@ -128,14 +143,21 @@ pub fn save_media(app: AppHandle, ext: String, b64: String) -> Result<String, St
 /// cannot make the shell buffer it all.
 const MAX_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
 
-/// Download a remote image into the media library, returning its name to link, so a
-/// pasted URL becomes a local file like any other media. This has to happen in the
-/// shell: the app's CSP forbids the webview fetching arbitrary hosts, and a
-/// cross-origin image drawn to a canvas to crop would taint it.
+/// Bring a picture URL into the media library, returning its name to link: a remote
+/// one downloaded, a legacy board's inline `data:` one decoded. The download has to
+/// happen in the shell: the app's CSP forbids the webview fetching arbitrary hosts,
+/// and a cross-origin image drawn to a canvas to crop would taint it.
 #[tauri::command(async)]
 pub fn download_image(app: AppHandle, url: String) -> Result<String, String> {
-  let (bytes, mime) = fetch_image(&url)?;
-  store_media_bytes(&app, &bytes, fetched_ext(&url, mime.as_deref()))
+  let (bytes, ext) = match url.strip_prefix("data:") {
+    Some(data) => decode_data_url(data)?,
+    None => {
+      let (bytes, mime) = fetch_image(&url)?;
+      let ext = fetched_ext(&url, mime.as_deref()).to_string();
+      (bytes, ext)
+    }
+  };
+  store_media_bytes(&app, &bytes, &ext)
 }
 
 /// http(s) only, a short timeout so a dead link never hangs a board load
@@ -205,12 +227,36 @@ fn fetched_ext<'a>(url: &'a str, mime: Option<&'a str>) -> &'a str {
   }
 }
 
-/// Read a media file back as base64 — used to re-parse a stored `.eml` for its
-/// attachments (`recoverCardAttachments`) and to adopt an orphaned file.
-#[tauri::command(async)]
-pub fn read_media(app: AppHandle, name: String) -> Result<String, String> {
-  let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
-  Ok(STANDARD.encode(bytes))
+/// A `data:` URL's bytes and the extension its media type gives them.
+fn decode_data_url(data: &str) -> Result<(Vec<u8>, String), String> {
+  let (meta, payload) = data.split_once(',').ok_or("Not a data URL.")?;
+  let bytes = if meta.contains(";base64") {
+    let payload: String = payload.chars().filter(|c| !c.is_whitespace()).collect();
+    STANDARD.decode(payload).map_err(|e| format!("The picture was not valid base64: {e}"))?
+  } else {
+    percent_decode(payload)
+  };
+  Ok((bytes, ext_of(None, Some(meta))))
+}
+
+fn percent_decode(s: &str) -> Vec<u8> {
+  let bytes = s.as_bytes();
+  let mut out = Vec::with_capacity(bytes.len());
+  let mut i = 0;
+  while i < bytes.len() {
+    let hex = bytes.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok());
+    match (bytes[i], hex) {
+      (b'%', Some(b)) => {
+        out.push(b);
+        i += 3;
+      }
+      (b, _) => {
+        out.push(b);
+        i += 1;
+      }
+    }
+  }
+  out
 }
 
 /// Read what metadata we can from a stored media file, dispatched by its leading
@@ -222,28 +268,24 @@ pub fn read_media(app: AppHandle, name: String) -> Result<String, String> {
 /// place in a UI bundle.
 #[tauri::command(async)]
 pub fn extract_media_meta(app: AppHandle, name: String) -> Result<MediaMeta, String> {
-  let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
-  Ok(read_meta(&bytes))
+  Ok(read_meta(&read_media(&app, &name)?))
 }
 
-/// Recognise the text in a stored image, best-effort — a text-message screenshot's
-/// words become the card's notes (see buildMediaDraft). Reads the file by its
-/// library name, same traversal guard as extract_media_meta. Empty when there's
-/// nothing to read, or on any platform without an OCR engine (only macOS has one).
-#[tauri::command(async)]
-pub fn ocr_image(app: AppHandle, name: String) -> Result<String, String> {
-  let bytes = std::fs::read(media_file(&app, &name)?).map_err(|e| format!("Could not read media: {e}"))?;
-  Ok(ocr_bytes(&bytes))
-}
-
+/// The text in an image, best-effort: empty when there's nothing to read, or on any
+/// platform without an OCR engine (only macOS has one).
 #[cfg(target_os = "macos")]
-fn ocr_bytes(bytes: &[u8]) -> String {
+pub(crate) fn ocr_bytes(bytes: &[u8]) -> String {
   crate::ocr::recognise_text(bytes)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn ocr_bytes(_bytes: &[u8]) -> String {
+pub(crate) fn ocr_bytes(_bytes: &[u8]) -> String {
   String::new()
+}
+
+/// A stored media file's bytes, by its library name.
+pub(crate) fn read_media(app: &AppHandle, name: &str) -> Result<Vec<u8>, String> {
+  std::fs::read(media_file(app, name)?).map_err(|e| format!("Could not read media: {e}"))
 }
 
 /// Sweep media no board links any more. Content-addressed files can be shared by
@@ -445,6 +487,14 @@ mod tests {
     assert_eq!(fetched_ext("https://x.test/dir/pic.webp?w=200#top", None), "webp");
     assert_eq!(fetched_ext("https://x.test", None), "");
     assert_eq!(fetched_ext("https://x.test/.hidden", None), "");
+  }
+
+  #[test]
+  fn a_data_url_decodes_in_both_its_forms() {
+    assert_eq!(decode_data_url("image/png;base64,cGl4\nZWxz").unwrap(), (b"pixels".to_vec(), "png".into()));
+    assert_eq!(decode_data_url("image/svg+xml,%3Csvg%3E%zz").unwrap(), (b"<svg>%zz".to_vec(), "svg".into()));
+    assert!(decode_data_url("image/png;base64").is_err());
+    assert!(decode_data_url("image/png;base64,!!!").is_err());
   }
 
   /// A temp library holding one media file per name, all old enough to sweep unless

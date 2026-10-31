@@ -12,8 +12,8 @@ use std::path::Path;
 use mail_parser::{MessageParser, MessagePart, MessageRef};
 use tauri::{AppHandle, Emitter};
 
-use crate::board_store::media::store_media_bytes;
-use crate::file_types::ext_of;
+use crate::board_store::media::{media_store, read_media, Store};
+use crate::file_types::{ext_of, file_name};
 use crate::schema::{CardKind, DatePrecision, EmailAddress, EmailAttachment, EmailMeta, UtcInstant};
 
 use mbox::looks_like_mbox;
@@ -63,11 +63,6 @@ struct Parsed {
   picture: Option<Part>,
   attachments: Vec<Part>,
 }
-
-/// Where a part's bytes go: the media name they were kept under, or None if they
-/// couldn't be, which degrades the part to its name rather than failing the import.
-pub trait Store: FnMut(&[u8], &str) -> Option<String> {}
-impl<F: FnMut(&[u8], &str) -> Option<String>> Store for F {}
 
 fn parse(raw: &[u8]) -> Result<Parsed, String> {
   let message = MessageParser::new().parse(raw).ok_or("Not an email message")?;
@@ -248,16 +243,6 @@ pub fn recover(eml: &[u8], keep_picture: bool, store: &mut impl Store) -> Option
   })
 }
 
-pub(crate) fn media_store(app: &AppHandle) -> impl Store + '_ {
-  move |bytes: &[u8], ext: &str| match store_media_bytes(app, bytes, ext) {
-    Ok(name) => Some(name),
-    Err(e) => {
-      log::warn!("Could not keep imported media: {e}");
-      None
-    }
-  }
-}
-
 #[derive(Clone, serde::Serialize)]
 struct EmailProgress {
   done: usize,
@@ -268,10 +253,6 @@ fn progress(app: &AppHandle) -> impl FnMut(usize, usize) + '_ {
   move |done, total| {
     let _ = app.emit("email:progress", EmailProgress { done, total });
   }
-}
-
-pub(crate) fn file_name(path: &Path) -> String {
-  path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned())
 }
 
 /// The files the user picked, parsed and their media kept.
@@ -302,8 +283,7 @@ pub fn parse_email_text(app: AppHandle, text: String) -> EmailParse {
 /// content-addressed, and the .eml itself is already stored.
 #[tauri::command(async)]
 pub fn recover_email_attachments(app: AppHandle, eml: String, keep_picture: bool) -> Result<Option<RecoveredEmail>, String> {
-  let bytes = std::fs::read(crate::board_store::media::media_file(&app, &eml)?).map_err(|e| format!("Could not read media: {e}"))?;
-  Ok(recover(&bytes, keep_picture, &mut media_store(&app)))
+  Ok(recover(&read_media(&app, &eml)?, keep_picture, &mut media_store(&app)))
 }
 
 #[cfg(test)]

@@ -13,31 +13,31 @@ use super::read_zip_entry;
 #[serde(rename_all = "camelCase")]
 pub struct MediaMeta {
   #[serde(skip_serializing_if = "Option::is_none")]
-  title: Option<String>,
+  pub(crate) title: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  author: Option<String>,
+  pub(crate) author: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  created: Option<String>,
+  pub(crate) created: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  modified: Option<String>,
+  pub(crate) modified: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pages: Option<u32>,
+  pub(crate) pages: Option<u32>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  words: Option<u32>,
+  pub(crate) words: Option<u32>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  width: Option<u32>,
+  pub(crate) width: Option<u32>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  height: Option<u32>,
+  pub(crate) height: Option<u32>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  taken_at: Option<String>,
+  pub(crate) taken_at: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  camera_make: Option<String>,
+  pub(crate) camera_make: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  camera_model: Option<String>,
+  pub(crate) camera_model: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  latitude: Option<f64>,
+  pub(crate) latitude: Option<f64>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  longitude: Option<f64>,
+  pub(crate) longitude: Option<f64>,
 }
 
 pub fn read_meta(bytes: &[u8]) -> MediaMeta {

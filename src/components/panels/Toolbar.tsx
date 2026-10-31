@@ -4,7 +4,8 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
 import { count } from '@wired-square/kit/core';
-import { DOCUMENT_FILE_ACCEPT, IMAGE_FILE_ACCEPT } from '../../lib/fileTypes';
+import { DOCUMENT_FILE_FILTER, IMAGE_FILE_FILTER } from '../../lib/fileTypes';
+import type { FileFilter } from '../../storage/StorageAdapter';
 import { arrangedPositions, type LayoutNode } from '../../lib/autoLayout';
 import { primaryClusterId } from '../../lib/clusters';
 import { CARD_H, CARD_W } from '../../lib/layout';
@@ -51,11 +52,11 @@ export function Toolbar() {
       ...emptyPayloadFor(kind),
     });
 
-  // Image and Document both import a file (the same path as dropping one in): pick,
-  // then let the store save it, read its metadata, and make the right card.
-  const pickAndImport = async (accept: string) => {
-    const files = await storage.pickFiles(accept, true);
-    if (files.length) await addImportedMedia(files);
+  // Image and Document both import a file, the same path as the Inbox: the shell
+  // stores it, reads its metadata and hands back the card to place.
+  const pickAndImport = async (filter: FileFilter) => {
+    const paths = await storage.pickPaths(filter, true);
+    if (paths.length) addImportedMedia(await storage.importMediaFiles(paths));
   };
 
   // Tidy the board: untangle the string and pull the cards together (see
@@ -118,10 +119,10 @@ export function Toolbar() {
               label="+ Add"
               items={[
                 { label: 'Card', onSelect: () => addCard() },
-                { label: 'Image', onSelect: () => void pickAndImport(IMAGE_FILE_ACCEPT) },
+                { label: 'Image', onSelect: () => void pickAndImport(IMAGE_FILE_FILTER) },
                 { label: 'Person', onSelect: () => add('person') },
                 { label: 'Organisation', onSelect: () => add('organisation') },
-                { label: 'Document', onSelect: () => void pickAndImport(DOCUMENT_FILE_ACCEPT) },
+                { label: 'Document', onSelect: () => void pickAndImport(DOCUMENT_FILE_FILTER) },
                 { label: 'Email', onSelect: () => openEmailImport() },
                 { label: 'Message', onSelect: () => add('message') },
                 { label: 'Call', onSelect: () => add('call') },

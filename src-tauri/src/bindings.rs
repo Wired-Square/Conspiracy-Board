@@ -14,13 +14,16 @@ fn export_all(dir: &Path) -> Result<(), ts_rs::ExportError> {
   crate::board_store::board_index::BoardSummary::export_all_to(dir)?;
   crate::board_store::bundle::BundleManifest::export_all_to(dir)?;
   crate::board_store::inbox::InboxBatch::export_all_to(dir)?;
+  crate::import::MediaDraft::export_all_to(dir)?;
   crate::mail::EmailParse::export_all_to(dir)?;
   crate::mail::RecoveredEmail::export_all_to(dir)?;
   crate::board_store::media::GcOutcome::export_all_to(dir)?;
   crate::board_store::media::MediaEntry::export_all_to(dir)?;
   crate::extract::meta::MediaMeta::export_all_to(dir)?;
   crate::library_index::DocHit::export_all_to(dir)?;
-  crate::library_index::DocStatus::export_all_to(dir)
+  crate::library_index::DocStatus::export_all_to(dir)?;
+  std::fs::write(dir.join("fileTypes.ts"), crate::file_types::typescript())?;
+  Ok(())
 }
 
 fn ts_files(dir: &Path) -> Vec<(String, String)> {
