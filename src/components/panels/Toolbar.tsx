@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useReactFlow } from '@xyflow/react';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
@@ -11,9 +10,9 @@ import { primaryClusterId } from '../../lib/clusters';
 import { CARD_H, CARD_W } from '../../lib/layout';
 import { storage } from '../../storage';
 import type { CardKind } from '../../types/board';
-import type { CardNode } from '../../types/reactflow';
 import { VIEW_META, type View } from '../../types/view';
 import { Menu } from '../ui/Menu';
+import { useCamera } from '../canvas/Canvas';
 import { useBoardStore, useEmailImportStore, useMediaAuditStore } from '../../hooks/useStores';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
@@ -31,7 +30,7 @@ export function Toolbar() {
   const addCluster = useBoardStore((s) => s.addCluster);
   const lastError = useBoardStore((s) => s.lastError);
   const openEmailImport = useEmailImportStore((s) => s.openWith);
-  const { getNodes, fitView } = useReactFlow<CardNode>();
+  const camera = useCamera();
 
   // The box owns its text locally so typing is instant; the store — which drives the
   // board dim, record filter and search-lens — is written on a short debounce, so no
@@ -60,22 +59,23 @@ export function Toolbar() {
   };
 
   // Tidy the board: untangle the string and pull the cards together (see
-  // lib/autoLayout). getNodes() is the drawn set with React Flow's measured sizes,
+  // lib/autoLayout). getNodes() is the drawn set with the canvas's measured sizes,
   // exactly what the layout needs; fitView then frames the result — a frame later,
-  // once the new positions have been committed to the flow.
+  // once the new positions have reached the canvas.
   const tidy = () => {
-    const layoutNodes: LayoutNode[] = getNodes().map((n) => ({
+    if (!camera) return;
+    const layoutNodes: LayoutNode[] = camera.getNodes().map((n) => ({
       id: n.id,
-      position: n.position,
-      width: n.measured?.width ?? CARD_W,
-      height: n.measured?.height ?? CARD_H,
+      position: { x: n.x, y: n.y },
+      width: n.size?.width ?? CARD_W,
+      height: n.size?.height ?? CARD_H,
       // The layout's gravity cluster is the card's primary.
       clusterId: primaryClusterId(n.data.card.clusterIds),
     }));
     const positions = arrangedPositions(layoutNodes, connections);
     if (!positions.size) return;
     arrangeCards(positions);
-    requestAnimationFrame(() => void fitView({ padding: 0.2, duration: 400 }));
+    requestAnimationFrame(() => void camera.fitView({ padding: 0.2, duration: 400 }));
   };
 
   return (

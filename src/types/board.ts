@@ -1,6 +1,6 @@
 // The board model, generated from the Rust schema (src-tauri/src/schema.rs) into
-// src/bindings. React Flow nodes/edges are a derived view (see
-// components/canvas/flowAdapter.ts) and are never persisted directly.
+// src/bindings. The canvas's nodes/edges are a derived view (see
+// components/canvas/projection.ts) and are never persisted directly.
 
 export type { Board } from '../bindings/Board';
 export type { BoardMeta } from '../bindings/BoardMeta';

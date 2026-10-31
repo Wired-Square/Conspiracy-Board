@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, Cluster, Connection } from '../../types/board';
-import { cardToNode, connectionToEdge, reconcileEdges, reconcileNodes } from './flowAdapter';
+import { cardToNode, connectionToEdge, reconcileEdges, reconcileNodes } from './projection';
 
 const clusters: Cluster[] = [
   { id: 'k1', label: 'One', color: '#e23b3b', visible: true },
@@ -41,20 +41,17 @@ describe('reconcileNodes', () => {
     expect(next.map((n) => n.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('keeps a settled drag’s node as it is', () => {
-    const dragged = { ...prev[0], position: { x: 40, y: 50 }, measured: { width: 200, height: 150 } };
-    const settled = { ...a, position: dragged.position };
-    const next = reconcileNodes([dragged, prev[1]], clusters, [settled, b], clusters);
-    expect(next[0]).toBe(dragged);
+  it('moves a node whose card only moved, keeping its colours', () => {
+    const tidied = { ...a, position: { x: 300, y: 0 } };
+    const [node] = reconcileNodes(prev, clusters, [tidied, b], clusters);
+    expect(node).toMatchObject({ x: 300, y: 0, data: { clusterColor: prev[0].data.clusterColor } });
+    expect(node.data.card).toBe(tidied);
   });
 
-  it('moves a tidied node, keeping its measured size', () => {
-    const measured = { ...prev[0], measured: { width: 200, height: 150 } };
-    const tidied = { ...a, position: { x: 300, y: 0 } };
-    const [node] = reconcileNodes([measured, prev[1]], clusters, [tidied, b], clusters);
-    expect(node.position).toEqual({ x: 300, y: 0 });
-    expect(node.measured).toEqual({ width: 200, height: 150 });
-    expect(node.data.card).toBe(tidied);
+  it('keeps a node already where its moved card is', () => {
+    const moved = { ...prev[0], x: 40, y: 50 };
+    const settled = { ...a, position: { x: 40, y: 50 } };
+    expect(reconcileNodes([moved, prev[1]], clusters, [settled, b], clusters)[0]).toBe(moved);
   });
 
   it('recolours only the cards a cluster change reaches', () => {
@@ -76,15 +73,15 @@ describe('reconcileEdges', () => {
   const c2: Connection = { id: 'e2', source: 'b', target: 'c', kind: 'red-string' };
   const prev = [connectionToEdge(c1), connectionToEdge(c2)];
 
-  it('keeps an edge whose connection is unchanged, even once selected', () => {
-    const selected = [{ ...prev[0], selected: true }, prev[1]];
-    expect(reconcileEdges(selected, [c1, c2])).toBe(selected);
+  it('keeps an edge whose connection is unchanged, even once highlighted', () => {
+    const highlighted = [{ ...prev[0], className: 'hl' }, prev[1]];
+    expect(reconcileEdges(highlighted, [c1, c2])).toBe(highlighted);
   });
 
   it('rebuilds an updated connection’s edge', () => {
     const graded = { ...c2, grade: 'confirmed' as const };
     const next = reconcileEdges(prev, [c1, graded]);
     expect(next[0]).toBe(prev[0]);
-    expect(next[1].data?.grade).toBe('confirmed');
+    expect(next[1].data.grade).toBe('confirmed');
   });
 });

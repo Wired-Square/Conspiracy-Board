@@ -1,5 +1,4 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useReactFlow } from '@xyflow/react';
 import { useTimelineCards } from '../../hooks/useTimelineCards';
 import { useDocHits } from '../../hooks/useDocHits';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -19,6 +18,7 @@ import { CARD_H, CARD_W } from '../../lib/layout';
 import type { CardKind } from '../../types/board';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
+import { useCamera } from '../canvas/Canvas';
 import { useBoardStore } from '../../hooks/useStores';
 import { cx } from '@wired-square/kit/core';
 
@@ -43,7 +43,7 @@ export function TimelineDrawer() {
   const clusters = useBoardStore((s) => s.clusters);
   const selectedCardId = useBoardStore((s) => s.selectedCardId);
   const selectCard = useBoardStore((s) => s.selectCard);
-  const { setCenter, getNode, getZoom } = useReactFlow();
+  const camera = useCamera();
   const stripRef = useRef<HTMLDivElement>(null);
 
   // Keeping your place: changing a filter used to snap the strip back to the
@@ -162,10 +162,9 @@ export function TimelineDrawer() {
     setOpen(true);
   }, []);
 
-  // onPick is handed to every memoized chip, so it must keep a stable identity: a
-  // card drag respreads `cards` each pointermove (see flowAdapter's onNodesChange),
-  // which rebuilds `datedById`, so depending on it directly would re-render the
-  // whole strip every frame. The measure context is read through a ref instead.
+  // onPick is handed to every memoized chip, so it must keep a stable identity:
+  // every edit respreads `cards`, which rebuilds `datedById`, so depending on it
+  // directly would re-render the whole strip on every edit. The measure context is read through a ref instead.
   const measureRef = useRef({ measuring, datedById });
   measureRef.current = { measuring, datedById };
 
@@ -180,17 +179,17 @@ export function TimelineDrawer() {
         return;
       }
       selectCard(id);
-      const n = getNode(id);
-      if (!n) return; // Filtered out by cluster visibility.
-      const w = n.measured?.width ?? CARD_W;
-      const h = n.measured?.height ?? CARD_H;
-      setCenter(n.position.x + w / 2, n.position.y + h / 2, {
+      const n = camera?.getNode(id);
+      if (!camera || !n) return; // Not drawn: a record kind, or in a hidden cluster.
+      const w = n.size?.width ?? CARD_W;
+      const h = n.size?.height ?? CARD_H;
+      void camera.setCentre(n.x + w / 2, n.y + h / 2, {
         // Don't centre the card and leave it stranded at minZoom.
-        zoom: Math.max(getZoom(), 0.9),
+        zoom: Math.max(camera.getViewport().zoom, 0.9),
         duration: 400,
       });
     },
-    [selectCard, getNode, getZoom, setCenter],
+    [selectCard, camera],
   );
 
   // The dated events, in order: the milestones the Start/Prev/Next/End controls

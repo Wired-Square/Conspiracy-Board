@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useReactFlow } from '@xyflow/react';
 import { Modal } from '../ui/Modal';
+import { useCamera } from '../canvas/Canvas';
 import { NEW_CLUSTER } from '../../store/emailImportStore';
 import { useRoster } from '../../hooks/useRoster';
 import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
@@ -27,7 +27,7 @@ export function EmailImportModal() {
   const addCard = useBoardStore((s) => s.addCard);
   const setView = useBoardStore((s) => s.setView);
   const roster = useRoster();
-  const { fitView } = useReactFlow();
+  const camera = useCamera();
 
   const [paste, setPaste] = useState('');
   const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
@@ -90,18 +90,10 @@ export function EmailImportModal() {
     // Show the user exactly what landed — including a card that only gained an
     // address, whose face does not change and which would otherwise be silent.
     //
-    // Only what is drawn, though. fitView does not no-op when it matches no
-    // node: it fits an empty bounds, which divides by a zero width, clamps the
-    // resulting Infinity to maxZoom, and sails off to park the world origin in
-    // the middle of the screen. An all-email import — the ordinary case — would
-    // do exactly that, since the record has no node.
+    // Only what is drawn, though: an all-email import — the ordinary case — has
+    // nothing on the board to frame.
     if (drawnIds.length) {
-      fitView({
-        nodes: drawnIds.map((id) => ({ id })),
-        duration: 500,
-        padding: 0.4,
-        maxZoom: 1,
-      });
+      camera?.fitWhenDrawn({ ids: drawnIds, duration: 500, padding: 0.4, maxZoom: 1 });
     } else if (addedIds.length) {
       // It all went to the record — the ordinary case, an mbox with nobody
       // ticked. Nothing moves on the board, so say where it went instead.

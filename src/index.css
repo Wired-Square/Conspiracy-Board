@@ -60,10 +60,36 @@ body {
   min-height: 0;
 }
 
-/* Corkboard backdrop for the flow surface. */
-.react-flow {
-  background:
-    radial-gradient(circle at 30% 20%, #2c2114, #1a140e 70%);
+/* The board canvas, dressed as corkboard. */
+.app-canvas {
+  --app-canvas-bg: radial-gradient(circle at 30% 20%, #2c2114, #1a140e 70%);
+  --app-canvas-dot: #3a3026;
+  --app-canvas-connection: var(--string);
+  --app-canvas-chrome: var(--panel);
+  --app-canvas-chrome-text: var(--ink);
+  --app-canvas-chrome-hover: #4a3a22;
+  --app-canvas-chrome-border: var(--panel-border);
+  --app-canvas-minimap-node: #888;
+  --app-canvas-minimap-mask: rgba(15, 12, 9, 0.7);
+  --app-canvas-minimap-view: transparent;
+  --app-radius: 8px;
+  --app-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.08);
+  --app-focus: 0 0 0 2px var(--string);
+}
+
+.board-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Above the record and objects views, which cover the canvas at z-index 4. */
+.app-canvas-panel {
+  z-index: 5;
+}
+
+.app-canvas__node:has(.is-selected),
+.app-canvas__node.is-dragging {
+  z-index: 1;
 }
 
 /* ---- Toolbar ---- */
@@ -438,16 +464,14 @@ button:hover {
   color: #4a4034;
 }
 
-/* Source = a "hot corner" nub at the card's top-right; drag from here to link.
-   Selectors are .react-flow__handle.<class> to outrank React Flow's positioning. */
-.react-flow__handle.card-source {
+/* Source = a "hot corner" nub at the card's top-right; drag from here to link. */
+.card-source {
+  position: absolute;
   width: 14px;
   height: 14px;
   top: -7px;
   right: -7px;
-  left: auto;
-  bottom: auto;
-  transform: none;
+  cursor: crosshair;
   border-radius: 50%;
   background: var(--string);
   border: 1.5px solid #fff;
@@ -461,24 +485,16 @@ button:hover {
   opacity: 1;
 }
 
-/* Target = the whole card. Inert until a connection is being dragged, so it
-   doesn't swallow clicks or card-drag the rest of the time. */
-.react-flow__handle.card-target {
+/* Target = the whole card, lit while a connection is being dragged over it. It
+   never takes the pointer: the canvas finds the card under the drop itself. */
+.card-target {
+  position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: none;
-  border: none;
   border-radius: 5px;
-  background: transparent;
   pointer-events: none;
 }
 
-.react-flow__handle.card-target.connecting {
-  pointer-events: all;
-}
-
-.react-flow__handle.card-target.connecting:hover {
+.app-canvas.is-connecting .app-canvas__node:hover .card-target {
   background: rgba(200, 64, 47, 0.12);
   box-shadow: inset 0 0 0 2px var(--string);
 }
@@ -562,19 +578,19 @@ button:hover {
 }
 
 /* Highlight / dim driven by useHighlightConnections. */
-.react-flow__node.dim {
+.app-canvas__node.dim {
   opacity: 0.3;
 }
 
-.react-flow__node.hl {
+.app-canvas__node.hl {
   opacity: 1;
 }
 
-.react-flow__edge.dim {
+.app-canvas__edge.dim {
   opacity: 0.12;
 }
 
-.react-flow__edge.hl .red-string__strand {
+.app-canvas__edge.hl .red-string__strand {
   stroke-width: 5;
   filter: drop-shadow(0 0 4px rgba(200, 64, 47, 0.85));
 }
@@ -933,7 +949,7 @@ textarea:focus {
 }
 
 /* ---- Record view ---- */
-/* Covers the canvas rather than replacing it, so React Flow stays mounted and
+/* Covers the canvas rather than replacing it, so the canvas stays mounted and
    measured (see App). Opaque, or the board would read through the list. */
 .record {
   position: absolute;
@@ -1504,24 +1520,6 @@ button:disabled {
   color: var(--string);
 }
 
-/* ---- React Flow controls / minimap theming ---- */
-.react-flow__controls button {
-  background: var(--panel);
-  border-bottom: 1px solid var(--panel-border);
-  fill: var(--ink);
-  color: var(--ink);
-}
-
-.react-flow__controls button:hover {
-  background: #4a3a22;
-}
-
-.react-flow__minimap {
-  background: var(--panel) !important;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-}
-
 /* A failed save is otherwise invisible until the user reloads and finds
    their work gone, so it gets a loud strip rather than a console message. */
 .toolbar__error {
@@ -1536,8 +1534,8 @@ button:disabled {
 }
 
 /* ---- Menu ---- */
-/* The list positions against .menu, which is safe: the toolbar's <Panel> is a
-   sibling of <ReactFlow>, not a child, so the pane never sees these events and
+/* The list positions against .menu, which is safe: the toolbar's panel is a
+   sibling of the canvas, not a child, so the pane never sees these events and
    there is no overflow to escape. */
 .menu {
   position: relative;

@@ -1,6 +1,6 @@
 import type { Cluster } from '../types/board';
 
-// Cluster facts consumed in several shapes — React Flow nodes on the board,
+// Cluster facts consumed in several shapes — canvas nodes on the board,
 // canonical cards on the timeline, rows in the record — so the rules live here
 // rather than being re-derived by each consumer.
 

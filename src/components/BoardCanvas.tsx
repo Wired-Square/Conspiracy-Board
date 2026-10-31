@@ -1,47 +1,36 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
-import {
-  ReactFlow,
-  Background,
-  BackgroundVariant,
-  Controls,
-  MiniMap,
-  useReactFlow,
-  type NodeMouseHandler,
-  type Viewport as RFViewport,
-} from '@xyflow/react';
-import { nodeTypes } from './nodes/nodeTypes';
-import { edgeTypes } from './edges/edgeTypes';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { EvidenceCard } from './nodes/EvidenceCard';
 import { useHighlightConnections } from '../hooks/useHighlightConnections';
 import { useParticipantEdges } from '../hooks/useParticipantEdges';
 import { useRoster } from '../hooks/useRoster';
 import { NO_CLUSTER_ACCENT } from '../lib/clusters';
 import { drawnCardIds, linksWithin, searchMatchIds } from '../lib/visibility';
-import type { CardNode } from '../types/reactflow';
+import { CARD_H, CARD_W } from '../lib/layout';
+import type { Viewport } from '../types/board';
+import { boardStore } from '../store/boardStore';
 import { useBoardStore } from '../hooks/useStores';
-import { onConnect, onEdgesChange, onNodesChange, useFlowStore } from './canvas/flowAdapter';
+import { Canvas, useCamera } from './canvas/Canvas';
+import { mountRedString } from './canvas/redString';
+import { useProjection } from './canvas/projection';
 
 export function BoardCanvas() {
   const cards = useBoardStore((s) => s.cards);
-  const nodes = useFlowStore((s) => s.nodes);
-  const edges = useFlowStore((s) => s.edges);
+  const nodes = useProjection((s) => s.nodes);
+  const edges = useProjection((s) => s.edges);
   const clusters = useBoardStore((s) => s.clusters);
-  const viewport = useBoardStore((s) => s.viewport);
+  const [savedViewport] = useState(() => boardStore.getState().viewport);
   const selectedCardId = useBoardStore((s) => s.selectedCardId);
   const searchQuery = useBoardStore((s) => s.searchQuery);
 
   const setViewport = useBoardStore((s) => s.setViewport);
   const selectCard = useBoardStore((s) => s.selectCard);
+  const arrangeCards = useBoardStore((s) => s.arrangeCards);
+  const addConnection = useBoardStore((s) => s.addConnection);
 
-  // Which ids are visible is derived from `cards`, not `nodes`: during a drag
-  // `nodes` changes every pointermove but `cards` holds still until the drag
-  // settles (see flowAdapter's onNodesChange), so everything keyed on this set — the
-  // participant edges above all — stays put through a drag instead of
-  // recomputing per frame.
-  //
-  // The filter lives here rather than in flowAdapter on purpose. The adapter
-  // keeps a node for every card, so switching kind works in both directions:
-  // a filter there would have to add and drop nodes as a card's kind changes.
-  // The canvas simply declines to draw.
+  // The filter lives here rather than in the projection on purpose. The
+  // projection keeps a node for every card, so switching kind works in both
+  // directions: a filter there would have to add and drop nodes as a card's kind
+  // changes. The canvas simply declines to draw.
   const visibleNodeIds = useMemo(() => drawnCardIds(cards, clusters), [cards, clusters]);
 
   const visibleNodes = useMemo(
@@ -52,7 +41,6 @@ export function BoardCanvas() {
   // The board keeps every search match in place and fades the rest, so a search
   // reads the argument without redrawing it. This is the in-memory entity matcher
   // (names, addresses, numbers) — full text is the timeline's search, not this.
-  // From `cards`, like visibleNodeIds, so it too holds still during a drag.
   const matchIds = useMemo(
     () => searchMatchIds(cards, visibleNodeIds, searchQuery),
     [cards, visibleNodeIds, searchQuery],
@@ -63,35 +51,27 @@ export function BoardCanvas() {
   // within view — and restore the pre-search viewport when the box is cleared.
   // A transient lens: searching takes you to look, clearing brings you home.
   // The toolbar debounces its store write, so this fires when typing pauses.
-  // React Flow's own viewport controls — the animated camera. Distinct from the
-  // store's setViewport above, which persists the viewport the user pans to.
-  const { fitView, getViewport, setViewport: moveViewport } = useReactFlow();
-  const preSearchViewport = useRef<RFViewport | null>(null);
+  const camera = useCamera();
+  const preSearchViewport = useRef<Viewport | null>(null);
   // matchIds is null exactly when the query is empty (see the memo above), so this
   // needs no second normalise.
   const searching = matchIds !== null;
 
   useEffect(() => {
+    if (!camera) return;
     if (!searching) {
       // Box cleared — return to where we were, once, then forget it.
       if (preSearchViewport.current) {
-        void moveViewport(preSearchViewport.current, { duration: 300 });
+        void camera.setViewport(preSearchViewport.current, { duration: 300 });
         preSearchViewport.current = null;
       }
       return;
     }
     // Remember where we were before the first frame, so clearing can bring us back.
-    if (!preSearchViewport.current) preSearchViewport.current = getViewport();
+    preSearchViewport.current ??= camera.getViewport();
     // Nothing drawn to frame (matches live only in the record) — leave the view put.
-    if (matchIds?.size) {
-      void fitView({
-        nodes: [...matchIds].map((id) => ({ id })),
-        maxZoom: 1.2,
-        padding: 0.2,
-        duration: 400,
-      });
-    }
-  }, [searching, matchIds, fitView, getViewport, moveViewport]);
+    if (matchIds?.size) void camera.fitView({ ids: [...matchIds], maxZoom: 1.2, padding: 0.2, duration: 400 });
+  }, [camera, searching, matchIds]);
 
   const visibleEdges = useMemo(() => linksWithin(edges, visibleNodeIds), [edges, visibleNodeIds]);
 
@@ -123,58 +103,26 @@ export function BoardCanvas() {
     matchIds,
   );
 
-  const handleNodeClick: NodeMouseHandler<CardNode> = useCallback(
-    (_, node) => selectCard(node.id),
-    [selectCard],
-  );
-
-  const handleNodeMouseEnter: NodeMouseHandler<CardNode> = useCallback(
-    (_, node) => setHoveredId(node.id),
-    [],
-  );
-
-  const handleNodeMouseLeave = useCallback(() => setHoveredId(null), []);
-
-  const handlePaneClick = useCallback(() => selectCard(null), [selectCard]);
-
-  const handleMoveEnd = useCallback(
-    (_: unknown, vp: RFViewport) => setViewport(vp),
-    [setViewport],
-  );
-
   return (
-    <ReactFlow
+    <Canvas
       nodes={displayNodes}
       edges={displayEdges}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onNodeClick={handleNodeClick}
-      onNodeMouseEnter={handleNodeMouseEnter}
-      onNodeMouseLeave={handleNodeMouseLeave}
-      onPaneClick={handlePaneClick}
-      onMoveEnd={handleMoveEnd}
-      defaultViewport={viewport}
-      fitView={!viewport}
-      deleteKeyCode={null}
+      renderNode={(node) => <EvidenceCard data={node.data} selected={!!node.selected} />}
+      mountEdge={mountRedString}
+      onNodeClick={(node) => selectCard(node.id)}
+      onNodeEnter={(node) => setHoveredId(node.id)}
+      onNodeLeave={() => setHoveredId(null)}
+      onPaneClick={() => selectCard(null)}
+      onNodeDragEnd={(node, position) => arrangeCards(new Map([[node.id, position]]))}
+      onConnect={addConnection}
+      onMoveEnd={setViewport}
+      viewport={savedViewport}
       minZoom={0.2}
       maxZoom={2.5}
-      // Mount DOM only for nodes in view: an mbox import can put hundreds of
-      // image-bearing cards on the board, and off-screen ones need no <img>.
-      // Selection and fitView work off the store/internal node set, not the DOM.
-      onlyRenderVisibleElements
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#3a3026" />
-      <Controls />
-      <MiniMap
-        nodeColor={(n) => (n as CardNode).data.clusterColor ?? NO_CLUSTER_ACCENT}
-        maskColor="rgba(15, 12, 9, 0.7)"
-        pannable
-        zoomable
-      />
-    </ReactFlow>
+      unmeasuredSize={{ width: CARD_W, height: CARD_H }}
+      background={{ gap: 28, size: 1.5 }}
+      controls
+      minimap={{ nodeColour: (node) => node.data.clusterColor ?? NO_CLUSTER_ACCENT }}
+    />
   );
 }
