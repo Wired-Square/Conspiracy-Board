@@ -1,16 +1,19 @@
 //! Imported media: one content-addressed file per import in `media/`, linked from
 //! boards by name.
 
+use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use sha2::{Digest, Sha256};
 
-use super::{media_dir, run_open, write_atomic};
+use super::board_db::library_media_refs;
+use super::{boards_dir, media_dir, run_open, write_atomic};
+use crate::library_index::{prune_documents, LibraryDb};
 use crate::extract::meta::{read_meta, MediaMeta};
 
 /// A media file younger than this is never swept by `gc_media`: it may have just
@@ -237,30 +240,47 @@ fn ocr_bytes(_bytes: &[u8]) -> String {
 }
 
 /// Sweep media no board links any more. Content-addressed files can be shared by
-/// several cards or boards, so a file must not be deleted the moment one card
-/// drops it: the reference set is only whole once every board has been read.
-/// The webview gathers the names still in use and hands them here — anything else
-/// in the media directory is unreferenced and removed. Call with a *complete*
-/// set: a board that failed to load must keep the whole app from sweeping, or it
-/// would cost that board its media. Returns how many files were removed, for logging.
+/// several cards or boards, so a file must not be deleted the moment one card drops
+/// it: the keep-set is only whole once every board's refs are known. If any board's
+/// are not (`library_media_refs`), nothing is swept and those boards are returned, so
+/// the webview can record their refs and ask again. After a sweep the search index
+/// drops the rows of whatever went.
 #[tauri::command(async)]
-pub fn gc_media(app: AppHandle, keep: Vec<String>) -> Result<u32, String> {
-  let keep: std::collections::HashSet<String> = keep.into_iter().collect();
+pub fn gc_media(app: AppHandle, db: State<LibraryDb>) -> Result<GcOutcome, String> {
+  let outcome = gc(&boards_dir(&app)?, &media_dir(&app)?, GC_MIN_AGE)?;
+  if outcome.unknown.is_empty() {
+    prune_documents(&app, &db)?;
+  }
+  Ok(outcome)
+}
+
+fn gc(boards: &Path, media: &Path, min_age: Duration) -> Result<GcOutcome, String> {
+  let refs = library_media_refs(boards, None)?;
+  if !refs.unknown.is_empty() {
+    return Ok(GcOutcome { removed: 0, unknown: refs.unknown });
+  }
+  Ok(GcOutcome { removed: sweep(media, &refs.names, min_age)?, unknown: Vec::new() })
+}
+
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct GcOutcome {
+  removed: u32,
+  unknown: Vec<String>,
+}
+
+fn sweep(dir: &Path, keep: &HashSet<String>, min_age: Duration) -> Result<u32, String> {
   let mut removed = 0;
-  for (name, entry) in media_entries(&media_dir(&app)?)? {
+  for (name, entry) in media_entries(dir)? {
     if keep.contains(&name) {
       continue;
     }
     // Leave a very fresh file alone even if it looks unreferenced: it may have
-    // just been written and the board that links it not yet saved, so a keep-set
-    // built a moment ago would not know about it. The next sweep, once its board
-    // is on disk, will keep it or take it for real.
-    if entry.metadata().and_then(|m| m.modified()).map_or(true, |t| {
-      t.elapsed().map(|age| age < GC_MIN_AGE).unwrap_or(true)
-    }) {
-      continue;
-    }
-    if std::fs::remove_file(entry.path()).is_ok() {
+    // just been written and the board that links it not yet saved.
+    let fresh = entry
+      .metadata()
+      .and_then(|m| m.modified())
+      .map_or(true, |t| t.elapsed().map_or(true, |age| age < min_age));
+    if !fresh && std::fs::remove_file(entry.path()).is_ok() {
       removed += 1;
     }
   }
@@ -352,6 +372,7 @@ pub fn open_media(app: AppHandle, name: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::board_store::board_db::save_board_file;
   use crate::board_store::{atomic_writer, temp_dir_for};
 
   #[test]
@@ -413,5 +434,65 @@ mod tests {
     assert_eq!(fetched_ext("https://x.test/dir/pic.webp?w=200#top", None), "webp");
     assert_eq!(fetched_ext("https://x.test", None), "");
     assert_eq!(fetched_ext("https://x.test/.hidden", None), "");
+  }
+
+  /// A temp library holding one media file per name, all old enough to sweep unless
+  /// `fresh` names them.
+  fn library(name: &str, files: &[&str], fresh: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
+    let dir = temp_dir_for(name);
+    let (boards, media) = (dir.join("boards"), dir.join("media"));
+    std::fs::create_dir_all(&boards).unwrap();
+    std::fs::create_dir_all(&media).unwrap();
+    for f in files {
+      std::fs::write(media.join(f), b"").unwrap();
+      if !fresh.contains(f) {
+        set_old(&media.join(f));
+      }
+    }
+    (dir, boards, media)
+  }
+
+  fn on_disk(media: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(media)
+      .unwrap()
+      .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+      .collect();
+    names.sort();
+    names
+  }
+
+  #[test]
+  fn gc_sweeps_only_old_unreferenced_media() {
+    let (dir, boards, media) = library("gc-sweep", &["kept.png", "orphan.pdf", "fresh.eml"], &["fresh.eml"]);
+    let staged = atomic_writer().staged_path(&media.join("staged.png"));
+    std::fs::write(&staged, b"in flight").unwrap();
+    set_old(&staged);
+    save_board_file(&boards.join("brd_a.sqlite"), Some(&["kept.png"]));
+
+    let outcome = gc(&boards, &media, GC_MIN_AGE).unwrap();
+    assert_eq!(outcome, GcOutcome { removed: 1, unknown: vec![] });
+    assert_eq!(on_disk(&media), vec!["fresh.eml", "kept.png", "staged.png.new"]);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn gc_sweeps_nothing_while_any_board_is_unknown() {
+    let (dir, boards, media) = library("gc-unknown", &["kept.png", "orphan.pdf"], &[]);
+    save_board_file(&boards.join("brd_a.sqlite"), Some(&["kept.png"]));
+    save_board_file(&boards.join("brd_old.sqlite"), None);
+    std::fs::write(boards.join("brd_legacy.json"), "{}").unwrap();
+
+    let mut outcome = gc(&boards, &media, GC_MIN_AGE).unwrap();
+    outcome.unknown.sort();
+    assert_eq!(outcome, GcOutcome { removed: 0, unknown: vec!["brd_legacy".into(), "brd_old".into()] });
+    assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
+    assert!(gc(&dir.join("absent"), &media, GC_MIN_AGE).is_err());
+    assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  fn set_old(path: &Path) {
+    let old = std::time::SystemTime::now() - Duration::from_secs(3600);
+    std::fs::OpenOptions::new().write(true).open(path).unwrap().set_modified(old).unwrap();
   }
 }

@@ -415,31 +415,16 @@ export const boardStore = createStore<BoardState>()((set, get) => {
   };
 
   /**
-   * Sweep media no board references any more. Content-addressed files can be
-   * shared, so a file cannot be deleted the moment one card lets go of it — the
-   * keep-set is only whole once every board has been read. Runs in the background
-   * off startup and after a board is deleted; it aborts rather than sweeping if
-   * any board fails to load, so an unreadable board never costs its media.
+   * Sweep media no board references any more, in the background off startup and
+   * after a board is deleted. The shell builds the keep-set and sweeps nothing while
+   * any board's refs are unknown, so an unreadable board never costs its media.
    */
   const gcMedia = async () => {
-    // Flush first, so the open board's just-added media is on disk and in the
-    // keep-set. Only the current board can have unsaved edits; the rest are as
-    // they are on disk. (The shell also spares very fresh files, as a backstop.)
+    // Flush first, so the open board's just-added media is in its recorded refs.
+    // (The shell also spares very fresh files, as a backstop.)
     await flushAutosave();
-    const entries = await storage.listBoards();
-    const boards = await Promise.all(entries.map((e) => storage.loadBoard(e.id)));
-    // A board that won't load means the keep-set is incomplete — don't sweep, or a
-    // temporarily unreadable board would lose its media. (The shell dedupes the
-    // list, so passing refs with repeats across boards is fine.)
-    if (boards.some((b) => !b)) return;
-    try {
-      await storage.gcMedia(boards.flatMap((b) => boardMediaRefs(b!)));
-      // Drop the search-index rows for any blob just swept, so the index tracks the
-      // media store. Board-agnostic, so it reconciles against what's left on disk.
-      await storage.pruneDocuments();
-    } catch {
-      // Housekeeping: a failed sweep just leaves orphans for next time.
-    }
+    // Housekeeping: a failed sweep just leaves orphans for next time.
+    await storage.gcMedia().catch(() => {});
   };
 
   /**

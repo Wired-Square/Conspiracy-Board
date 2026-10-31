@@ -8,8 +8,8 @@ export type CardMediaEntry = { file: string; kind: CardMediaKind };
 /**
  * Every media file a card points at, tagged: its picture, the original .eml, an
  * attachment, a document. This is the *only* enumeration of the media-bearing
- * fields, and (through `boardMediaRefs`) the keep-set for a destructive sweep
- * (`gcMedia` → `gc_media`): a media field added to the model but left out here
+ * fields, and (through `boardMediaRefs`, recorded with every save) the keep-set for
+ * a destructive sweep (`gc_media`): a media field added to the model but left out here
  * would have its files quietly deleted the next time GC runs. Add the field to the
  * model (`types/board.ts`) and to this list together — the field comments there
  * point back here to say so.

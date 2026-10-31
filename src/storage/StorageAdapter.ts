@@ -129,12 +129,14 @@ export interface StorageAdapter {
   /** Open a media file in the OS default app — Preview for a PDF, and so on. */
   openMedia(name: string): Promise<void>;
   /**
-   * Sweep media no board references any more. `keep` must be the *complete* set
-   * of names still in use across every board — a partial set would delete live
-   * files. Content-addressed media can be shared between cards, so this replaces
-   * per-reference deletion. Returns how many files were removed.
+   * Sweep media no board references any more. The shell builds the keep-set from
+   * every board's recorded refs and sweeps nothing while any board's are unknown
+   * (unrecorded or unreadable). Returns how many files were removed.
    */
-  gcMedia(keep: string[]): Promise<number>;
+  gcMedia(): Promise<number>;
+  /** The media every board but `exceptId` references, or null when some board's
+   *  refs are unknown — the maintenance audit's "used elsewhere". */
+  mediaRefs(exceptId: string | null): Promise<Set<string> | null>;
   /** Every file in the media library — the maintenance view's "see all files" and
    *  the disk side of its integrity checks. Read-only; never deletes. */
   listMedia(): Promise<MediaEntry[]>;
@@ -169,8 +171,6 @@ export interface StorageAdapter {
    * simply resumes where it left off.
    */
   pendingMedia(): Promise<string[]>;
-  /** Drop index rows for media no longer on disk; called after gcMedia sweeps blobs. */
-  pruneDocuments(): Promise<number>;
   /** Empty the search index — the recovery path if it ever drifts; the queue rebuilds. */
   rebuildIndex(): Promise<void>;
   /** Every indexed file's name and status, for the Objects view to badge each file. */

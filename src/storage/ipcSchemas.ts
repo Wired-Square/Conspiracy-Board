@@ -49,3 +49,7 @@ export const readBundleSchema: z.ZodType<{
   manifest: z.string().nullable(),
   boards: z.array(z.object({ id: z.string(), json: z.string() })),
 });
+
+export const gcOutcomeSchema = z.object({ removed: z.number(), unknown: z.array(z.string()) });
+
+export const libraryRefsSchema = z.object({ names: z.array(z.string()), unknown: z.array(z.string()) });

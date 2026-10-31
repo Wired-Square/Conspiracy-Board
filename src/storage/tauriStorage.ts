@@ -7,6 +7,8 @@ import { invokeChecked } from './ipc';
 import {
   docHitSchema,
   docStatusSchema,
+  gcOutcomeSchema,
+  libraryRefsSchema,
   loadedBoardSchema,
   mediaEntrySchema,
   mediaMetaSchema,
@@ -21,6 +23,7 @@ import {
 } from '../data/boardIndex';
 import { orderByManifest, parseManifest } from '../data/bundle';
 import { bytesToB64, b64ToBytes } from '../lib/base64';
+import { boardMediaRefs } from '../lib/media';
 import { setMediaDir } from './media';
 import { toPickedFiles, type PickedFile, type StorageAdapter } from './StorageAdapter';
 
@@ -80,6 +83,21 @@ const bodyMap = (xs: { id: string }[]): Map<string, string> =>
 // skips the read-modify-write of index.json entirely.
 const lastSummary = new Map<string, string>();
 
+// The shell vouches only for boards whose media refs it has recorded, and names the
+// rest. A board saved before refs were recorded is read here, where the card schema
+// lives, and its refs recorded once; then the shell is asked again.
+async function withRefsRecorded<T extends { unknown: string[] }>(ask: () => Promise<T>): Promise<T> {
+  const first = await ask();
+  if (!first.unknown.length) return first;
+  await Promise.all(
+    first.unknown.map(async (id) => {
+      const board = await tauriStorage.loadBoard(id);
+      if (board) await invoke('record_media_refs', { id, refs: boardMediaRefs(board) });
+    }),
+  );
+  return ask();
+}
+
 const boardBodies = (board: Board): EntityBodies => ({
   cards: bodyMap(board.cards),
   connections: bodyMap(board.connections),
@@ -102,8 +120,8 @@ export const tauriStorage: StorageAdapter = {
 
   async loadBoard(id) {
     // A corrupt or locked database reads as "unreadable this time", never a throw:
-    // the store's load paths (loadBoardForOpen, gcMedia, the media audit) all treat
-    // a null load as "leave it be", never as a board to delete.
+    // the load paths (loadBoardForOpen, withRefsRecorded) treat a null load as
+    // "leave it be", never as a board to delete.
     const res = await invokeChecked('load_board', loadedBoardSchema, { id }).catch(() => null);
     if (!res?.json) return null;
     const board = safeParseBoardJson(res.json);
@@ -145,6 +163,7 @@ export const tauriStorage: StorageAdapter = {
         connectionIds: board.connections.map((c) => c.id),
         clusters: changed(next.clusters, prev?.clusters),
         clusterIds: board.clusters.map((c) => c.id),
+        mediaRefs: boardMediaRefs(board),
       },
     });
     // Only after the write lands, so a failed save leaves the cache stale and the next
@@ -207,8 +226,15 @@ export const tauriStorage: StorageAdapter = {
     return invoke('open_media', { name });
   },
 
-  gcMedia(keep) {
-    return invokeChecked('gc_media', z.number(), { keep });
+  async gcMedia() {
+    return (await withRefsRecorded(() => invokeChecked('gc_media', gcOutcomeSchema))).removed;
+  },
+
+  async mediaRefs(exceptId) {
+    const refs = await withRefsRecorded(() =>
+      invokeChecked('media_refs', libraryRefsSchema, { except: exceptId }),
+    );
+    return refs.unknown.length ? null : new Set(refs.names);
   },
 
   listMedia() {
@@ -233,10 +259,6 @@ export const tauriStorage: StorageAdapter = {
 
   pendingMedia() {
     return invokeChecked('pending_media', z.array(z.string()));
-  },
-
-  pruneDocuments() {
-    return invokeChecked('prune_documents', z.number());
   },
 
   rebuildIndex() {

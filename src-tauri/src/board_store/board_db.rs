@@ -18,11 +18,11 @@
 //! out (`serde_json`'s `RawValue`) and never parsed here; the schema stays in
 //! TypeScript (`src/data/schema.ts`), its one canonical definition.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use serde_json::value::RawValue;
 
 use super::{boards_dir, read_opt, remove_if_present, run_open};
@@ -93,6 +93,7 @@ fn init_board_schema(conn: &Connection) -> Result<(), String> {
        CREATE TABLE IF NOT EXISTS cards       (id TEXT PRIMARY KEY, json TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY, json TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS clusters    (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+       CREATE TABLE IF NOT EXISTS media_refs  (name TEXT PRIMARY KEY);
        PRAGMA user_version=1;",
     )
     .map_err(|e| format!("Could not prepare the board schema: {e}"))
@@ -115,6 +116,7 @@ pub struct SaveBoardPayload {
   connection_ids: Vec<String>,
   clusters: Vec<BoardBody>,
   cluster_ids: Vec<String>,
+  media_refs: Vec<String>,
 }
 
 /// A single entity to upsert: its id (the envelope's, this side's) and its JSON (the
@@ -193,7 +195,109 @@ fn write_board_tx(tx: &Transaction, p: &SaveBoardPayload) -> Result<(), String> 
   write_table(tx, "cards", &p.cards, &p.card_ids)?;
   write_table(tx, "connections", &p.connections, &p.connection_ids)?;
   write_table(tx, "clusters", &p.clusters, &p.cluster_ids)?;
-  Ok(())
+  write_media_refs(tx, &p.media_refs)
+}
+
+/// The media names the board's cards link, which TypeScript derives from the cards
+/// (`boardMediaRefs`) and the sweep keeps. The `media_refs` meta row marks them as
+/// recorded: a board saved before they were has the table but not the row.
+fn write_media_refs(tx: &Transaction, refs: &[String]) -> Result<(), String> {
+  tx.execute("DELETE FROM media_refs", []).map_err(|e| format!("Could not record media refs: {e}"))?;
+  {
+    let mut stmt = tx
+      .prepare("INSERT OR IGNORE INTO media_refs(name) VALUES(?1)")
+      .map_err(|e| format!("Could not record media refs: {e}"))?;
+    for name in refs {
+      stmt.execute([name]).map_err(|e| format!("Could not record media refs: {e}"))?;
+    }
+  }
+  upsert_meta(tx, "media_refs", "recorded")
+}
+
+/// Record the refs of a board saved before refs were, read for it by the webview.
+/// Only while they are still unrecorded: a save in the meantime wrote fresher ones.
+#[tauri::command(async)]
+pub fn record_media_refs(app: AppHandle, id: String, refs: Vec<String>) -> Result<(), String> {
+  let path = board_db_file(&app, &id)?;
+  if !path.exists() {
+    return Err("The board's database is missing.".into());
+  }
+  record_if_unrecorded(&mut open_board_db(&path)?, &refs)
+}
+
+fn record_if_unrecorded(conn: &mut Connection, refs: &[String]) -> Result<(), String> {
+  let tx = conn
+    .transaction_with_behavior(TransactionBehavior::Immediate)
+    .map_err(|e| format!("Could not begin recording media refs: {e}"))?;
+  if recorded_refs(&tx).map_err(|e| format!("Could not read media refs: {e}"))?.is_none() {
+    write_media_refs(&tx, refs)?;
+  }
+  tx.commit().map_err(|e| format!("Could not record media refs: {e}"))
+}
+
+/// The board's recorded media refs, or None if it has none recorded yet.
+fn recorded_refs(conn: &Connection) -> rusqlite::Result<Option<Vec<String>>> {
+  let recorded = conn
+    .query_row("SELECT 1 FROM meta WHERE key='media_refs'", [], |_| Ok(()))
+    .optional()?
+    .is_some();
+  if !recorded {
+    return Ok(None);
+  }
+  let mut stmt = conn.prepare("SELECT name FROM media_refs")?;
+  let names = stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+  Ok(Some(names))
+}
+
+/// Every media name the boards on disk link, and the ids of any board whose refs are
+/// unknown: unrecorded, unreadable, or a legacy JSON board not yet migrated. While any
+/// are unknown the set is incomplete, and nothing may be swept on its say-so.
+#[derive(Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryRefs {
+  pub names: HashSet<String>,
+  pub unknown: Vec<String>,
+}
+
+pub(crate) fn library_media_refs(boards: &Path, except: Option<&str>) -> Result<LibraryRefs, String> {
+  let entries = std::fs::read_dir(boards).map_err(|e| format!("Could not read the boards directory: {e}"))?;
+  let mut refs = LibraryRefs::default();
+  for entry in entries {
+    let path = entry.map_err(|e| format!("Could not read the boards directory: {e}"))?.path();
+    let (Some(id), Some(ext)) = (path.file_stem().and_then(|s| s.to_str()), path.extension()) else {
+      continue;
+    };
+    if !valid_board_id(id) || Some(id) == except {
+      continue;
+    }
+    let known = if ext == "sqlite" {
+      read_refs(&path)
+    } else if ext == "json" && !path.with_extension("sqlite").exists() {
+      None
+    } else {
+      continue;
+    };
+    match known {
+      Some(names) => refs.names.extend(names),
+      None => refs.unknown.push(id.to_string()),
+    }
+  }
+  Ok(refs)
+}
+
+/// A board's recorded refs, opened without creating anything: a file gone since the
+/// listing, or one that won't read, is simply unknown.
+fn read_refs(path: &Path) -> Option<Vec<String>> {
+  let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX).ok()?;
+  conn.busy_timeout(std::time::Duration::from_secs(5)).ok()?;
+  recorded_refs(&conn).ok().flatten()
+}
+
+/// The media refs of every board but `except` (the open one, whose live refs the
+/// caller already has), for the maintenance audit.
+#[tauri::command(async)]
+pub fn media_refs(app: AppHandle, except: Option<String>) -> Result<LibraryRefs, String> {
+  library_media_refs(&boards_dir(&app)?, except.as_deref())
 }
 
 fn order_json(ids: &[String]) -> Result<String, String> {
@@ -410,6 +514,7 @@ mod tests {
       connection_ids: vec![],
       clusters: vec![],
       cluster_ids: vec![],
+      media_refs: vec![],
     }
   }
 
@@ -453,6 +558,7 @@ mod tests {
         connection_ids: vec!["e1".into()],
         clusters: vec![body("g1", r#"{"id":"g1","label":"grp"}"#)],
         cluster_ids: vec!["g1".into()],
+        media_refs: vec![],
       },
     );
     let v = read(&conn);
@@ -535,4 +641,65 @@ mod tests {
     assert!(v.get("viewport").is_some());
     let _ = std::fs::remove_dir_all(&dir);
   }
+
+  #[test]
+  fn a_save_replaces_the_recorded_refs() {
+    let mut conn = fresh();
+    assert_eq!(recorded_refs(&conn).unwrap(), None);
+    let mut p = card_payload(&[], &[], None);
+    p.media_refs = vec!["a.png".into(), "b.pdf".into(), "a.png".into()];
+    apply(&mut conn, &p);
+    p.media_refs = vec!["b.pdf".into()];
+    apply(&mut conn, &p);
+    assert_eq!(recorded_refs(&conn).unwrap(), Some(vec!["b.pdf".to_string()]));
+  }
+
+  #[test]
+  fn recording_refs_never_overwrites_a_save() {
+    let mut conn = fresh();
+    record_if_unrecorded(&mut conn, &["old.png".into()]).unwrap();
+    assert_eq!(recorded_refs(&conn).unwrap(), Some(vec!["old.png".to_string()]));
+    let mut p = card_payload(&[], &[], None);
+    p.media_refs = vec!["new.png".into()];
+    apply(&mut conn, &p);
+    record_if_unrecorded(&mut conn, &["stale.png".into()]).unwrap();
+    assert_eq!(recorded_refs(&conn).unwrap(), Some(vec!["new.png".to_string()]));
+  }
+
+  #[test]
+  fn library_refs_name_every_board_they_cannot_vouch_for() {
+    let dir = temp_dir_for("library-refs");
+    save_board_file(&dir.join("brd_saved.sqlite"), Some(&["a.png", "b.pdf"]));
+    save_board_file(&dir.join("brd_other.sqlite"), Some(&["b.pdf", "c.eml"]));
+    save_board_file(&dir.join("brd_old.sqlite"), None);
+    std::fs::write(dir.join("brd_legacy.json"), "{}").unwrap();
+    std::fs::write(dir.join("brd_saved.json"), "{}").unwrap(); // migrated, not yet retired
+    std::fs::write(dir.join("brd_corrupt.sqlite"), "not a database").unwrap();
+    std::fs::write(dir.join("brd_saved.sqlite-wal"), "").unwrap();
+
+    let refs = library_media_refs(&dir, None).unwrap();
+    let mut unknown = refs.unknown.clone();
+    unknown.sort();
+    assert_eq!(unknown, vec!["brd_corrupt", "brd_legacy", "brd_old"]);
+    let mut names: Vec<_> = refs.names.into_iter().collect();
+    names.sort();
+    assert_eq!(names, vec!["a.png", "b.pdf", "c.eml"]);
+
+    let except = library_media_refs(&dir, Some("brd_other")).unwrap();
+    assert!(!except.names.contains("c.eml"));
+    assert!(library_media_refs(&dir.join("absent"), None).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+}
+
+/// A board database on disk with its refs recorded, or (None) saved before refs were.
+#[cfg(test)]
+pub(super) fn save_board_file(path: &Path, refs: Option<&[&str]>) {
+  let mut conn = open_board_db(path).unwrap();
+  let tx = conn.transaction().unwrap();
+  match refs {
+    Some(refs) => write_media_refs(&tx, &refs.iter().map(|r| r.to_string()).collect::<Vec<_>>()).unwrap(),
+    None => upsert_meta(&tx, "meta", "{}").unwrap(),
+  }
+  tx.commit().unwrap();
 }

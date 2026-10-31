@@ -245,9 +245,8 @@ pub fn pending_media(app: AppHandle, db: State<LibraryDb>) -> Result<Vec<String>
 /// Drop the rows for any media the library no longer holds — called after `gc_media`
 /// sweeps blobs. Reconciles against what's on disk, not against boards, so it stays
 /// board-agnostic like the rest of the index.
-#[tauri::command(async)]
-pub fn prune_documents(app: AppHandle, db: State<LibraryDb>) -> Result<u32, String> {
-  let keep: std::collections::HashSet<String> = media_names(&app)?.into_iter().collect();
+pub(crate) fn prune_documents(app: &AppHandle, db: &LibraryDb) -> Result<u32, String> {
+  let keep: std::collections::HashSet<String> = media_names(app)?.into_iter().collect();
   let mut guard = db.lock_db()?;
   let tx = guard.transaction().map_err(|e| format!("Could not prune the index: {e}"))?;
   let names: Vec<String> = {

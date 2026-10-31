@@ -1,7 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 import { boardStore } from './boardStore';
 import { storage } from '../storage';
-import { boardMediaRefs, cardMediaEntries } from '../lib/media';
+import { cardMediaEntries } from '../lib/media';
 import { auditMedia, type CurrentRef, type MediaRow } from '../lib/maintenance';
 import { errorMessage } from '../lib/errors';
 
@@ -11,7 +11,7 @@ import { errorMessage } from '../lib/errors';
 // the imperative actions; this store is just the shared read-model they write to.
 //
 // Reads once when the view mounts and on demand — deliberately NOT on every card edit:
-// it lists the disk and loads every other board, too much to redo per keystroke, and a
+// it lists the disk and every other board's refs, too much to redo per keystroke, and a
 // reprocess changes derived fields, not the file inventory. The view is keyed on the
 // board, so it re-audits when the board switches.
 
@@ -57,17 +57,12 @@ export const mediaAuditStore = createStore<MediaAuditState>()((set) => ({
       // let it run alongside them rather than after.
       const diskP = storage.listMedia();
 
-      // Every *other* board's references, from disk, to tell an orphan (no board
-      // wants it) from a file another board owns. If one won't load the set is
-      // incomplete — withhold the orphan verdict, as gc_media does before deleting.
-      const entries = await storage.listBoards();
-      const others = await Promise.all(
-        entries.filter((e) => e.id !== currentBoardId).map((e) => storage.loadBoard(e.id)),
-      );
-      const complete = others.every((b) => b !== null);
-      const allRefs = complete ? new Set(others.flatMap((b) => boardMediaRefs(b!))) : null;
+      // Every *other* board's references, to tell an orphan (no board wants it) from a
+      // file another board owns. Null when some board's are unknown — withhold the
+      // orphan verdict, as gc_media does before deleting.
+      const allRefs = await storage.mediaRefs(currentBoardId);
 
-      set({ rows: auditMedia(await diskP, currentRefs, allRefs), incomplete: !complete });
+      set({ rows: auditMedia(await diskP, currentRefs, allRefs), incomplete: allRefs === null });
     } catch (e) {
       set({ error: errorMessage(e) });
     } finally {
