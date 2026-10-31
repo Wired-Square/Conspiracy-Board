@@ -27,10 +27,10 @@ use crate::board_store::open_read_only;
 use crate::library_index::{run_search, DocHit};
 use crate::schema::{Board, Card, CardKind};
 
-#[expect(dead_code, reason = "s2 starts the server from the setting")]
+pub(crate) mod lifecycle;
+
 pub(crate) const PORT: u16 = 8793;
 
-#[cfg_attr(not(test), expect(dead_code, reason = "s2 starts the server from the setting"))]
 pub(crate) fn start(library: PathBuf, port: u16, token: String) -> Result<CancellationToken, String> {
   let tools = LibraryTools { library };
   let router = Arc::new(LibraryTools::router());
@@ -63,7 +63,6 @@ pub(crate) fn serve_loopback<S: ServerHandler + Send + 'static>(
   Ok(cancel)
 }
 
-#[cfg_attr(not(any(test, feature = "mcp")), expect(dead_code, reason = "s2 makes the library token with it"))]
 pub(crate) fn random_token() -> Result<String, String> {
   let mut bytes = [0u8; 24];
   getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
