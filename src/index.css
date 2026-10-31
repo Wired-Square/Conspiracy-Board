@@ -138,6 +138,31 @@ body {
   white-space: nowrap;
 }
 
+/* Shown only while the library MCP is on; red when it is on but not listening. */
+.mcp-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mcp-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6fae6f;
+}
+
+.mcp-indicator.is-error {
+  border-color: var(--string);
+  background: rgba(200, 64, 47, 0.16);
+}
+
+.mcp-indicator.is-error .mcp-indicator__dot {
+  background: var(--string);
+}
+
 /* Grows to fill the middle of the row, pushing the actions to the right without
    the actions rule having to know it's there. */
 .toolbar__search {
