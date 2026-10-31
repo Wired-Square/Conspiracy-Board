@@ -1,7 +1,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import { DRAFT_COMMIT_MS, drafts } from '../lib/drafts';
 
-/** The Solid twin of hooks/useDraft: a typed field's local copy of `value`, committed when typing pauses, on flush and on cleanup. */
+/** A typed field's local copy of `value`, committed when typing pauses, on flush and on cleanup. */
 export function createDraft<T>(value: Accessor<T>, commit: (draft: T) => void): [Accessor<T>, (draft: T) => void, () => void] {
   const [draft, setDraft] = createSignal(value());
   let pending: { draft: T } | null = null;

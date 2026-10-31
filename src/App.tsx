@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Component } from 'solid-js';
 import { BoardCanvas } from './components/BoardCanvas';
 import { CameraProvider, CanvasPanel, useCamera, type Camera } from './components/canvas/Canvas';
-import { ClusterPanel } from './components/panels/ClusterPanel';
 import { TimelineDrawer } from './components/timeline/TimelineDrawer';
 import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
@@ -18,6 +17,7 @@ import { EmailImportModal } from './solid/panels/EmailImportModal';
 import { ImageEditorModal } from './solid/panels/ImageEditorModal';
 import { CardEditor } from './solid/panels/CardEditor';
 import { Toolbar } from './solid/panels/Toolbar';
+import { ClusterPanel } from './solid/panels/ClusterPanel';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -116,7 +116,7 @@ export default function App() {
                 Maintenance dropdown in this corner instead. */}
             {view !== 'object' && (
               <CanvasPanel position="top-right">
-                <ClusterPanel />
+                <SolidIsland component={ClusterPanel} />
               </CanvasPanel>
             )}
           </div>
