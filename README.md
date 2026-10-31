@@ -341,20 +341,21 @@ stays whole by default and **Only what isn't linked** narrows it to the work.
 
 Three rules explain most of the code:
 
-1. **`src/types/board.ts` is canonical.** It is exactly what gets persisted.
-   React Flow's nodes and edges are a *derived view* built by `src/data/mappers.ts`
-   and are never persisted. `boardStore` holds both and syncs them by hand.
+1. **The Rust schema is canonical.** `src-tauri/src/schema.rs` is exactly what
+   gets persisted, generated into `src/bindings` and re-exported by
+   `src/types/board.ts`. The canvas's nodes and edges are a *derived view* built
+   by `src/components/canvas/projection.ts` and are never persisted.
 2. **`src/storage/StorageAdapter.ts` is the only IO seam.** Nothing else in
    `src/` reads or writes persistent state. `src/platform/` is the one other
    place that talks to the shell, for things a webview cannot do alone. Between
-   them, the rest of `src/` is ordinary React that neither knows nor asks what it
+   them, the rest of `src/` is ordinary SolidJS that neither knows nor asks what it
    is running inside. The seam says one thing about *where*, deliberately:
    `boardLocation`/`revealBoard`, because the user is entitled to know where
    their evidence is even though the code is not.
 3. **Anything derivable is derived at render**, not stored. Selection is the
    example worth knowing: `selectedCardId` is the single source of truth, and
-   `useHighlightConnections` derives React Flow's per-node `selected` flag and
-   the highlight classes from it during render.
+   `components/board/BoardCanvas.tsx` derives each card's `selected` flag and
+   the highlight classes from it.
 
 ```
 src/
@@ -613,7 +614,8 @@ from which fields are empty, since a real message with no From and no Date would
 otherwise be mistaken for a card still waiting and be silently overwritten.
 
 Untrusted email bodies end up in `notes`, which is why `MarkdownView` leaves
-react-markdown's HTML escaping and URL sanitising alone. Don't add `rehype-raw`.
+micromark's HTML escaping and URL sanitising alone. Don't turn on its
+`allowDangerousHtml` or `allowDangerousProtocol`.
 
 ### The Inbox folder
 
@@ -813,8 +815,6 @@ both were broken by hand while the palette was being chosen.
   not scale — an mbox import can make it long. The roster takes most of the
   pressure off it (the hundreds of relations are derived now; the ones you draw
   by hand number in the tens), so it gets typeahead when it actually bites.
-- `react-router-dom` is a dependency and is imported nowhere. There are no
-  routes; the timeline is a drawer, not a page.
 - **Dragging anything onto the app window does nothing.** The window is not a
   drop target — the [Inbox folder](#the-inbox-folder) is the drop target, and
   the `+ Add` pickers cover the manual case. (The old in-window drop, and the

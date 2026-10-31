@@ -1,29 +1,25 @@
-/** @jsxImportSource react */
-import { useEffect, useRef, useState } from 'react';
+import { Show, createSignal, onMount } from 'solid-js';
 import { Modal } from './Modal';
 import { promptStore, type PromptRequest } from '../../store/promptStore';
-import { usePromptStore } from '../../hooks/useStores';
+import { fromStore } from '../fromStore';
 
 /**
  * Renders the one active prompt/confirm request (see promptStore) on the shared
- * Modal and resolves its promise. Mounted once, near the app root; returns null
- * when nothing is being asked, so each request mounts a fresh dialog with its own
- * input state.
+ * Modal and resolves its promise. Keyed on the request, so each one mounts a fresh
+ * dialog with its own input state.
  */
 export function PromptHost() {
-  const request = usePromptStore((s) => s.request);
-  const token = usePromptStore((s) => s.token);
-  return request ? <PromptDialog key={token} request={request} /> : null;
+  const request = fromStore(promptStore, (s) => s.request);
+  return (
+    <Show when={request()} keyed>
+      {(request) => <PromptDialog request={request} />}
+    </Show>
+  );
 }
 
-function PromptDialog({ request }: { request: PromptRequest }) {
-  const [value, setValue] = useState(request.kind === 'text' ? request.initialValue ?? '' : '');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Select the prefilled text on open, so Rename is type-over and New is ready.
-  useEffect(() => {
-    inputRef.current?.select();
-  }, []);
+function PromptDialog(props: { request: PromptRequest }) {
+  const request = props.request;
+  const [value, setValue] = createSignal(request.kind === 'text' ? (request.initialValue ?? '') : '');
 
   // Clearing narrows on `kind`, so resolve gets its exact type with no cast.
   const clear = () => promptStore.setState({ request: null });
@@ -32,11 +28,11 @@ function PromptDialog({ request }: { request: PromptRequest }) {
     if (request.kind === 'text') request.resolve(null);
     else request.resolve(false);
   };
-  const submittable = request.kind !== 'text' || value.trim().length > 0;
+  const submittable = () => request.kind !== 'text' || value().trim().length > 0;
   const submit = () => {
-    if (!submittable) return;
+    if (!submittable()) return;
     clear();
-    if (request.kind === 'text') request.resolve(value.trim());
+    if (request.kind === 'text') request.resolve(value().trim());
     else request.resolve(true);
   };
 
@@ -46,25 +42,34 @@ function PromptDialog({ request }: { request: PromptRequest }) {
       onClose={cancel}
       footer={
         <>
-          <button className="link-button" onClick={cancel}>
+          <button class="link-button" onClick={cancel}>
             {request.cancelLabel ?? 'Cancel'}
           </button>
-          <button className={request.danger ? 'is-danger' : ''} onClick={submit} disabled={!submittable}>
+          <button class={request.danger ? 'is-danger' : ''} onClick={submit} disabled={!submittable()}>
             {request.confirmLabel ?? 'OK'}
           </button>
         </>
       }
     >
-      {request.message && <p>{request.message}</p>}
+      <Show when={request.message}>
+        <p>{request.message}</p>
+      </Show>
       {request.kind === 'text' && (
-        <label className="field">
-          {request.label && <span>{request.label}</span>}
+        <label class="field">
+          <Show when={request.label}>
+            <span>{request.label}</span>
+          </Show>
           <input
-            ref={inputRef}
-            autoFocus
-            value={value}
+            // Selects the prefilled text on open, so Rename is type-over and New is ready.
+            ref={(el) =>
+              onMount(() => {
+                el.focus();
+                el.select();
+              })
+            }
+            value={value()}
             placeholder={request.placeholder}
-            onChange={(e) => setValue(e.target.value)}
+            onInput={(e) => setValue(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') submit();
             }}
