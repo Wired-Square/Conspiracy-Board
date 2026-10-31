@@ -185,7 +185,7 @@ export function TimelineDrawer() {
       const h = n.size?.height ?? CARD_H;
       void camera.setCentre(n.x + w / 2, n.y + h / 2, {
         // Don't centre the card and leave it stranded at minZoom.
-        zoom: Math.max(camera.getZoom(), 0.9),
+        zoom: Math.max(camera.getViewport().zoom, 0.9),
         duration: 400,
       });
     },
