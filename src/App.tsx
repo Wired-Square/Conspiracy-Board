@@ -15,7 +15,8 @@ import { BundleImportModal } from './components/panels/BundleImportModal';
 import { FirstRunModal } from './components/panels/FirstRunModal';
 import { ManageModal } from './components/panels/ManageModal';
 import { BusyOverlay } from './components/ui/BusyOverlay';
-import { BackgroundTaskIndicator } from './components/ui/BackgroundTaskIndicator';
+import { SolidIsland } from './components/SolidIsland';
+import { BackgroundTaskIndicator } from './solid/BackgroundTaskIndicator';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
 import { useStart } from './hooks/useStart';
@@ -130,7 +131,7 @@ export default function App() {
         {bundleImportBoards && <BundleImportModal boards={bundleImportBoards} />}
         {manageOpen && <ManageModal />}
         <ImportOverlay />
-        <BackgroundTaskIndicator />
+        <SolidIsland component={BackgroundTaskIndicator} />
         <UndoToast />
         <PromptHost />
       </CameraProvider>
