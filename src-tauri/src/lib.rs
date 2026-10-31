@@ -26,6 +26,7 @@ pub fn run() {
     // writes by path so a large `.zip` never crosses IPC.
     .plugin(tauri_plugin_dialog::init())
     .manage(quit::Busy::default())
+    .manage(board_store::session::OpenBoard::default())
     .plugin(wslib_tauri::quit_guard::init(quit::is_busy))
     .invoke_handler(tauri::generate_handler![
       board_store::init_storage,
@@ -41,6 +42,19 @@ pub fn run() {
       board_store::board_db::reveal_board,
       board_store::board_db::record_media_refs,
       board_store::board_db::media_refs,
+      board_store::session::open_board_session,
+      board_store::session::close_board_session,
+      board_store::session::update_card,
+      board_store::session::move_cards,
+      board_store::session::add_cards,
+      board_store::session::delete_cards,
+      board_store::session::add_connections,
+      board_store::session::update_connection,
+      board_store::session::delete_connections,
+      board_store::session::set_cluster,
+      board_store::session::delete_cluster,
+      board_store::session::set_meta,
+      board_store::session::set_viewport,
       board_store::media::media_dir_path,
       board_store::media::save_media,
       board_store::media::download_image,

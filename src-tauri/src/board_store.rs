@@ -23,6 +23,7 @@ pub mod board_index;
 pub mod bundle;
 pub mod inbox;
 pub mod media;
+pub mod session;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

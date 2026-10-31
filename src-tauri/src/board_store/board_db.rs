@@ -25,6 +25,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
+use super::session::OpenBoard;
 use super::{boards_dir, read_opt, remove_if_present, run_open};
 use crate::library_index::LibraryDb;
 use crate::schema::{self, parse_board, parse_board_json, parse_card, Board, BoardMeta, Viewport, BOARD_VERSION};
@@ -47,7 +48,7 @@ fn board_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
   Ok(boards_dir(app)?.join(format!("{id}.json")))
 }
 
-fn board_db_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+pub(super) fn board_db_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
   if !valid_board_id(id) {
     return Err(format!("Not a usable board id: {id:?}"));
   }
@@ -243,7 +244,7 @@ fn checked<T: Serialize>(
     .collect()
 }
 
-fn from_value<T: DeserializeOwned>(value: Value) -> Result<T, String> {
+pub(super) fn from_value<T: DeserializeOwned>(value: Value) -> Result<T, String> {
   serde_json::from_value(value).map_err(|e| format!("Not a valid board row: {e}"))
 }
 
@@ -261,6 +262,25 @@ fn write_media_refs(tx: &Transaction, refs: &[String]) -> Result<(), String> {
     }
   }
   upsert_meta(tx, "media_refs", "recorded")
+}
+
+/// Leaves the recorded marker alone: a board whose refs were never recorded stays
+/// unknown to the sweep, however many names are added here.
+pub(super) fn change_media_refs<'a>(
+  tx: &Transaction,
+  added: impl IntoIterator<Item = &'a str>,
+  removed: impl IntoIterator<Item = &'a str>,
+) -> Result<(), String> {
+  let failed = |e: rusqlite::Error| format!("Could not record media refs: {e}");
+  let mut insert = tx.prepare("INSERT OR IGNORE INTO media_refs(name) VALUES(?1)").map_err(failed)?;
+  for name in added {
+    insert.execute([name]).map_err(failed)?;
+  }
+  let mut delete = tx.prepare("DELETE FROM media_refs WHERE name=?1").map_err(failed)?;
+  for name in removed {
+    delete.execute([name]).map_err(failed)?;
+  }
+  Ok(())
 }
 
 /// Record the refs of a board saved before refs were, read for it by the webview.
@@ -365,11 +385,11 @@ pub fn media_refs(app: AppHandle, db: State<LibraryDb>, except: Option<String>) 
   library_media_refs(&boards_dir(&app)?, &listed, except.as_deref())
 }
 
-fn to_json(value: &impl Serialize) -> Result<String, String> {
+pub(super) fn to_json(value: &impl Serialize) -> Result<String, String> {
   serde_json::to_string(value).map_err(|e| format!("Could not encode the board: {e}"))
 }
 
-fn upsert_meta(tx: &Transaction, key: &str, value: &str) -> Result<(), String> {
+pub(super) fn upsert_meta(tx: &Transaction, key: &str, value: &str) -> Result<(), String> {
   tx.execute(
     "INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     rusqlite::params![key, value],
@@ -378,20 +398,12 @@ fn upsert_meta(tx: &Transaction, key: &str, value: &str) -> Result<(), String> {
   Ok(())
 }
 
-/// `table` is always one of the three literals this module passes — never caller
-/// input — so formatting it into the statement carries no injection surface; ids and
-/// json are bound parameters.
+/// `table` is always one of the three literals this module and `session` pass — never
+/// caller input — so formatting it into the statement carries no injection surface; ids
+/// and json are bound parameters.
 fn write_table(tx: &Transaction, table: &str, bodies: &[BoardBody], ids: &[String]) -> Result<(), String> {
-  {
-    let sql = format!("INSERT INTO {table}(id,json) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET json=excluded.json");
-    let mut stmt = tx.prepare(&sql).map_err(|e| format!("Could not prepare a board write: {e}"))?;
-    for b in bodies {
-      stmt
-        .execute(rusqlite::params![b.id, b.json])
-        .map_err(|e| format!("Could not write a board row: {e}"))?;
-    }
-  }
-  let keep: std::collections::HashSet<&str> = ids.iter().map(String::as_str).collect();
+  upsert_rows(tx, table, bodies.iter().map(|b| (b.id.as_str(), b.json.as_str())))?;
+  let keep: HashSet<&str> = ids.iter().map(String::as_str).collect();
   let present: Vec<String> = {
     let mut stmt = tx
       .prepare(&format!("SELECT id FROM {table}"))
@@ -401,15 +413,28 @@ fn write_table(tx: &Transaction, table: &str, bodies: &[BoardBody], ids: &[Strin
       .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
       .map_err(|e| format!("Could not read board rows: {e}"))?
   };
-  {
-    let mut del = tx
-      .prepare(&format!("DELETE FROM {table} WHERE id=?1"))
-      .map_err(|e| format!("Could not prepare a board delete: {e}"))?;
-    for id in &present {
-      if !keep.contains(id.as_str()) {
-        del.execute(rusqlite::params![id]).map_err(|e| format!("Could not delete a board row: {e}"))?;
-      }
-    }
+  delete_rows(tx, table, present.iter().map(String::as_str).filter(|id| !keep.contains(id)))
+}
+
+pub(super) fn upsert_rows<'a>(
+  tx: &Transaction,
+  table: &str,
+  rows: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Result<(), String> {
+  let sql = format!("INSERT INTO {table}(id,json) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET json=excluded.json");
+  let mut stmt = tx.prepare(&sql).map_err(|e| format!("Could not prepare a board write: {e}"))?;
+  for (id, json) in rows {
+    stmt.execute(rusqlite::params![id, json]).map_err(|e| format!("Could not write a board row: {e}"))?;
+  }
+  Ok(())
+}
+
+pub(super) fn delete_rows<'a>(tx: &Transaction, table: &str, ids: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
+  let mut del = tx
+    .prepare(&format!("DELETE FROM {table} WHERE id=?1"))
+    .map_err(|e| format!("Could not prepare a board delete: {e}"))?;
+  for id in ids {
+    del.execute([id]).map_err(|e| format!("Could not delete a board row: {e}"))?;
   }
   Ok(())
 }
@@ -420,7 +445,7 @@ fn read_board_db(path: &Path) -> Result<Board, String> {
 
 /// The rows put back together and validated as a board, migrated from whatever version
 /// they were saved at.
-fn reassemble_board(conn: &Connection) -> Result<Board, String> {
+pub(super) fn reassemble_board(conn: &Connection) -> Result<Board, String> {
   let meta = read_meta(conn)?;
   let version: u8 = meta.get("version").and_then(|v| v.parse().ok()).unwrap_or(3);
   let mut board = json!({
@@ -528,7 +553,8 @@ pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
 /// The files first, then the board list: a listed board whose file is gone would open
 /// as null, where an unlisted file is merely invisible.
 #[tauri::command(async)]
-pub fn delete_board(app: AppHandle, library: State<LibraryDb>, id: String) -> Result<(), String> {
+pub fn delete_board(app: AppHandle, library: State<LibraryDb>, open: State<OpenBoard>, id: String) -> Result<(), String> {
+  open.close(&id)?;
   let db = board_db_file(&app, &id)?;
   remove_if_present(&db)?;
   remove_if_present(&db_sidecar(&db, "-wal"))?;
@@ -574,7 +600,7 @@ mod tests {
   }
 
   /// A whole board as the webview sends it on a first save: every body, every id.
-  fn full_payload(board: &Board) -> SaveBoardPayload {
+  pub(super) fn full_payload(board: &Board) -> SaveBoardPayload {
     fn bodies<T: Serialize>(xs: &[T], id: impl Fn(&T) -> &str) -> (Vec<BoardBody>, Vec<String>) {
       xs.iter().map(|x| (body(id(x), serde_json::to_value(x).unwrap()), id(x).to_string())).unzip()
     }
@@ -821,5 +847,15 @@ pub(super) fn save_board_file(path: &Path, refs: Option<&[&str]>) {
     Some(refs) => write_media_refs(&tx, &refs.iter().map(|r| r.to_string()).collect::<Vec<_>>()).unwrap(),
     None => upsert_meta(&tx, "meta", "{}").unwrap(),
   }
+  tx.commit().unwrap();
+}
+
+#[cfg(test)]
+pub(super) fn write_board_file(path: &Path, board: &Board) {
+  let mut payload = tests::full_payload(board);
+  payload.media_refs = board.cards.iter().flat_map(schema::Card::media_files).map(String::from).collect();
+  let mut conn = open_board_db(path).unwrap();
+  let tx = conn.transaction().unwrap();
+  write_board_tx(&tx, &payload).unwrap();
   tx.commit().unwrap();
 }

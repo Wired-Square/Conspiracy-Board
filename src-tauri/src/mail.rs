@@ -156,8 +156,12 @@ fn truncate(text: String) -> String {
 
 /// `YYYY-MM-DDTHH:MM:SS.000Z`, as `Date#toISOString` writes it.
 fn iso_utc(timestamp: i64) -> String {
+  iso_utc_millis(timestamp, 0)
+}
+
+pub(crate) fn iso_utc_millis(timestamp: i64, millis: u32) -> String {
   let d = mail_parser::DateTime::from_timestamp(timestamp);
-  format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.000Z", d.year, d.month, d.day, d.hour, d.minute, d.second)
+  format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{millis:03}Z", d.year, d.month, d.day, d.hour, d.minute, d.second)
 }
 
 fn keep(part: &Part, store: &mut impl Store) -> Option<String> {
