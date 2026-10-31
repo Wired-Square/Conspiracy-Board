@@ -13,7 +13,8 @@ export default defineConfig({
   // the app somewhere the window will never look. clearScreen keeps Vite from
   // wiping the Rust build output the two share a terminal with.
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
+  // Agents' worktrees live under .claude/; without this, their edits reload the app.
+  server: { port: 1420, strictPort: true, watch: { ignored: ['**/.claude/**'] } },
   // Only the pure logic is unit-tested (dates, mbox splitting, schema
   // migration) — no DOM needed, so no jsdom.
   // css: the stylesheet is stubbed to '' by default, which would quietly empty

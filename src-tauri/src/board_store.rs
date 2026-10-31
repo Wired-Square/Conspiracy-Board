@@ -31,6 +31,11 @@ use tauri::{AppHandle, Manager};
 use wslib_file_atomic::{Options, Readers};
 
 pub(crate) fn library_dir(app: &AppHandle) -> Result<PathBuf, String> {
+  // Dev builds can point at a throwaway library, so a walk never edits the real one.
+  #[cfg(debug_assertions)]
+  if let Some(dir) = std::env::var_os("CONSPIRACY_LIBRARY_DIR").filter(|d| !d.is_empty()) {
+    return Ok(PathBuf::from(dir));
+  }
   // The OS-standard per-app data directory — on macOS
   // ~/Library/Application Support/com.wiredsquare.conspiracy, and the platform's
   // equivalent elsewhere (XDG data home on Linux, %APPDATA% on Windows). It
@@ -101,6 +106,10 @@ fn remove_if_present(path: &Path) -> Result<(), String> {
 pub fn init_storage(app: AppHandle) -> Result<(), String> {
   for dir in [boards_dir(&app)?, media_dir(&app)?, inbox_dir(&app)?] {
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
+  }
+  #[cfg(debug_assertions)]
+  if std::env::var_os("CONSPIRACY_LIBRARY_DIR").is_some_and(|d| !d.is_empty()) {
+    app.asset_protocol_scope().allow_directory(media_dir(&app)?, true).map_err(|e| e.to_string())?;
   }
   Ok(())
 }
