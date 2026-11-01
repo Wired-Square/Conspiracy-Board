@@ -98,6 +98,8 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
 pub struct DocStatus {
   name: String,
   status: String,
+  error: Option<String>,
+  attempts: u32,
 }
 
 /// One search hit: the media name (which the webview maps back to a card), a snippet
@@ -328,16 +330,20 @@ pub(crate) fn prune_documents(app: &AppHandle, db: &LibraryDb) -> Result<u32, St
   Ok(removed)
 }
 
-/// Every document's name and status, for the Objects view to badge each file. Absent
-/// from this list means never processed (shown as pending until the worker reaches it).
+/// Every document's status and last error, for the Objects view to badge each file.
+/// Absent from this list means never processed (shown as pending until the worker
+/// reaches it).
 #[tauri::command(async)]
 pub fn index_statuses(db: State<LibraryDb>) -> Result<Vec<DocStatus>, String> {
-  let conn = db.lock_db()?;
+  read_statuses(&*db.lock_db()?)
+}
+
+fn read_statuses(conn: &Connection) -> Result<Vec<DocStatus>, String> {
   let mut stmt = conn
-    .prepare("SELECT name, status FROM documents")
+    .prepare("SELECT name, status, error, attempts FROM documents")
     .map_err(|e| format!("Could not read the index: {e}"))?;
   stmt
-    .query_map([], |r| Ok(DocStatus { name: r.get(0)?, status: r.get(1)? }))
+    .query_map([], |r| Ok(DocStatus { name: r.get(0)?, status: r.get(1)?, error: r.get(2)?, attempts: r.get(3)? }))
     .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
     .map_err(|e| format!("Could not read the index: {e}"))
 }
@@ -389,6 +395,18 @@ mod tests {
     assert!(run_search(&conn, "broken", 10).unwrap().is_empty());
     let n: i64 = conn.query_row("SELECT count(*) FROM documents WHERE status='failed'", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 1);
+  }
+
+  #[test]
+  fn a_status_carries_the_last_error_and_how_often_it_was_tried() {
+    let mut conn = mem();
+    index(&mut conn, "cc.pdf", ExtractOutcome::Failed("broken".into()));
+    index(&mut conn, "cc.pdf", ExtractOutcome::Failed("still broken".into()));
+    index(&mut conn, "dd.txt", ExtractOutcome::Text("fine".into()));
+    let mut statuses = read_statuses(&conn).unwrap();
+    statuses.sort_by(|a, b| a.name.cmp(&b.name));
+    let seen: Vec<_> = statuses.iter().map(|s| (s.status.as_str(), s.error.as_deref(), s.attempts)).collect();
+    assert_eq!(seen, [("failed", Some("still broken"), 2), ("indexed", None, 0)]);
   }
 
   #[test]

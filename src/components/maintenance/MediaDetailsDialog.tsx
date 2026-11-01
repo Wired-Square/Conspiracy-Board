@@ -1,9 +1,9 @@
 import { Show, createResource } from 'solid-js';
 import { size } from '@wired-square/kit/core';
 import { storage } from '../../storage';
-import type { MediaMeta } from '../../storage/StorageAdapter';
+import type { DocStatus, MediaMeta } from '../../storage/StorageAdapter';
 import { formatOccurredAt } from '../../lib/dates';
-import { STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
+import { indexFailure, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { boardStore } from '../../store/boardStore';
 import { Modal } from '../ui/Modal';
 import { MetaList } from '../ui/MetaList';
@@ -50,7 +50,7 @@ function metaFacts(meta: MediaMeta): [string, string][] {
   return facts;
 }
 
-export function MediaDetailsDialog(props: { row: MediaRow; indexState?: string; onClose: () => void }) {
+export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; onClose: () => void }) {
   // The embedded properties are a live re-parse of the file, so only for on-disk files
   // and only on open. A resource keeps only the latest read, so a row changed mid-read
   // never shows the old file's properties.
@@ -59,13 +59,18 @@ export function MediaDetailsDialog(props: { row: MediaRow; indexState?: string; 
     (file) => storage.extractMediaMeta(file).catch(() => null),
   );
 
-  const identity = (): [string, string][] => [
-    ['File', props.row.file],
-    ['Size', size(props.row.size)],
-    ['On disk', props.row.onDisk ? 'yes' : 'no'],
-    ['Status', STATUS_LABEL[props.row.status]],
-    ['Search index', props.indexState ? INDEX_LABEL[props.indexState] ?? props.indexState : 'pending'],
-  ];
+  const identity = (): [string, string][] => {
+    const status = props.index?.status;
+    const failure = indexFailure(props.index);
+    return [
+      ['File', props.row.file],
+      ['Size', size(props.row.size)],
+      ['On disk', props.row.onDisk ? 'yes' : 'no'],
+      ['Status', STATUS_LABEL[props.row.status]],
+      ['Search index', status ? INDEX_LABEL[status] ?? status : 'pending'],
+      ...(failure ? [['Index error', failure] as [string, string]] : []),
+    ];
+  };
 
   const showCard = (cardId: string) => {
     boardStore.getState().selectCard(cardId);
