@@ -1,9 +1,10 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { size, count } from '@wired-square/kit/core';
 import { storage } from '../../storage';
+import type { DocStatus } from '../../storage/StorageAdapter';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
-import { countIssues, isIssue, mediaRowMatchesWithDocs, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
+import { countIssues, indexFailure, isIssue, mediaRowMatchesWithDocs, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { normaliseQuery } from '../../lib/search';
 import { mediaIconFor } from '../../lib/mediaIcon';
 import { boardStore } from '../../store/boardStore';
@@ -53,11 +54,11 @@ export function ObjectView() {
 
   // Each file's search-index status, for its badge. Refreshed on mount and every time
   // the index queue drains, so badges catch up as files finish extracting.
-  const [indexStatus, setIndexStatus] = createSignal<Record<string, string>>({});
+  const [indexStatus, setIndexStatus] = createSignal<Record<string, DocStatus>>({});
   const loadIndexStatus = async () => {
     try {
       const statuses = await storage.indexStatuses();
-      setIndexStatus(Object.fromEntries(statuses.map((s) => [s.name, s.status])));
+      setIndexStatus(Object.fromEntries(statuses.map((s) => [s.name, s])));
     } catch {
       // Best-effort: no badges rather than an error.
     }
@@ -182,7 +183,7 @@ export function ObjectView() {
               <MediaFileRow
                 row={rowByFile().get(file)!}
                 check={checks()[file]}
-                indexState={indexStatus()[file]}
+                index={indexStatus()[file]}
                 onReprocess={(cardId) => void run('Reprocessing…', () => reprocessCard(cardId))}
                 onVerify={verify}
                 onAdopt={(file) => void run('Adding card…', () => adoptOrphan(file))}
@@ -197,7 +198,7 @@ export function ObjectView() {
 
       <Show when={detailsRow()}>
         {(row) => (
-          <MediaDetailsDialog row={row()} indexState={indexStatus()[row().file]} onClose={() => setDetailsRow(null)} />
+          <MediaDetailsDialog row={row()} index={indexStatus()[row().file]} onClose={() => setDetailsRow(null)} />
         )}
       </Show>
     </div>
@@ -207,9 +208,8 @@ export function ObjectView() {
 type RowProps = {
   row: MediaRow;
   check: Check | undefined;
-  /** This file's search-index status ('indexed' | 'failed' | 'unsupported'), or
-   *  undefined until it has been processed. */
-  indexState: string | undefined;
+  /** This file's search-index row, or undefined until it has been processed. */
+  index: DocStatus | undefined;
   onReprocess: (cardId: string) => void;
   onVerify: (file: string) => void;
   onAdopt: (file: string) => void;
@@ -257,10 +257,14 @@ function MediaFileRow(props: RowProps) {
       <Show when={props.check === 'ok'}>
         <span class="maintenance-row__status is-ok">verified ✓</span>
       </Show>
-      <Show when={props.indexState === 'failed'}>
-        <span class="maintenance-row__status is-missing">index failed</span>
+      <Show when={indexFailure(props.index)}>
+        {(why) => (
+          <span class="maintenance-row__status is-missing" title={why()}>
+            index failed
+          </span>
+        )}
       </Show>
-      <Show when={props.indexState === 'unsupported'}>
+      <Show when={props.index?.status === 'unsupported'}>
         <span class="maintenance-row__status is-unknown">no text</span>
       </Show>
 

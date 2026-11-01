@@ -3,4 +3,4 @@
 /**
  * One file's place in the index, for the Objects view's badge.
  */
-export type DocStatus = { name: string, status: string, };
+export type DocStatus = { name: string, status: string, error: string | null, attempts: number, };

@@ -9,7 +9,7 @@ import { ObjectView } from './ObjectView';
 
 const { storage } = vi.hoisted(() => ({
   storage: {
-    indexStatuses: vi.fn(async () => [{ name: 'scan.pdf', status: 'failed' }]),
+    indexStatuses: vi.fn(async () => [{ name: 'scan.pdf', status: 'failed', error: 'No text layer', attempts: 2 }]),
     verifyMedia: vi.fn(async () => true),
     extractMediaMeta: vi.fn(async () => ({ title: 'Ledger' })),
     searchDocuments: vi.fn(async () => []),
@@ -51,6 +51,14 @@ test('audits on mount and badges each row with its index status', async () => {
   await settle();
   expect(row('Scan').textContent).toContain('index failed');
   expect(button(row('stray.png'), 'Add as card')).toBeDefined();
+});
+
+test('a failed index shows its last error and how often it was tried', async () => {
+  await settle();
+  const badge = [...row('Scan').querySelectorAll('.maintenance-row__status')].find((b) => b.textContent === 'index failed')!;
+  expect(badge.getAttribute('title')).toBe('No text layer (tried 2 times)');
+  button(row('Scan'), 'Details').click();
+  expect(document.body.textContent).toContain('No text layer (tried 2 times)');
 });
 
 test('Verify marks the row, and a row survives a re-audit', async () => {

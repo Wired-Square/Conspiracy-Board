@@ -1,6 +1,7 @@
 import type { CardKind } from '../types/board';
 import type { CardMediaKind } from './media';
-import type { MediaEntry } from '../storage/StorageAdapter';
+import type { DocStatus, MediaEntry } from '../storage/StorageAdapter';
+import { count } from '@wired-square/kit/core';
 
 // The integrity read of the media library, done as one pure function so it can be
 // tested without the shell. The IO — listing the disk, gathering every board's
@@ -65,6 +66,12 @@ export const STATUS_LABEL: Record<MediaStatus, string> = {
   foreign: 'other board',
   unknown: 'unreferenced?',
 };
+
+/** Why a file's last index failed, and how often it has been tried. */
+export function indexFailure(index: DocStatus | undefined): string | undefined {
+  if (index?.status !== 'failed') return undefined;
+  return `${index.error ?? 'unknown error'} (tried ${count(index.attempts, 'time')})`;
+}
 
 /**
  * The Objects view's row matcher, over a row's visible fields — its filename, the
