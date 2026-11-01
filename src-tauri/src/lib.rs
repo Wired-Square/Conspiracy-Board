@@ -19,6 +19,8 @@ compile_error!("the `mcp` feature is for development builds only");
 
 #[cfg(target_os = "macos")]
 mod ocr;
+#[cfg(target_os = "macos")]
+mod pdf_kit;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

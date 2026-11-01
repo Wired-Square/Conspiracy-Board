@@ -87,3 +87,8 @@ objc2-vision = { version = "0.3.2", features = [
   "VNObservation",
   "VNTypes",
 ] }
+# PDFKit opens a PDF lopdf can't, and renders a scanned page into a CoreGraphics
+# bitmap for Vision to read. Same objc2 generation again.
+objc2-pdf-kit = { version = "0.3.2", default-features = false, features = ["std", "PDFDocument", "PDFPage", "objc2-core-graphics"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGBitmapContext", "CGColorSpace", "CGContext", "CGImage"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFCGTypes"] }
