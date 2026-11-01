@@ -51,7 +51,7 @@ jobs:
       - name: Read the wslib crates and packages from the registry mirrors
         shell: bash
         env:
-          NPM_MIRROR_TOKEN: ${{ secrets.NPM_MIRROR_TOKEN }}
+          NPM_MIRROR_TOKEN: ${{ secrets.CARGO_REGISTRIES_WIRED_SQUARE_TOKEN }}
         run: |
           mkdir -p "${CARGO_HOME:-$HOME/.cargo}"
           cat .cargo/mirror.toml >> "${CARGO_HOME:-$HOME/.cargo}/config.toml"
