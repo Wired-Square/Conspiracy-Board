@@ -9,6 +9,7 @@ import { BundleExportModal } from './components/panels/BundleExportModal';
 import { BundleImportModal } from './components/panels/BundleImportModal';
 import { EmailImportModal } from './components/panels/EmailImportModal';
 import { ImageEditorModal } from './components/panels/ImageEditorModal';
+import { LibraryMcpModal } from './components/panels/LibraryMcpModal';
 import { CardEditor } from './components/panels/CardEditor';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
@@ -23,6 +24,7 @@ import { startUndoShortcut } from './platform/undoShortcut';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
+import { startLibraryMcpStatus } from './platform/libraryMcpStatus';
 import { boardStore } from './store/boardStore';
 import { closeDialog, dialogStore } from './store/dialogStore';
 import { emailImportStore } from './store/emailImportStore';
@@ -37,7 +39,14 @@ export default function App() {
 
   onMount(() => {
     void boardStore.getState().init().then(() => setReady(true));
-    for (const start of [startInbox, startUndoShortcut, startBoardMenu, startImportProgress, startJobProgress]) {
+    for (const start of [
+      startInbox,
+      startUndoShortcut,
+      startBoardMenu,
+      startImportProgress,
+      startJobProgress,
+      startLibraryMcpStatus,
+    ]) {
       onCleanup(start());
     }
   });
@@ -117,6 +126,9 @@ export default function App() {
           {bundleImport()}
           <Show when={dialogs().manage}>
             <ManageModal />
+          </Show>
+          <Show when={dialogs().libraryMcp}>
+            <LibraryMcpModal />
           </Show>
           <BusyOverlay />
           <BackgroundTaskIndicator />

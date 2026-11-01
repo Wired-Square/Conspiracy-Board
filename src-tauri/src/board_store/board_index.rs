@@ -16,7 +16,7 @@ use crate::library_index::LibraryDb;
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSummary {
-  id: String,
+  pub(crate) id: String,
   title: String,
   updated_at: String,
 }
@@ -101,7 +101,7 @@ fn freshest(entries: Vec<BoardSummary>) -> Vec<BoardSummary> {
   best.into_values().collect()
 }
 
-pub(super) fn upsert_summary(conn: &Connection, id: &str, title: &str, updated_at: &str) -> Result<(), String> {
+pub(crate) fn upsert_summary(conn: &Connection, id: &str, title: &str, updated_at: &str) -> Result<(), String> {
   upsert(conn, &BoardSummary { id: id.into(), title: title.into(), updated_at: updated_at.into() })
 }
 
@@ -128,7 +128,7 @@ pub(crate) fn listed_ids(conn: &Connection) -> Result<Vec<String>, String> {
 }
 
 /// Newest first, the order the Open dialog lists boards in.
-fn summaries(conn: &Connection) -> Result<Vec<BoardSummary>, String> {
+pub(crate) fn summaries(conn: &Connection) -> Result<Vec<BoardSummary>, String> {
   let mut stmt = conn
     .prepare("SELECT id, title, updated_at FROM boards ORDER BY updated_at DESC")
     .map_err(|e| format!("Could not read the board list: {e}"))?;
@@ -155,6 +155,16 @@ fn set_state(conn: &Connection, key: &str, value: Option<&str>) -> Result<(), St
     None => conn.execute("DELETE FROM library_state WHERE key=?1", [key]),
   };
   done.map(|_| ()).map_err(|e| format!("Could not write the library state: {e}"))
+}
+
+const LIBRARY_MCP: &str = "library_mcp";
+
+pub(crate) fn library_mcp_enabled(conn: &Connection) -> Result<bool, String> {
+  Ok(state(conn, LIBRARY_MCP)?.as_deref() == Some("on"))
+}
+
+pub(crate) fn set_library_mcp_enabled(conn: &Connection, on: bool) -> Result<(), String> {
+  set_state(conn, LIBRARY_MCP, on.then_some("on"))
 }
 
 #[tauri::command(async)]
@@ -241,6 +251,20 @@ mod tests {
     set_state(&conn, "current_id", Some("brd_x")).unwrap();
     set_state(&conn, "current_id", None).unwrap();
     assert_eq!(state(&conn, "current_id").unwrap(), None);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn the_library_mcp_is_off_until_turned_on_and_stays_as_set() {
+    let dir = temp_dir_for("index-library-mcp");
+    let conn = open(&dir);
+    assert!(!library_mcp_enabled(&conn).unwrap());
+    set_library_mcp_enabled(&conn, true).unwrap();
+    drop(conn);
+    let conn = open(&dir);
+    assert!(library_mcp_enabled(&conn).unwrap());
+    set_library_mcp_enabled(&conn, false).unwrap();
+    assert!(!library_mcp_enabled(&conn).unwrap());
     let _ = std::fs::remove_dir_all(&dir);
   }
 }

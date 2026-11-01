@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
 use super::session::OpenBoard;
-use super::{boards_dir, read_opt, remove_if_present, run_open};
+use super::{boards_dir, open_read_only, read_opt, remove_if_present, run_open};
 use crate::library_index::LibraryDb;
 use crate::quit;
 use crate::schema::{parse_board, parse_board_json, Board, Card, BOARD_VERSION};
@@ -122,6 +122,18 @@ fn ensure_from_legacy(db: &Path, legacy: &Path) -> Result<bool, String> {
   Ok(true)
 }
 
+/// A board read without writing anything, not even a legacy board's migration.
+pub(crate) fn peek_board(boards: &Path, id: &str) -> Result<Option<Board>, String> {
+  if !valid_board_id(id) {
+    return Err(format!("Not a usable board id: {id:?}"));
+  }
+  let db = boards.join(format!("{id}.sqlite"));
+  if db.exists() {
+    return reassemble_board(&open_read_only(&db)?).map(Some);
+  }
+  read_opt(boards.join(format!("{id}.json")))?.map(|json| parse_board_json(&json)).transpose()
+}
+
 #[tauri::command(async)]
 pub fn load_board(app: AppHandle, id: String) -> Result<Option<Board>, String> {
   board_db(&app, &id)?.map(|db| read_board_db(&db)).transpose()
@@ -167,7 +179,7 @@ fn create_board_dbs<'a>(boards: impl IntoIterator<Item = (&'a Path, &'a Board)>)
 }
 
 /// Refuses a database that already exists, and leaves none behind when the write fails.
-pub(super) fn create_board_db(path: &Path, board: &Board) -> Result<(), String> {
+pub(crate) fn create_board_db(path: &Path, board: &Board) -> Result<(), String> {
   if path.exists() {
     return Err("That board already exists.".into());
   }

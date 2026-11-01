@@ -6,7 +6,8 @@ Emails can be pulled in as first-class cards; images — a photograph, or a
 screenshot of a text thread whose words are read back out — become evidence cards.
 
 A macOS app, built with Tauri. Entirely local — no backend, no accounts, no
-network; nothing you pin here leaves the machine.
+network; nothing you pin here leaves the machine unless you turn on the
+[Library MCP](#library-mcp) and connect an AI client to it.
 
 ## Running it
 
@@ -680,6 +681,51 @@ author, an attachment's name) plus their dates; and because one photograph can
 belong to many objects at once — a launch-day group shot lands on everyone in it —
 it finds that image by any of them and shows how many share it.
 
+## Library MCP
+
+The app can serve this library, read-only, to an AI client on the same Mac. It is
+off by default. When on, it listens on loopback only, at
+`http://127.0.0.1:8793/mcp` (Streamable HTTP), and every request needs a bearer
+token. It reads the board files and the search index directly, so it does not get
+in the way of an open board.
+
+Turn it on under **File ▸ Library MCP…** (*Serve this library over MCP*). The
+setting sticks, so it starts again at launch. The same dialog shows the URL and
+the token, each with **Copy**, and **Rotate token**, which turns the old token away
+at once. While it is on, the toolbar shows **MCP on**, and clicking that opens the
+dialog.
+
+To connect a client, give it the URL and an `Authorization` header. Most clients
+take something of this shape; check yours for the exact format:
+
+```json
+{
+  "mcpServers": {
+    "conspiracy": {
+      "type": "http",
+      "url": "http://127.0.0.1:8793/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+The tools: `list_boards` (every board, newest first), `board_summary` (title and
+counts), `list_cards` (in brief, filtered by kind or text), `get_card` (one card
+in full), `list_connections` (the strings), `list_clusters`, `search_library`
+(full-text over extracted file text) and `media_text` (one file's extracted
+text).
+
+- **It cannot write.** No tool changes a board, a card or the index.
+- **The token changes on every relaunch**, as well as on Rotate, so a client needs
+  the new one each time.
+- **A taken port is not worked around.** If something else holds 8793 the toolbar
+  shows **MCP stopped**, and the dialog shows why, with a **Retry**.
+
+This is separate from the dev harness on 8792
+([Driving it from Claude Code](#driving-it-from-claude-code)), which is never in
+a release build.
+
 ## Desktop
 
 `src-tauri/` is the shell the UI runs inside. It is deliberately thin — it holds
@@ -696,6 +742,8 @@ what a webview cannot do for itself, and nothing else:
   for switching surface — the webview lists the boards for it and turns its clicks
   into store calls. *Show Inbox Folder* is the exception: a fixed path the shell
   reveals itself, no round-trip.
+- **`library_mcp.rs`** serves the [Library MCP](#library-mcp): read-only tools
+  over loopback that read the board files and the search index directly.
 
 Everything reaching them goes through `src/platform/` and `src/storage/`. Nothing
 else in `src/` knows the shell is there. The payload types are generated from the

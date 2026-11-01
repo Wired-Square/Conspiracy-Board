@@ -6,6 +6,7 @@ mod file_types;
 mod import;
 mod jobs;
 mod library_index;
+mod library_mcp;
 mod mail;
 #[cfg(feature = "mcp")]
 mod mcp;
@@ -78,6 +79,10 @@ pub fn run() {
       library_index::reindex_all,
       library_index::jobs_pending,
       library_index::index_statuses,
+      library_mcp::lifecycle::library_mcp_status,
+      library_mcp::lifecycle::enable_library_mcp,
+      library_mcp::lifecycle::disable_library_mcp,
+      library_mcp::lifecycle::rotate_library_mcp_token,
       menu::set_board_menu,
     ])
     .on_menu_event(menu::on_event)
@@ -112,6 +117,7 @@ pub fn run() {
         Err(e) => return Err(e.into()),
       }
       app.manage(library_index::start_worker(app.handle()));
+      library_mcp::lifecycle::manage_and_resume(app.handle())?;
 
       // Watch the Inbox drop-folder — the one automatic way in. Mail dragged to
       // Finder becomes one .eml per message, which this hands to the importer;

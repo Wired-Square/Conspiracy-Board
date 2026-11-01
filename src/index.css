@@ -138,6 +138,31 @@ body {
   white-space: nowrap;
 }
 
+/* Shown only while the library MCP is on; red when it is on but not listening. */
+.mcp-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mcp-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6fae6f;
+}
+
+.mcp-indicator.is-error {
+  border-color: var(--string);
+  background: rgba(200, 64, 47, 0.16);
+}
+
+.mcp-indicator.is-error .mcp-indicator__dot {
+  background: var(--string);
+}
+
 /* Grows to fill the middle of the row, pushing the actions to the right without
    the actions rule having to know it's there. */
 .toolbar__search {
@@ -1841,6 +1866,30 @@ button:disabled {
   font-size: 0.75rem;
   color: var(--ink);
   background: rgba(200, 64, 47, 0.12);
+}
+
+.library-mcp__warn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.library-mcp__value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.library-mcp__value code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  background: #2a2015;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
 }
 
 /* Thumbnail grid of pictures already on the board — the object picker's grid (see

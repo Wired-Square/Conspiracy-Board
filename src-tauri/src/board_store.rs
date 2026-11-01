@@ -27,6 +27,9 @@ pub mod session;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
+
+use rusqlite::{Connection, OpenFlags};
 use tauri::{AppHandle, Manager};
 
 use wslib_file_atomic::{Options, Readers};
@@ -73,6 +76,15 @@ fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
     Err(e) => Err(format!("Could not read {}: {e}", path.display())),
   }
+}
+
+/// A connection that cannot write, for a reader beside the open session.
+pub(crate) fn open_read_only(path: &Path) -> Result<Connection, String> {
+  let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+  let failed = |e: rusqlite::Error| format!("Could not open {}: {e}", path.display());
+  let conn = Connection::open_with_flags(path, flags).map_err(failed)?;
+  conn.busy_timeout(Duration::from_secs(5)).map_err(failed)?;
+  Ok(conn)
 }
 
 /// How media files are written: staged beside the target as
@@ -132,7 +144,7 @@ fn run_open(args: &[&std::ffi::OsStr], cannot: &str, refused: &str) -> Result<()
 }
 
 #[cfg(test)]
-fn temp_dir_for(name: &str) -> PathBuf {
+pub(crate) fn temp_dir_for(name: &str) -> PathBuf {
   let dir = std::env::temp_dir().join(format!("conspiracy-test-{}-{name}", std::process::id()));
   let _ = std::fs::remove_dir_all(&dir);
   std::fs::create_dir_all(&dir).unwrap();

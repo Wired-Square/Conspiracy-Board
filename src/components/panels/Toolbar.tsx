@@ -17,6 +17,7 @@ import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '../fromStore';
 import { createDebounced } from '../createDebounced';
 import { Menu } from '../ui/Menu';
+import { LibraryMcpIndicator } from '../LibraryMcpIndicator';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
 
@@ -136,6 +137,7 @@ export function Toolbar() {
               (src-tauri/src/menu.rs); autosave means there is no Save item to
               miss. A failed save is what's worth showing — the strip below. */}
         </div>
+        <LibraryMcpIndicator />
       </div>
       <Show when={lastError()}>
         <div class="toolbar__error" role="alert">

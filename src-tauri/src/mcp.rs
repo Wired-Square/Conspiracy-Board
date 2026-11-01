@@ -1,7 +1,6 @@
 //! The development harness: an MCP server on loopback that reads app state and
 //! drives the window's DOM over Tauri events. Never in a release build.
 
-use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,15 +11,14 @@ use rmcp::{tool, tool_router, ErrorData};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, Wry};
 use wslib_mcp::dom::{self, DomBridge, BRIDGE_TIMEOUT};
-use wslib_mcp::http::{self, ClientPolicy, HostPolicy, HttpConfig};
 use wslib_mcp::result::{ok_json, tool_error};
 use wslib_mcp::rmcp;
 use wslib_mcp::router::mark_read_only;
 use wslib_mcp::server::{ServerIdentity, ToolServer};
 use wslib_mcp::tauri_bridge::TauriBridge;
-use wslib_mcp::CancellationToken;
 
 use crate::jobs::Jobs;
+use crate::library_mcp::{random_token, serve_loopback};
 
 const PORT: u16 = 8792;
 
@@ -35,8 +33,10 @@ fn try_start(app: &AppHandle) -> Result<(), String> {
     Ok(token) if !token.is_empty() => token,
     _ => random_token()?,
   };
-  let listener = http::bind_with_retry(SocketAddr::from(([127, 0, 0, 1], PORT)), Duration::from_secs(2))
-    .map_err(|e| e.to_string())?;
+  let tools = Tools { page: TauriBridge::new(app), jobs: app.state::<Arc<Jobs>>().inner().clone() };
+  let router = Arc::new(Tools::router());
+  let identity = Tools::identity();
+  serve_loopback(PORT, token.clone(), move || ToolServer::new(tools.clone(), router.clone(), identity.clone()))?;
 
   let url = format!("http://127.0.0.1:{PORT}/mcp");
   // Not the app's data directory, which macOS guards from a terminal.
@@ -45,31 +45,8 @@ fn try_start(app: &AppHandle) -> Result<(), String> {
     .create_parents(true)
     .write(&handoff, json!({ "url": url, "token": token }).to_string().as_bytes())
     .map_err(|e| format!("{}: {e}", handoff.display()))?;
-
-  let tools = Tools { page: TauriBridge::new(app), jobs: app.state::<Arc<Jobs>>().inner().clone() };
-  let router = Arc::new(Tools::router());
-  let identity = Tools::identity();
-  let config = HttpConfig {
-    bearer_token: Some(token),
-    allowed_hosts: HostPolicy::Loopback,
-    allowed_clients: ClientPolicy::Loopback,
-    allowed_origins: http::loopback_origins(PORT),
-    ..HttpConfig::default()
-  };
-  let factory = move || ToolServer::new(tools.clone(), router.clone(), identity.clone());
-  tauri::async_runtime::spawn(async move {
-    if let Err(e) = http::serve(listener, factory, config, CancellationToken::new()).await {
-      log::warn!("[mcp] server stopped: {e}");
-    }
-  });
   log::info!("[mcp] dev server on {url}; token in {}", handoff.display());
   Ok(())
-}
-
-fn random_token() -> Result<String, String> {
-  let mut bytes = [0u8; 24];
-  getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
-  Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 #[derive(Clone)]
@@ -140,13 +117,5 @@ mod tests {
     ]
     .map(|(name, read_only)| (name.to_string(), read_only));
     assert_eq!(tools, expected);
-  }
-
-  #[test]
-  fn a_token_is_48_hex_digits_and_fresh_each_time() {
-    let token = random_token().unwrap();
-    assert_eq!(token.len(), 48);
-    assert!(token.bytes().all(|b| b.is_ascii_hexdigit()));
-    assert_ne!(token, random_token().unwrap());
   }
 }
