@@ -14,7 +14,7 @@ import { NEW_CARD, choiceFor, planOffer, type Choice } from '../../lib/importOff
 import { formatOccurredAt } from '../../lib/dates';
 import { storage } from '../../storage';
 import type { Card } from '../../types/board';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 export function EmailImportModal() {
   // Mounted only while open (see App), so there is no self-hide guard here and

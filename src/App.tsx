@@ -18,7 +18,7 @@ import { RecordView } from './components/record/RecordView';
 import { ObjectView } from './components/maintenance/ObjectView';
 import { UndoToast } from './components/ui/UndoToast';
 import { PromptHost } from './components/ui/PromptModal';
-import { fromStore } from './components/fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { startInbox } from './platform/inbox';
 import { startUndoShortcut } from './platform/undoShortcut';
 import { startBoardMenu } from './platform/boardMenu';

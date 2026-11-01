@@ -1,7 +1,7 @@
 import { Show, createSignal, onMount } from 'solid-js';
 import { Modal } from './Modal';
 import { promptStore, type PromptRequest } from '../../store/promptStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 /**
  * Renders the one active prompt/confirm request (see promptStore) on the shared

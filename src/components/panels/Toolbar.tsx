@@ -14,7 +14,7 @@ import { camera } from '../board/camera';
 import { boardStore } from '../../store/boardStore';
 import { emailImportStore } from '../../store/emailImportStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
 import { Menu } from '../ui/Menu';
 import { LibraryMcpIndicator } from '../LibraryMcpIndicator';

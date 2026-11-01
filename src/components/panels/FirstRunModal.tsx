@@ -4,7 +4,7 @@
 import logo from '../../../src-tauri/icons/icon.svg';
 import { Show } from 'solid-js';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 // The first-run choice, shown only when the library is genuinely empty (see
 // boardStore.firstRun). The app never seeds a board on its own — least of all the

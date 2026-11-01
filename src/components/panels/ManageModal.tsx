@@ -4,7 +4,7 @@ import { storage } from '../../storage';
 import { prompt, confirm } from '../../store/promptStore';
 import { errorMessage } from '../../lib/errors';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 // Managing the open board — rename it, reveal its file, or delete it — gathered
 // into one dialog rather than three separate File-menu items. The rename and

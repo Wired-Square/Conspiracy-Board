@@ -10,7 +10,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { MediaIcon } from '../ui/MediaIcon';
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox

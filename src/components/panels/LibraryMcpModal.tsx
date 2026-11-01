@@ -4,7 +4,7 @@ import { errorMessage } from '../../lib/errors';
 import { libraryMcp, type LibraryMcpStatus } from '../../platform/libraryMcp';
 import { closeDialog } from '../../store/dialogStore';
 import { libraryMcpStore, setLibraryMcpStatus } from '../../store/libraryMcpStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 export function LibraryMcpModal() {
   const status = fromStore(libraryMcpStore, (s) => s.status);

@@ -23,11 +23,11 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@wired-square/canvas": "0.1.0",
     "@wired-square/kit": "0.3.4",
+    "@wired-square/store": "file:/Users/alex/src/wired/wslib-ts/packages/store",
     "d3-force": "^3.0.0",
     "micromark": "4.0.2",
     "micromark-extension-gfm": "3.0.0",
-    "solid-js": "^1.9.18",
-    "zustand": "^4.5.0"
+    "solid-js": "^1.9.18"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.4",

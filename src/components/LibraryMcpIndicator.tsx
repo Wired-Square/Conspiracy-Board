@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { openDialog } from '../store/dialogStore';
 import { libraryMcpStore } from '../store/libraryMcpStore';
-import { fromStore } from './fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 export function LibraryMcpIndicator() {
   const status = fromStore(libraryMcpStore, (s) => s.status);

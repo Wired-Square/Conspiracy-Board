@@ -12,7 +12,7 @@ import { boardStore } from '../../store/boardStore';
 import { projectionStore } from '../canvas/projection';
 import type { CardNodeData, StringEdge, StringEdgeData } from '../../types/canvas';
 import type { Viewport } from '../../types/board';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { EvidenceCard } from './EvidenceCard';
 import { camera, setCamera, withFitWhenDrawn } from './camera';
 

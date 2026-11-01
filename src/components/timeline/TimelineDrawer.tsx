@@ -17,7 +17,7 @@ import { CARD_H, CARD_W } from '../../lib/layout';
 import type { Card, CardKind } from '../../types/board';
 import { camera } from '../board/camera';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
 import { createDocHits } from '../createDocHits';
 import { TimelineItem } from './TimelineItem';

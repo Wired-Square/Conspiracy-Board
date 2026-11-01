@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 import type { Card, Cluster, Connection } from '../../types/board';
 import type { CardNode, StringEdge, StringEdgeData } from '../../types/canvas';
 import { clusterColor, extraClusterColors, primaryClusterId } from '../../lib/clusters';
@@ -89,7 +89,7 @@ export function reconcileEdges(prev: StringEdge[], connections: Connection[]): S
 
 type ProjectionState = { nodes: CardNode[]; edges: StringEdge[] };
 
-export const projectionStore = createStore<ProjectionState>()(() => {
+export const projectionStore = createStore<ProjectionState>(() => {
   const { cards, clusters, connections } = boardStore.getState();
   return { nodes: reconcileNodes([], clusters, cards, clusters), edges: reconcileEdges([], connections) };
 });

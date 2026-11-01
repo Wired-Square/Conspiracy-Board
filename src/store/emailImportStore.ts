@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 import type { EmailDraft } from '../bindings/EmailDraft';
 import type { EmailParse } from '../bindings/EmailParse';
 import { emailCardsByMessageId } from '../lib/email/meta';
@@ -53,7 +53,7 @@ type EmailImportState = {
   commit: (offer: Pick<OfferPlan, 'entityDrafts' | 'patches'>) => Promise<{ addedIds: string[]; drawnIds: string[] }>;
 };
 
-export const emailImportStore = createStore<EmailImportState>()((set, get) => {
+export const emailImportStore = createStore<EmailImportState>((set, get) => {
   // Clears any previous result, so a re-parse in the same modal session doesn't
   // re-render the old preview on every progress tick.
   const parse = async (run: () => Promise<EmailParse>) => {

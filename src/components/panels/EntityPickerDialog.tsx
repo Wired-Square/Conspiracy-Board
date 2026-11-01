@@ -5,7 +5,7 @@ import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
 import { Modal } from '../ui/Modal';
 import { autofocus } from '../ui/autofocus';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 /** A "＋ New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */

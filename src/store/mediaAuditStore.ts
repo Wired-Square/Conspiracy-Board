@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 import { boardStore } from './boardStore';
 import { storage } from '../storage';
 import { cardMediaEntries } from '../lib/media';
@@ -29,7 +29,7 @@ type MediaAuditState = {
   refresh: () => Promise<void>;
 };
 
-export const mediaAuditStore = createStore<MediaAuditState>()((set) => ({
+export const mediaAuditStore = createStore<MediaAuditState>((set) => ({
   rows: [],
   loading: true,
   error: null,
