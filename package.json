@@ -23,7 +23,7 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@wired-square/canvas": "0.1.0",
     "@wired-square/kit": "0.3.4",
-    "@wired-square/store": "file:/Users/alex/src/wired/wslib-ts/packages/store",
+    "@wired-square/store": "^0.1.0",
     "d3-force": "^3.0.0",
     "micromark": "4.0.2",
     "micromark-extension-gfm": "3.0.0",

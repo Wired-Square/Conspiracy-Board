@@ -21,8 +21,8 @@ importers:
         specifier: 0.3.4
         version: 0.3.4(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))
       '@wired-square/store':
-        specifier: file:/Users/alex/src/wired/wslib-ts/packages/store
-        version: file:../wslib-ts/packages/store(solid-js@1.9.18)
+        specifier: ^0.1.0
+        version: 0.1.0(solid-js@1.9.18)
       d3-force:
         specifier: ^3.0.0
         version: 3.0.0
@@ -680,8 +680,8 @@ packages:
       '@tauri-apps/api':
         optional: true
 
-  '@wired-square/store@file:../wslib-ts/packages/store':
-    resolution: {directory: ../wslib-ts/packages/store, type: directory}
+  '@wired-square/store@0.1.0':
+    resolution: {integrity: sha512-T73lWFjIzmm5j7PhwK/C+yZO9N8v8MZSAAaOqt4OviOpUuyzCovLeXmAHDBIJIiTqkZ+s011X+phbKuNfJdIig==}
     peerDependencies:
       react: ^19.0.0
       solid-js: ^1.9.11
@@ -1707,7 +1707,7 @@ snapshots:
     optionalDependencies:
       '@tauri-apps/api': 2.12.4
 
-  '@wired-square/store@file:../wslib-ts/packages/store(solid-js@1.9.18)':
+  '@wired-square/store@0.1.0(solid-js@1.9.18)':
     optionalDependencies:
       solid-js: 1.9.18
 
