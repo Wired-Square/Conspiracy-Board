@@ -27,7 +27,7 @@ use crate::jobs::Jobs;
 /// The extractors and their versions. Bump it when an extractor changes (a better OCR
 /// engine, say) and `pending_media` re-enqueues every file indexed under an older
 /// string, so the whole library re-reads on the next launch.
-const ENGINE: &str = "pdf:lopdf-0.34;ooxml;ocr:vision-1;plain;v1";
+const ENGINE: &str = "pdf:lopdf-0.46+vision-ocr;ooxml;ocr:vision-1;plain;v1";
 
 /// How many times a file that keeps failing is retried automatically before it is left
 /// alone. A manual reindex (force) always tries again regardless.

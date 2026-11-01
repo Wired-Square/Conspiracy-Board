@@ -10,6 +10,7 @@
 
 use objc2::rc::autoreleasepool;
 use objc2::AllocAnyThread;
+use objc2_core_graphics::CGImage;
 use objc2_foundation::{NSArray, NSData, NSDictionary};
 use objc2_vision::{
   VNImageRequestHandler, VNRecognizeTextRequest, VNRecognizedTextObservation, VNRequest,
@@ -31,7 +32,20 @@ fn recognise_in_pool(bytes: &[u8]) -> String {
   let options = NSDictionary::new();
   let handler =
     VNImageRequestHandler::initWithData_options(VNImageRequestHandler::alloc(), &data, &options);
+  recognise_with(&handler)
+}
 
+/// The same for an image already decoded, such as a rendered PDF page. The caller
+/// holds the autorelease pool.
+pub fn recognise_image(image: &CGImage) -> String {
+  let options = NSDictionary::new();
+  let handler = unsafe {
+    VNImageRequestHandler::initWithCGImage_options(VNImageRequestHandler::alloc(), image, &options)
+  };
+  recognise_with(&handler)
+}
+
+fn recognise_with(handler: &VNImageRequestHandler) -> String {
   let request = VNRecognizeTextRequest::new();
   // Accurate over Fast: a chat screenshot is dense small text, and this runs once
   // at import, not per frame. Language correction fixes the obvious slips.

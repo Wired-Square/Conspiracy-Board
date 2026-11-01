@@ -68,38 +68,70 @@ fn cap(mut s: String) -> String {
   s
 }
 
-// ---- PDF (lopdf) ----
+// ---- PDF (lopdf, then PDFKit and Vision for what it can't read) ----
 
+/// A page whose text layer has fewer visible characters than this is read as a scan.
+const SCANNED_PAGE_CHARS: usize = 20;
+/// The most pages of one PDF we OCR, so one huge scan can't hold the indexer for long.
+const MAX_OCR_PAGES: usize = 200;
+
+#[cfg(target_os = "macos")]
 fn pdf_text(bytes: &[u8]) -> ExtractOutcome {
-  let doc = match lopdf::Document::load_mem(bytes) {
-    Ok(d) => d,
-    Err(e) => return ExtractOutcome::Failed(format!("The PDF wouldn't parse: {e}")),
+  use crate::pdf_kit::PdfKitDocument;
+
+  let (mut pages, kit) = match lopdf::Document::load_mem(bytes) {
+    Ok(doc) => (text_layer(&doc), None),
+    Err(e) => match PdfKitDocument::open(bytes) {
+      Some(kit) => ((0..kit.page_count()).map(|i| kit.page_text(i)).collect(), Some(kit)),
+      None => return unparsable(e),
+    },
   };
-  let pages: Vec<u32> = doc.get_pages().keys().copied().collect();
-  let mut text = String::new();
-  // In batches, so a single unreadable page doesn't cost the whole batch — a batch
-  // that errors is retried page by page — and with an overall cap for a huge file.
-  for batch in pages.chunks(50) {
-    if text.len() >= MAX_TEXT_BYTES {
-      break;
-    }
-    match doc.extract_text(batch) {
-      Ok(t) => push_page(&mut text, &t),
-      Err(_) => {
-        for &page in batch {
-          if let Ok(t) = doc.extract_text(&[page]) {
-            push_page(&mut text, &t);
-          }
+  let scanned: Vec<usize> =
+    (0..pages.len()).filter(|&i| visible_chars(&pages[i]) < SCANNED_PAGE_CHARS).take(MAX_OCR_PAGES).collect();
+  if !scanned.is_empty() {
+    if let Some(kit) = kit.or_else(|| PdfKitDocument::open(bytes)) {
+      for i in scanned {
+        let read = kit.read_page(i);
+        if visible_chars(&read) > visible_chars(&pages[i]) {
+          pages[i] = read;
         }
       }
     }
   }
-  ExtractOutcome::Text(cap(text))
+  ExtractOutcome::Text(cap(pages.join("\n")))
 }
 
-fn push_page(text: &mut String, page: &str) {
-  text.push_str(page);
-  text.push('\n');
+#[cfg(not(target_os = "macos"))]
+fn pdf_text(bytes: &[u8]) -> ExtractOutcome {
+  match lopdf::Document::load_mem(bytes) {
+    Ok(doc) => ExtractOutcome::Text(cap(text_layer(&doc).join("\n"))),
+    Err(e) => unparsable(e),
+  }
+}
+
+fn unparsable(e: lopdf::Error) -> ExtractOutcome {
+  ExtractOutcome::Failed(format!("The PDF wouldn't parse: {e}"))
+}
+
+/// Each page's text, in order, stopping once the cap is reached. A page that won't
+/// read is empty, so it doesn't cost the rest.
+fn text_layer(doc: &lopdf::Document) -> Vec<String> {
+  let mut total = 0;
+  doc
+    .get_pages()
+    .keys()
+    .map_while(|&page| {
+      (total < MAX_TEXT_BYTES).then(|| {
+        let text = doc.extract_text(&[page]).unwrap_or_default();
+        total += text.len();
+        text
+      })
+    })
+    .collect()
+}
+
+fn visible_chars(text: &str) -> usize {
+  text.chars().filter(|c| !c.is_whitespace()).count()
 }
 
 // ---- Office / OOXML (zip + quick-xml) ----
@@ -201,6 +233,99 @@ mod tests {
   #[test]
   fn a_broken_pdf_fails_rather_than_panics() {
     assert!(matches!(extract_text(b"%PDF-1.4 not really a pdf", "pdf"), ExtractOutcome::Failed(_)));
+  }
+
+  enum TestPage<'a> {
+    Typed(&'a str),
+    Scanned(&'a str),
+  }
+
+  /// Objects 1-4 are the catalog, page tree, info and font; each page follows as its
+  /// page object, its content stream and, for a scan, its image. The xref entries end
+  /// in a bare newline, as Haru writes them.
+  fn pdf_of(pages: &[TestPage]) -> Vec<u8> {
+    let mut objects = vec![
+      String::new(),
+      String::new(),
+      "<< /Producer (test) >>".to_string(),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+    ];
+    let mut kids = Vec::new();
+    for page in pages {
+      let page_id = objects.len() + 1;
+      kids.push(format!("{page_id} 0 R"));
+      let (content, resources, image) = match page {
+        TestPage::Typed(text) => (format!("BT /F1 24 Tf 20 40 Td ({text}) Tj ET"), "/Font << /F1 4 0 R >>".to_string(), None),
+        TestPage::Scanned(text) => (
+          "q 400 0 0 100 0 0 cm /Im1 Do Q".to_string(),
+          format!("/XObject << /Im1 {} 0 R >>", page_id + 2),
+          Some(scanned_image_of(text)),
+        ),
+      };
+      objects.push(format!(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Contents {} 0 R /Resources << {resources} >> >>",
+        page_id + 1
+      ));
+      objects.push(format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()));
+      objects.extend(image);
+    }
+    objects[0] = "<< /Type /Catalog /Pages 2 0 R >>".to_string();
+    objects[1] = format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), kids.len());
+
+    let mut pdf = b"%PDF-1.3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+      offsets.push(pdf.len());
+      pdf.extend(format!("{} 0 obj\n{body}\nendobj\n", i + 1).bytes());
+    }
+    let (xref_at, size) = (pdf.len(), objects.len() + 1);
+    pdf.extend(format!("xref\n0 {size}\n0000000000 65535 f\n").bytes());
+    for offset in offsets {
+      pdf.extend(format!("{offset:010} 00000 n\n").bytes());
+    }
+    pdf.extend(format!("trailer\n<< /Root 1 0 R /Info 3 0 R /Size {size} >>\nstartxref\n{xref_at}\n%%EOF\n").bytes());
+    pdf
+  }
+
+  /// A typed page rendered to grey pixels and embedded as an image: legible text with
+  /// no font and no text layer, which is what a scanner writes.
+  fn scanned_image_of(text: &str) -> String {
+    let typed = pdf_of(&[TestPage::Typed(text)]);
+    let (width, height, pixels) =
+      crate::pdf_kit::PdfKitDocument::open(&typed).and_then(|kit| kit.render_grey(0)).expect("the typed page renders");
+    let hex: String = pixels.iter().map(|p| format!("{p:02x}")).collect();
+    format!(
+      "<< /Type /XObject /Subtype /Image /Width {width} /Height {height} /ColorSpace /DeviceGray \
+       /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length {} >>\nstream\n{hex}>\nendstream",
+      hex.len() + 1
+    )
+  }
+
+  #[test]
+  fn reads_a_pdf_whose_xref_entries_end_in_a_bare_newline() {
+    let pdf = pdf_of(&[TestPage::Typed("Hello trailer")]);
+    assert!(text_of(extract_text(&pdf, "pdf")).contains("Hello trailer"));
+  }
+
+  #[test]
+  fn reads_a_scanned_page_through_ocr() {
+    let text = text_of(extract_text(&pdf_of(&[TestPage::Scanned("Scanned words")]), "pdf"));
+    assert!(text.contains("Scanned words"), "OCR text was {text:?}");
+  }
+
+  #[test]
+  fn reads_a_mixed_pdf_page_by_page_in_order() {
+    let pdf = pdf_of(&[TestPage::Typed("Typed words from the text layer"), TestPage::Scanned("Scanned words")]);
+    let text = text_of(extract_text(&pdf, "pdf"));
+    let typed = text.find("Typed words from the text layer").expect("typed page text");
+    let scanned = text.find("Scanned words").unwrap_or_else(|| panic!("no scanned page text in {text:?}"));
+    assert!(typed < scanned, "pages out of order in {text:?}");
+  }
+
+  #[test]
+  fn pdf_kit_reads_the_text_layer_lopdf_would() {
+    let kit = crate::pdf_kit::PdfKitDocument::open(&pdf_of(&[TestPage::Typed("Kit words")])).expect("PDFKit opens it");
+    assert!(kit.page_text(0).contains("Kit words"));
   }
 
   #[test]
