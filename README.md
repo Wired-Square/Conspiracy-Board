@@ -717,8 +717,8 @@ in full), `list_connections` (the strings), `list_clusters`, `search_library`
 text).
 
 - **It cannot write.** No tool changes a board, a card or the index.
-- **The token changes on every relaunch**, as well as on Rotate, so a client needs
-  the new one each time.
+- **The token is kept in your Keychain**, so a client's config survives a relaunch.
+  It changes only on Rotate, and a client needs the new one then.
 - **A taken port is not worked around.** If something else holds 8793 the toolbar
   shows **MCP stopped**, and the dialog shows why, with a **Retry**.
 

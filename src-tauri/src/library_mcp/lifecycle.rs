@@ -2,10 +2,11 @@
 //! when the setting is on, and on enable; stopped on disable; restarted on a new token.
 
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, State};
+use wslib_secret::{Secret, SecretStore};
 
 use super::{random_token, start, Listening, PORT};
 use crate::board_store::board_index::{library_mcp_enabled, set_library_mcp_enabled};
@@ -14,6 +15,8 @@ use crate::library_index::LibraryDb;
 
 const CHANGED: &str = "library-mcp:changed";
 const STOP_WAIT: Duration = Duration::from_secs(2);
+const TOKEN_SERVICE: &str = "com.wiredsquare.conspiracy";
+const TOKEN_ACCOUNT: &str = "library-mcp-token";
 
 #[derive(Debug, PartialEq, serde::Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -32,13 +35,16 @@ type Reply = Result<LibraryMcpStatus, String>;
 pub(crate) struct LibraryMcp {
   library: PathBuf,
   port: u16,
+  store: Arc<dyn SecretStore>,
+  /// Serialises the changes and is held across the store, which can wait on a Keychain
+  /// prompt; `status` takes only `listener`, so a prompt never holds it up.
+  changing: Mutex<()>,
   listener: Mutex<Listener>,
 }
 
 #[derive(Default)]
 struct Listener {
-  // For this launch only until wslib-secret can keep it in the Keychain (D4).
-  token: Option<String>,
+  token: Option<Secret>,
   running: Option<Listening>,
   error: Option<String>,
 }
@@ -49,15 +55,42 @@ impl Listener {
       log::warn!("[library-mcp] the old server is still closing its connections");
     }
   }
+
+  fn fail(&mut self, error: String) {
+    log::warn!("[library-mcp] {error}");
+    self.error = Some(error);
+  }
+}
+
+fn locked<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
+  mutex.lock().map_err(|_| "The library MCP is unavailable.".to_string())
 }
 
 impl LibraryMcp {
-  fn new(library: PathBuf, port: u16) -> Self {
-    Self { library, port, listener: Mutex::default() }
+  fn new(library: PathBuf, port: u16, store: Arc<dyn SecretStore>) -> Self {
+    Self { library, port, store, changing: Mutex::default(), listener: Mutex::default() }
   }
 
   fn lock(&self) -> Result<MutexGuard<'_, Listener>, String> {
-    self.listener.lock().map_err(|_| "The library MCP is unavailable.".to_string())
+    locked(&self.listener)
+  }
+
+  fn kept_or_new_token(&self) -> Result<Secret, String> {
+    if let Some(token) = self.lock()?.token.clone() {
+      return Ok(token);
+    }
+    let kept = self.store.load(TOKEN_SERVICE, TOKEN_ACCOUNT);
+    match kept.map_err(|e| format!("The token could not be read from the Keychain: {e}"))? {
+      Some(token) => Ok(token),
+      None => self.keep_new_token(),
+    }
+  }
+
+  fn keep_new_token(&self) -> Result<Secret, String> {
+    let token = Secret::new(random_token()?);
+    let saved = self.store.save(TOKEN_SERVICE, TOKEN_ACCOUNT, &token);
+    saved.map_err(|e| format!("The token could not be saved to the Keychain: {e}"))?;
+    Ok(token)
   }
 
   fn report(&self, listener: &Listener, db: &LibraryDb) -> Reply {
@@ -65,25 +98,18 @@ impl LibraryMcp {
       enabled: library_mcp_enabled(&*db.lock_db()?)?,
       running: listener.running.is_some(),
       url: format!("http://127.0.0.1:{}/mcp", self.port),
-      token: listener.token.clone(),
+      token: listener.token.as_ref().map(|token| token.expose().to_owned()),
       error: listener.error.clone(),
     })
   }
 
-  fn restart(&self, listener: &mut Listener) -> Result<(), String> {
+  fn restart(&self, listener: &mut Listener, token: Secret) {
     listener.stop();
-    let token = match &listener.token {
-      Some(token) => token.clone(),
-      None => listener.token.insert(random_token()?).clone(),
-    };
+    let token = listener.token.insert(token).expose().to_owned();
     match start(self.library.clone(), self.port, token) {
       Ok(listening) => (listener.running, listener.error) = (Some(listening), None),
-      Err(e) => {
-        log::warn!("[library-mcp] not started on {}: {e}", self.port);
-        listener.error = Some(e);
-      }
+      Err(e) => listener.fail(format!("Not started on port {}: {e}", self.port)),
     }
-    Ok(())
   }
 
   fn status(&self, db: &LibraryDb) -> Reply {
@@ -91,23 +117,31 @@ impl LibraryMcp {
   }
 
   fn resume(&self, db: &LibraryDb) -> Reply {
-    let mut listener = self.lock()?;
-    if library_mcp_enabled(&*db.lock_db()?)? {
-      self.restart(&mut listener)?;
-    }
-    self.report(&listener, db)
+    let _changing = locked(&self.changing)?;
+    let enabled = library_mcp_enabled(&*db.lock_db()?)?;
+    if enabled { self.serve(db) } else { self.status(db) }
   }
 
   fn enable(&self, db: &LibraryDb) -> Reply {
-    let mut listener = self.lock()?;
+    let _changing = locked(&self.changing)?;
     set_library_mcp_enabled(&*db.lock_db()?, true)?;
-    if listener.running.is_none() {
-      self.restart(&mut listener)?;
+    self.serve(db)
+  }
+
+  /// Also Retry's: a running server has the kept token, so an error a failed rotate left is past.
+  fn serve(&self, db: &LibraryDb) -> Reply {
+    let token = self.kept_or_new_token();
+    let mut listener = self.lock()?;
+    match token {
+      _ if listener.running.is_some() => listener.error = None,
+      Ok(token) => self.restart(&mut listener, token),
+      Err(e) => listener.fail(e),
     }
     self.report(&listener, db)
   }
 
   fn disable(&self, db: &LibraryDb) -> Reply {
+    let _changing = locked(&self.changing)?;
     let mut listener = self.lock()?;
     set_library_mcp_enabled(&*db.lock_db()?, false)?;
     listener.stop();
@@ -116,10 +150,13 @@ impl LibraryMcp {
   }
 
   fn rotate_token(&self, db: &LibraryDb) -> Reply {
+    let _changing = locked(&self.changing)?;
+    let token = self.keep_new_token();
     let mut listener = self.lock()?;
-    listener.token = Some(random_token()?);
-    if listener.running.is_some() {
-      self.restart(&mut listener)?;
+    match token {
+      Ok(token) if listener.running.is_some() => self.restart(&mut listener, token),
+      Ok(token) => listener.token = Some(token),
+      Err(e) => listener.fail(e),
     }
     self.report(&listener, db)
   }
@@ -134,7 +171,7 @@ fn announce(app: &AppHandle, status: Reply) -> Reply {
 
 /// Off the setup thread: a taken port holds `start` for its bind retry.
 pub(crate) fn manage_and_resume(app: &AppHandle) -> Result<(), String> {
-  app.manage(LibraryMcp::new(library_dir(app)?, PORT));
+  app.manage(LibraryMcp::new(library_dir(app)?, PORT, Arc::new(wslib_secret::Keychain)));
   let app = app.clone();
   tauri::async_runtime::spawn_blocking(move || {
     if let Err(e) = announce(&app, app.state::<LibraryMcp>().resume(&app.state::<LibraryDb>())) {
@@ -179,7 +216,11 @@ pub async fn rotate_library_mcp_token(app: AppHandle) -> Reply {
 mod tests {
   use std::io::{Read, Write};
   use std::net::{TcpListener, TcpStream};
-  use std::sync::Arc;
+  use std::sync::atomic::{AtomicBool, Ordering};
+  use std::sync::mpsc;
+  use std::thread;
+
+  use wslib_secret::{MemoryStore, StoreError};
 
   use super::*;
   use crate::board_store::temp_dir_for;
@@ -248,6 +289,70 @@ mod tests {
     tauri::async_runtime::block_on(command).unwrap().unwrap()
   }
 
+  fn in_memory(dir: &std::path::Path, port: u16) -> LibraryMcp {
+    LibraryMcp::new(dir.to_path_buf(), port, Arc::new(MemoryStore::default()))
+  }
+
+  fn kept(store: &dyn SecretStore) -> Option<String> {
+    let token = store.load(TOKEN_SERVICE, TOKEN_ACCOUNT).unwrap();
+    token.map(|token| token.expose().to_owned())
+  }
+
+  #[derive(Default)]
+  struct Failing {
+    failing: AtomicBool,
+    kept: MemoryStore,
+  }
+
+  impl Failing {
+    fn check(&self) -> Result<(), StoreError> {
+      match self.failing.load(Ordering::SeqCst) {
+        true => Err(StoreError::Denied),
+        false => Ok(()),
+      }
+    }
+  }
+
+  impl SecretStore for Failing {
+    fn load(&self, service: &str, account: &str) -> Result<Option<Secret>, StoreError> {
+      self.check()?;
+      self.kept.load(service, account)
+    }
+
+    fn save(&self, service: &str, account: &str, secret: &Secret) -> Result<(), StoreError> {
+      self.check()?;
+      self.kept.save(service, account, secret)
+    }
+
+    fn delete(&self, service: &str, account: &str) -> Result<(), StoreError> {
+      self.check()?;
+      self.kept.delete(service, account)
+    }
+  }
+
+  /// A load that waits, as one does on a Keychain prompt, until the test answers it.
+  struct Prompting {
+    asked: Mutex<mpsc::Sender<()>>,
+    answered: Mutex<mpsc::Receiver<()>>,
+    kept: MemoryStore,
+  }
+
+  impl SecretStore for Prompting {
+    fn load(&self, service: &str, account: &str) -> Result<Option<Secret>, StoreError> {
+      self.asked.lock().unwrap().send(()).unwrap();
+      self.answered.lock().unwrap().recv().unwrap();
+      self.kept.load(service, account)
+    }
+
+    fn save(&self, service: &str, account: &str, secret: &Secret) -> Result<(), StoreError> {
+      self.kept.save(service, account, secret)
+    }
+
+    fn delete(&self, service: &str, account: &str) -> Result<(), StoreError> {
+      self.kept.delete(service, account)
+    }
+  }
+
   fn token(status: &LibraryMcpStatus) -> &str {
     status.token.as_deref().unwrap()
   }
@@ -257,7 +362,7 @@ mod tests {
     let dir = temp_dir_for("library-mcp-toggle");
     let db = open_at(&dir).unwrap();
     let port = free_port();
-    let mcp = LibraryMcp::new(dir.clone(), port);
+    let mcp = in_memory(&dir, port);
     let off = mcp.status(&db).unwrap();
     assert_eq!((off.enabled, off.running, off.token, off.error), (false, false, None, None));
     assert_eq!(off.url, format!("http://127.0.0.1:{port}/mcp"));
@@ -270,6 +375,116 @@ mod tests {
     let off = mcp.disable(&db).unwrap();
     assert_eq!((off.enabled, off.running, off.token.as_deref()), (false, false, Some(token(&on))));
     assert!(!library_mcp_enabled(&*db.lock_db().unwrap()).unwrap());
+
+    let again = mcp.enable(&db).unwrap();
+    assert_eq!((again.running, token(&again)), (true, token(&on)));
+    assert_ne!(http_status(port, token(&on)), 401);
+    mcp.disable(&db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn the_kept_token_survives_a_relaunch() {
+    let dir = temp_dir_for("library-mcp-relaunch");
+    let (db, port) = (open_at(&dir).unwrap(), free_port());
+    let store = Arc::new(MemoryStore::default());
+    let launched = LibraryMcp::new(dir.clone(), port, store.clone());
+    let first = launched.enable(&db).unwrap();
+    assert_eq!(kept(&*store).as_deref(), Some(token(&first)));
+    launched.disable(&db).unwrap();
+    set_library_mcp_enabled(&*db.lock_db().unwrap(), true).unwrap();
+
+    let relaunched = LibraryMcp::new(dir.clone(), port, store);
+    let resumed = relaunched.resume(&db).unwrap();
+    assert_eq!((resumed.running, token(&resumed)), (true, token(&first)));
+    assert_ne!(http_status(port, token(&first)), 401);
+    relaunched.disable(&db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_rotated_token_is_kept_before_the_restart() {
+    let dir = temp_dir_for("library-mcp-rotate-kept");
+    let (db, port) = (open_at(&dir).unwrap(), free_port());
+    let store = Arc::new(MemoryStore::default());
+    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    let before = mcp.enable(&db).unwrap();
+    let after = mcp.rotate_token(&db).unwrap();
+    assert_ne!(token(&after), token(&before));
+    assert_eq!(kept(&*store).as_deref(), Some(token(&after)));
+    mcp.disable(&db).unwrap();
+    assert_eq!(kept(&*store).as_deref(), Some(token(&after)));
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_failing_store_shows_its_error_and_serves_no_token_it_cannot_keep() {
+    let dir = temp_dir_for("library-mcp-store-fails");
+    let (db, port) = (open_at(&dir).unwrap(), free_port());
+    let store = Arc::new(Failing::default());
+    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    store.failing.store(true, Ordering::SeqCst);
+    let refused = mcp.enable(&db).unwrap();
+    assert_eq!((refused.enabled, refused.running, refused.token), (true, false, None));
+    assert!(refused.error.unwrap().contains("denied"));
+
+    store.failing.store(false, Ordering::SeqCst);
+    let on = mcp.enable(&db).unwrap();
+    assert_eq!((on.running, &on.error), (true, &None));
+    store.failing.store(true, Ordering::SeqCst);
+    let unrotated = mcp.rotate_token(&db).unwrap();
+    assert_eq!((unrotated.running, token(&unrotated)), (true, token(&on)));
+    assert!(unrotated.error.unwrap().contains("denied"));
+    assert_ne!(http_status(port, token(&on)), 401);
+    mcp.disable(&db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn retry_after_a_failed_rotate_clears_the_error_and_keeps_serving() {
+    let dir = temp_dir_for("library-mcp-retry-rotate");
+    let (db, port) = (open_at(&dir).unwrap(), free_port());
+    let store = Arc::new(Failing::default());
+    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    let on = mcp.enable(&db).unwrap();
+    store.failing.store(true, Ordering::SeqCst);
+    assert!(mcp.rotate_token(&db).unwrap().error.is_some());
+
+    store.failing.store(false, Ordering::SeqCst);
+    let retried = mcp.enable(&db).unwrap();
+    assert_eq!((retried.running, token(&retried), &retried.error), (true, token(&on), &None));
+    assert_eq!(kept(&store.kept).as_deref(), Some(token(&on)));
+    assert_ne!(http_status(port, token(&on)), 401);
+    mcp.disable(&db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_keychain_prompt_at_launch_does_not_hold_up_the_status() {
+    let dir = temp_dir_for("library-mcp-prompt");
+    let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
+    set_library_mcp_enabled(&*db.lock_db().unwrap(), true).unwrap();
+    let (asked, prompted) = mpsc::channel();
+    let (answer, answered) = mpsc::channel();
+    let store = Prompting { asked: Mutex::new(asked), answered: Mutex::new(answered), kept: MemoryStore::default() };
+    let mcp = Arc::new(LibraryMcp::new(dir.clone(), port, Arc::new(store)));
+    let launch = thread::spawn({
+      let (mcp, db) = (mcp.clone(), db.clone());
+      move || mcp.resume(&db).unwrap()
+    });
+    prompted.recv().unwrap();
+
+    let (reply, replied) = mpsc::channel();
+    thread::spawn({
+      let (mcp, db) = (mcp.clone(), db.clone());
+      move || reply.send(mcp.status(&db).unwrap()).unwrap()
+    });
+    let waiting = replied.recv_timeout(Duration::from_secs(5)).expect("the status waited on the prompt");
+    assert_eq!((waiting.enabled, waiting.running, waiting.token), (true, false, None));
+
+    answer.send(()).unwrap();
+    assert!(launch.join().unwrap().running);
+    mcp.disable(&db).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
   }
 
@@ -278,7 +493,7 @@ mod tests {
     let dir = temp_dir_for("library-mcp-rotate");
     let db = open_at(&dir).unwrap();
     let port = free_port();
-    let mcp = LibraryMcp::new(dir.clone(), port);
+    let mcp = in_memory(&dir, port);
     let before = mcp.enable(&db).unwrap();
     let after = mcp.rotate_token(&db).unwrap();
     assert!(after.running);
@@ -294,12 +509,12 @@ mod tests {
     let dir = temp_dir_for("library-mcp-taken");
     let db = open_at(&dir).unwrap();
     let taken = TcpListener::bind("127.0.0.1:0").unwrap();
-    let mcp = LibraryMcp::new(dir.clone(), taken.local_addr().unwrap().port());
+    let mcp = in_memory(&dir, taken.local_addr().unwrap().port());
     let status = mcp.enable(&db).unwrap();
     assert_eq!((status.enabled, status.running), (true, false));
     assert!(status.error.is_some());
 
-    let relaunched = LibraryMcp::new(dir.clone(), taken.local_addr().unwrap().port());
+    let relaunched = in_memory(&dir, taken.local_addr().unwrap().port());
     let resumed = relaunched.resume(&db).unwrap();
     assert_eq!((resumed.enabled, resumed.running, resumed.error.is_some()), (true, false, true));
     let _ = std::fs::remove_dir_all(&dir);
@@ -309,7 +524,7 @@ mod tests {
   fn a_rotate_with_a_session_open_rebinds_and_drops_the_old_connection() {
     let dir = temp_dir_for("library-mcp-rotate-session");
     let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
-    let mcp = Arc::new(LibraryMcp::new(dir.clone(), port));
+    let mcp = Arc::new(in_memory(&dir, port));
     let before = as_a_command(&mcp, &db, LibraryMcp::enable);
     let session = held_event_stream(port, token(&before));
     let after = as_a_command(&mcp, &db, LibraryMcp::rotate_token);
@@ -325,7 +540,7 @@ mod tests {
   fn a_disable_with_a_session_open_frees_the_port_and_drops_the_connection() {
     let dir = temp_dir_for("library-mcp-disable-session");
     let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
-    let mcp = Arc::new(LibraryMcp::new(dir.clone(), port));
+    let mcp = Arc::new(in_memory(&dir, port));
     let on = as_a_command(&mcp, &db, LibraryMcp::enable);
     let session = held_event_stream(port, token(&on));
     assert!(!as_a_command(&mcp, &db, LibraryMcp::disable).running);

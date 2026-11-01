@@ -76,7 +76,7 @@ export function LibraryMcpModal() {
                 </button>
               </div>
               <span class="field__hint">
-                The token also changes each time Conspiracy relaunches, so a client needs the new one then.
+                The token is kept in your Keychain, so it stays the same across relaunches until you rotate it.
               </span>
             </div>
           </>

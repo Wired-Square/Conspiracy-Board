@@ -59,6 +59,8 @@ wslib-tauri = { version = "0.1.1", registry = "wired-square" }
 # getrandom is already in the tree through tauri.
 wslib-mcp = { version = "0.2.1", registry = "wired-square", features = ["http"] }
 getrandom = "0.3"
+# Keeps the library MCP token in the Keychain, so a client's config outlives a relaunch.
+wslib-secret = { version = "0.1.4", registry = "wired-square", features = ["keychain"] }
 
 [features]
 # `pnpm dev` turns it on; a release build refuses it (lib.rs).
