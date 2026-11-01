@@ -203,6 +203,39 @@ mod tests {
     assert!(matches!(extract_text(b"%PDF-1.4 not really a pdf", "pdf"), ExtractOutcome::Failed(_)));
   }
 
+  fn pdf_with_bare_newline_xref_entries(text: &str) -> Vec<u8> {
+    let content = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+    let objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+      "<< /Type /Pages /Kids [4 0 R] /Count 1 >>".to_string(),
+      "<< /Producer (test) >>".to_string(),
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R \
+       /Resources << /Font << /F1 6 0 R >> >> >>"
+        .to_string(),
+      format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+    ];
+    let mut pdf = b"%PDF-1.3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+      offsets.push(pdf.len());
+      pdf.extend(format!("{} 0 obj\n{body}\nendobj\n", i + 1).bytes());
+    }
+    let (xref_at, size) = (pdf.len(), objects.len() + 1);
+    pdf.extend(format!("xref\n0 {size}\n0000000000 65535 f\n").bytes());
+    for offset in offsets {
+      pdf.extend(format!("{offset:010} 00000 n\n").bytes());
+    }
+    pdf.extend(format!("trailer\n<< /Root 1 0 R /Info 3 0 R /Size {size} >>\nstartxref\n{xref_at}\n%%EOF\n").bytes());
+    pdf
+  }
+
+  #[test]
+  fn reads_a_pdf_whose_xref_entries_end_in_a_bare_newline() {
+    let pdf = pdf_with_bare_newline_xref_entries("Hello trailer");
+    assert!(text_of(extract_text(&pdf, "pdf")).contains("Hello trailer"));
+  }
+
   #[test]
   fn collects_word_run_text() {
     let xml = r#"<w:document><w:body><w:p>

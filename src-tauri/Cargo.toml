@@ -38,7 +38,7 @@ ureq = "2"
 # Info dictionary and page count; zip + quick-xml for Office (a .docx/.xlsx/.pptx
 # is a zip of XML — docProps/core.xml and app.xml); kamadak-exif + imagesize for a
 # photo's dimensions and EXIF (date taken, camera, GPS).
-lopdf = "0.34"
+lopdf = { version = "0.46", default-features = false }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 quick-xml = "0.37"
 kamadak-exif = "0.5"
