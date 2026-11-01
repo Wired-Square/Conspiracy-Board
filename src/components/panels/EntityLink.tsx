@@ -4,7 +4,7 @@ import { buildRoster, type AddressMatch, type Roster } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { EntityPickerDialog, type PickerCreateOption } from './EntityPickerDialog';
 
 // The badge + "Link…" + unlink UI, shared by the email view (matched by address)

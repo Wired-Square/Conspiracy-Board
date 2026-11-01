@@ -20,7 +20,7 @@ import { asPrimary, primaryClusterId, withMembership, withoutMembership } from '
 import { eventFor } from '../../lib/events';
 import { imageFacts } from '../../lib/mediaFacts';
 import type { Card, CardKind } from '../../types/board';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDraft } from '../createDraft';
 import { autofocus } from '../ui/autofocus';
 import { MarkdownView } from '../ui/MarkdownView';

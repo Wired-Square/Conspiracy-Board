@@ -15,7 +15,7 @@ import {
   type Geom,
 } from '../../lib/imageCrop';
 import type { ImageCrop } from '../../types/board';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 // What Save will store as the media file. An existing library file is kept and
 // only re-cropped; a picked file or a fetched URL is written from the held Blob on

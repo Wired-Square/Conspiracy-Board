@@ -5,7 +5,7 @@ import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { closeDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 /**
  * Choose what to bundle: this board, some boards, or the whole library. The chosen

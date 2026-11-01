@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { jobsStore } from '../store/jobsStore';
-import { fromStore } from './fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 // A small, non-blocking pill that background indexing is running — the search index
 // reading text out of imported files. Unlike BusyOverlay, it never covers the screen:

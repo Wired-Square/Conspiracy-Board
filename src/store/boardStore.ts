@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 import type { Board, Card, Cluster, Connection, Vec2, Viewport } from '../types/board';
 import { newCardId, newEdgeId, newClusterId, newBoardId } from '../lib/ids';
 import { setLocalCallingCode } from '../lib/phone';
@@ -248,7 +248,7 @@ export type BoardState = {
 // await the first instead of racing it.
 let initPromise: Promise<void> | undefined;
 
-export const boardStore = createStore<BoardState>()((set, get) => {
+export const boardStore = createStore<BoardState>((set, get) => {
   /** Send an edit for the open board; a refusal lands in lastError, as nothing else awaits it. */
   const send = (command: (boardId: string) => Promise<void>, onError?: () => void) => {
     const id = get().currentBoardId;

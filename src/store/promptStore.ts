@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 
 // A reusable "ask the user for something" dialog, promise-based so any caller —
 // including the native menu handler, which lives outside the UI — can `await
@@ -29,7 +29,7 @@ export type ConfirmRequest = Common & {
 
 export type PromptRequest = TextRequest | ConfirmRequest;
 
-export const promptStore = createStore<{ request: PromptRequest | null }>()(() => ({ request: null }));
+export const promptStore = createStore<{ request: PromptRequest | null }>(() => ({ request: null }));
 
 /** Show a request, cancel-resolving any it displaces so no awaiter is left hung. */
 function show(request: PromptRequest) {

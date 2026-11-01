@@ -5,7 +5,7 @@ import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 /**
  * What this card shares addresses with — derived, read-only, click to open.

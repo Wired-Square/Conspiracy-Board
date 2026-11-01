@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla';
+import { createStore } from '@wired-square/store';
 import type { Board } from '../types/board';
 
 // Which dialogs are open, held outside the UI so the native menu and the store can
@@ -24,7 +24,7 @@ const CLOSED: Dialogs = {
   bundleImportBoards: null,
 };
 
-export const dialogStore = createStore<Dialogs>()(() => CLOSED);
+export const dialogStore = createStore<Dialogs>(() => CLOSED);
 
 export function openDialog(open: Partial<Dialogs>): void {
   dialogStore.setState(open);

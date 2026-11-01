@@ -6,7 +6,7 @@ import { DEFAULT_BOARD_TITLE } from '../../data/emptyBoard';
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import { storage } from '../../storage';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDraft } from '../createDraft';
 
 export function BoardPropertiesModal(props: { onClose: () => void }) {

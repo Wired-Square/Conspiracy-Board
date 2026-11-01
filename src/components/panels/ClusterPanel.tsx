@@ -1,6 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDraft } from '../createDraft';
 import type { Cluster } from '../../types/board';
 

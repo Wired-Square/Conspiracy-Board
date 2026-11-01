@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 
 // A full-screen spinner with a line of text, for work the user has to wait on with
 // nothing else to look at — a bundle import storing its media (see importBoard).

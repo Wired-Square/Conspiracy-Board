@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal } from 'solid-js';
 import { touches } from '../../lib/connections';
 import { KIND_META } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { GradeField } from './GradeField';
 import { EntityPickerDialog } from './EntityPickerDialog';
 

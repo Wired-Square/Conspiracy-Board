@@ -9,7 +9,7 @@ import { mediaIconFor } from '../../lib/mediaIcon';
 import { boardStore } from '../../store/boardStore';
 import { jobsStore } from '../../store/jobsStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
-import { fromStore } from '../fromStore';
+import { fromStore } from '@wired-square/store/solid';
 import { createDocHits } from '../createDocHits';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
