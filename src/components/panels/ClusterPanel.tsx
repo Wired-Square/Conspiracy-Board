@@ -1,4 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
+import { Button, IconButton } from '@wired-square/kit';
+import { chevronDown, chevronRight, plus, trash } from '@wired-square/icons/solid';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDraft } from '../createDraft';
@@ -13,15 +15,15 @@ export function ClusterPanel() {
 
   return (
     <div class="cluster-panel">
-      <button class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
+      <Button tone="plain" class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
         <span class="panel-heading">Clusters</span>
-        <span aria-hidden="true">{open() ? '▾' : '▸'}</span>
-      </button>
+        {open() ? chevronDown() : chevronRight()}
+      </Button>
       <Show when={open()}>
         <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
-        <button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
-          + Add cluster
-        </button>
+        <Button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
+          {plus()} Add cluster
+        </Button>
       </Show>
     </div>
   );
@@ -45,10 +47,15 @@ function ClusterRow(props: { cluster: Cluster }) {
         onBlur={flushColor}
         title="Colour"
       />
-      <input class="cluster-label" value={label()} onInput={(e) => setLabel(e.currentTarget.value)} onBlur={flushLabel} />
-      <button class="cluster-delete" onClick={() => deleteCluster(id)} title="Delete cluster">
-        ×
-      </button>
+      <input
+        class="app-field__input cluster-label"
+        value={label()}
+        onInput={(e) => setLabel(e.currentTarget.value)}
+        onBlur={flushLabel}
+      />
+      <IconButton class="cluster-delete" label="Delete cluster" onClick={() => deleteCluster(id)}>
+        {trash()}
+      </IconButton>
     </div>
   );
 }

@@ -57,7 +57,7 @@ const replaceCard = (next: Card) =>
 const escape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!;
 const field = (label: string) =>
-  [...host.querySelectorAll<HTMLElement>('.field')].find((f) => f.firstElementChild?.textContent === label)!;
+  [...host.querySelectorAll<HTMLElement>('.field, .app-field')].find((f) => f.firstElementChild?.textContent === label)!;
 const type = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => {
   el.value = value;
   el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -68,13 +68,13 @@ const choose = (select: HTMLSelectElement, value: string) => {
 };
 
 test('the editor opens on the selection and closes on Escape', () => {
-  expect(host.querySelector('.modal')).toBeNull();
+  expect(host.querySelector('dialog')).toBeNull();
   open([card('a', { kind: 'document' })]);
   expect(field('Title').querySelector('input')!.value).toBe('a');
   expect(field('Kind').querySelector('select')!.value).toBe('document');
   escape();
   expect(actions.selectCard).toHaveBeenCalledWith(null);
-  expect(host.querySelector('.modal')).toBeNull();
+  expect(host.querySelector('dialog')).toBeNull();
 });
 
 test('the title commits when typing pauses, and to its own card when the selection moves', () => {
@@ -104,26 +104,26 @@ test('the notes preview renders the draft as markdown', () => {
 test('the grade picker shows the chosen grade’s definition', () => {
   open([card('a')]);
   const grade = field('Grade');
-  expect(grade.querySelector('.field__hint')!.textContent).toContain('Nobody has graded this yet');
+  expect(grade.querySelector('.app-field__note')!.textContent).toContain('Nobody has graded this yet');
   choose(grade.querySelector('select')!, 'admitted');
   expect(actions.updateCard).toHaveBeenCalledWith('a', { grade: 'admitted' });
   replaceCard(card('a', { grade: 'admitted' }));
   expect(grade.querySelector('select')!.value).toBe('admitted');
-  expect(grade.querySelector('.field__hint')!.textContent).toBe(GRADE_META.admitted.definition);
+  expect(grade.querySelector('.app-field__note')!.textContent).toBe(GRADE_META.admitted.definition);
 });
 
 test('the connection picker stacks over the editor, and Escape closes only the top', () => {
   open([card('a'), card('b', { kind: 'person', title: 'Bea' })]);
   button('Link to a card').click();
-  expect(host.querySelectorAll('.modal')).toHaveLength(2);
+  expect(host.querySelectorAll('dialog')).toHaveLength(2);
   escape();
-  expect(host.querySelectorAll('.modal')).toHaveLength(1);
+  expect(host.querySelectorAll('dialog')).toHaveLength(1);
   expect(actions.selectCard).not.toHaveBeenCalled();
 
   button('Link to a card').click();
   button('Bea').click();
   expect(actions.addConnection).toHaveBeenCalledWith('a', 'b');
-  expect(host.querySelectorAll('.modal')).toHaveLength(1);
+  expect(host.querySelectorAll('dialog')).toHaveLength(1);
 });
 
 test('a connection row keeps its half-typed label when a write replaces the row', () => {

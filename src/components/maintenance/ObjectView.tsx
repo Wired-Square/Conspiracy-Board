@@ -1,5 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { Button, Menu, MenuItem, Notice } from '@wired-square/kit';
 import { size, count } from '@wired-square/kit/core';
+import { check } from '@wired-square/icons/solid';
 import { storage } from '../../storage';
 import type { DocStatus } from '../../storage/StorageAdapter';
 import { mediaSrc } from '../../storage/media';
@@ -12,10 +14,8 @@ import { jobsStore } from '../../store/jobsStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDocHits } from '../createDocHits';
-import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
-import { CanvasPanel } from '../board/BoardCanvas';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
 // what the boards reference, plus a way to re-run the processing that first read
@@ -124,40 +124,39 @@ export function ObjectView() {
     setStatus(null);
   };
 
-  // The bulk actions, as the top-right Maintenance dropdown. "Only issues" is a
-  // toggle here, shown only when there is something to filter down to.
-  const maintenanceItems = createMemo((): MenuItem[] => [
-    {
-      label: 'Reprocess all',
-      onSelect: () =>
-        void run('Reprocessing all…', async () => {
-          const { done } = await reprocessAll();
-          return `Reprocessed ${count(done, 'card')}.`;
-        }),
-      disabled: busy(),
-    },
-    {
-      label: indexing() > 0 ? `Indexing ${indexing()}…` : 'Rebuild search index',
-      onSelect: () => void storage.reindexAll(),
-      disabled: indexing() > 0,
-    },
-    { label: 'Verify all', onSelect: () => void verifyEverything(), disabled: busy() },
-    { label: 'Refresh', onSelect: () => void refresh(), disabled: loading() },
-    ...(issueCount() > 0
-      ? [{ label: onlyIssues() ? 'Show all files' : 'Only issues', onSelect: () => setOnlyIssues((v) => !v) }]
-      : []),
-    { label: 'Media folder', onSelect: () => void storage.openMediaDir() },
-  ]);
+  const reprocessEverything = () =>
+    run('Reprocessing all…', async () => {
+      const { done } = await reprocessAll();
+      return `Reprocessed ${count(done, 'card')}.`;
+    });
 
   return (
     <div class="record maintenance">
-      <CanvasPanel position="top-right">
-        <Menu label="Maintenance" items={maintenanceItems()} />
-      </CanvasPanel>
+      <div class="record__bar">
+        <span class="panel-heading">Objects</span>
+        <Menu aria-label="Maintenance" trigger="Maintenance" chevron>
+          <MenuItem disabled={busy()} onSelect={() => void reprocessEverything()}>
+            Reprocess all
+          </MenuItem>
+          <MenuItem disabled={indexing() > 0} onSelect={() => void storage.reindexAll()}>
+            {indexing() > 0 ? `Indexing ${indexing()}…` : 'Rebuild search index'}
+          </MenuItem>
+          <MenuItem disabled={busy()} onSelect={() => void verifyEverything()}>
+            Verify all
+          </MenuItem>
+          <MenuItem disabled={loading()} onSelect={() => void refresh()}>
+            Refresh
+          </MenuItem>
+          <Show when={issueCount() > 0}>
+            <MenuItem onSelect={() => setOnlyIssues((v) => !v)}>{onlyIssues() ? 'Show all files' : 'Only issues'}</MenuItem>
+          </Show>
+          <MenuItem onSelect={() => void storage.openMediaDir()}>Media folder</MenuItem>
+        </Menu>
+      </div>
 
-      <Show when={error()}>
-        <p class="modal__warn maintenance__error">{error()}</p>
-      </Show>
+      <Notice tone="bad" class="maintenance__error">
+        {error()}
+      </Notice>
       <Show when={incomplete()}>
         <p class="hint maintenance__note">
           A board couldn’t be read, so files it might reference are shown as
@@ -238,9 +237,9 @@ function MediaFileRow(props: RowProps) {
         <span class="record-row__who">
           <Show when={props.row.owner} fallback="no card">
             {(owner) => (
-              <button class="link-button" onClick={() => props.onSelect(owner().cardId)}>
+              <Button tone="plain" class="cb-link" onClick={() => props.onSelect(owner().cardId)}>
                 {owner().mediaKind} on {owner().cardKind}
-              </button>
+              </Button>
             )}
           </Show>
           {' · '}
@@ -255,7 +254,7 @@ function MediaFileRow(props: RowProps) {
         <span class="maintenance-row__status is-missing">checksum ✗</span>
       </Show>
       <Show when={props.check === 'ok'}>
-        <span class="maintenance-row__status is-ok">verified ✓</span>
+        <span class="maintenance-row__status is-ok">verified {check()}</span>
       </Show>
       <Show when={indexFailure(props.index)}>
         {(why) => (
@@ -269,35 +268,35 @@ function MediaFileRow(props: RowProps) {
       </Show>
 
       <span class="maintenance-row__actions">
-        <button class="link-button" onClick={() => props.onDetails(props.row)}>
+        <Button tone="plain" onClick={() => props.onDetails(props.row)}>
           Details
-        </button>
+        </Button>
         <Show when={canAdopt()}>
-          <button class="link-button" onClick={() => props.onAdopt(file)} disabled={props.busy}>
+          <Button tone="plain" onClick={() => props.onAdopt(file)} disabled={props.busy}>
             Add as card
-          </button>
+          </Button>
         </Show>
         <Show when={props.row.owner}>
           {(owner) => (
-            <button class="link-button" onClick={() => props.onReprocess(owner().cardId)} disabled={props.busy}>
+            <Button tone="plain" onClick={() => props.onReprocess(owner().cardId)} disabled={props.busy}>
               Reprocess
-            </button>
+            </Button>
           )}
         </Show>
         <Show when={props.row.onDisk}>
-          <button
-            class="link-button"
+          <Button
+            tone="plain"
             onClick={() => void storage.reindexMedia([file])}
             title="Re-read this file's text into the search index"
           >
             Reindex
-          </button>
-          <button class="link-button" onClick={() => props.onVerify(file)} disabled={props.check === 'checking'}>
+          </Button>
+          <Button tone="plain" onClick={() => props.onVerify(file)} disabled={props.check === 'checking'}>
             {props.check === 'checking' ? 'Verifying…' : 'Verify'}
-          </button>
-          <button class="link-button" onClick={() => void storage.openMedia(file)}>
+          </Button>
+          <Button tone="plain" onClick={() => void storage.openMedia(file)}>
             Open
-          </button>
+          </Button>
         </Show>
       </span>
     </li>

@@ -1,4 +1,4 @@
-import { Modal } from '../ui/Modal';
+import { Button, Dialog } from '@wired-square/kit';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { prompt, confirm } from '../../store/promptStore';
@@ -54,23 +54,21 @@ export function ManageModal() {
   };
 
   return (
-    <Modal
-      title="Manage board"
-      onClose={close}
-      footer={
-        <button class="is-danger" onClick={() => void remove()}>
-          Delete board…
-        </button>
-      }
-    >
+    <Dialog title="Manage board" onClose={close}>
       <div class="field">
         <span>Board</span>
         <p class="manage__name">{title() || 'Untitled board'}</p>
       </div>
       <div class="manage__actions">
-        <button onClick={() => void rename()}>Rename…</button>
-        <button onClick={() => void reveal()}>Show in Finder</button>
+        <Button onClick={() => void rename()}>Rename…</Button>
+        <Button onClick={() => void reveal()}>Show in Finder</Button>
       </div>
-    </Modal>
+      <div class="app-dialog__actions">
+        <Button tone="danger" onClick={() => void remove()}>
+          Delete board…
+        </Button>
+        <Button onClick={close}>Close</Button>
+      </div>
+    </Dialog>
   );
 }

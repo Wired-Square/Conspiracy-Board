@@ -54,7 +54,11 @@ export function WhenField(props: { card: Card; locked?: boolean }) {
       <div class="field">
         <span>When</span>
         <div class="field__row">
-          <select value={mode()} onChange={(e) => onModeChange(e.currentTarget.value as WhenMode)}>
+          <select
+            class="app-field__input"
+            value={mode()}
+            onChange={(e) => onModeChange(e.currentTarget.value as WhenMode)}
+          >
             <option value="none">— undated —</option>
             <option value="day">Date only</option>
             <option value="minute">Date &amp; time</option>
@@ -91,6 +95,7 @@ function WhenInput(props: { cardId: string; occurredAt: string; precision: DateP
 
   return (
     <input
+      class="app-field__input"
       type={props.precision === 'day' ? 'date' : 'datetime-local'}
       value={text()}
       onInput={(e) => setText(e.currentTarget.value)}

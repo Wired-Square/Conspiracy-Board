@@ -1,11 +1,11 @@
 import { Show, createResource } from 'solid-js';
+import { Button, Dialog } from '@wired-square/kit';
 import { size } from '@wired-square/kit/core';
 import { storage } from '../../storage';
 import type { DocStatus, MediaMeta } from '../../storage/StorageAdapter';
 import { formatOccurredAt } from '../../lib/dates';
 import { indexFailure, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { boardStore } from '../../store/boardStore';
-import { Modal } from '../ui/Modal';
 import { MetaList } from '../ui/MetaList';
 
 // What one media file is and what it carries — reached from a row's "Details" button.
@@ -83,24 +83,16 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
   };
 
   return (
-    <Modal
-      title={props.row.owner ? props.row.owner.title || 'Untitled' : props.row.file}
-      onClose={props.onClose}
-      footer={
-        props.row.onDisk ? (
-          <button onClick={() => void storage.openMedia(props.row.file)}>Open file</button>
-        ) : undefined
-      }
-    >
+    <Dialog title={props.row.owner ? props.row.owner.title || 'Untitled' : props.row.file} onClose={props.onClose}>
       <MetaList facts={identity()} />
 
       <Show when={props.row.owner} fallback={<p class="hint">No card references this file.</p>}>
         {(owner) => (
           <p class="media-details__owner">
             Used by{' '}
-            <button class="link-button" onClick={() => showCard(owner().cardId)}>
+            <Button tone="plain" class="cb-link" onClick={() => showCard(owner().cardId)}>
               {owner().title || 'Untitled'}
-            </button>{' '}
+            </Button>{' '}
             ({owner().mediaKind} on {owner().cardKind})
           </p>
         )}
@@ -114,6 +106,12 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
           </Show>
         </Show>
       </Show>
-    </Modal>
+      <div class="app-dialog__actions">
+        <Show when={props.row.onDisk}>
+          <Button onClick={() => void storage.openMedia(props.row.file)}>Open file</Button>
+        </Show>
+        <Button onClick={props.onClose}>Close</Button>
+      </div>
+    </Dialog>
   );
 }

@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { Field } from '@wired-square/kit';
 import type { Card } from '../../types/board';
 import { emptyOrgMeta, emptyPersonMeta, withAddress, withDomain, withNumber } from '../../lib/entities';
 import { formatNumber } from '../../lib/phone';
@@ -82,50 +83,42 @@ export function EntityFields(props: { card: Card }) {
     <div class="field entity-fields">
       <span>{isOrg() ? 'Organisation details' : 'Person details'}</span>
 
-      <label class="field entity-fields__row">
-        <span>Addresses</span>
-        <input
-          value={addresses()}
-          placeholder="comma separated"
-          onInput={(e) => setAddresses(e.currentTarget.value)}
-          onBlur={commitAddresses}
-        />
-      </label>
-      <span class="field__hint">
-        {isOrg()
-          ? 'Mail this body sends itself — legal@, info@ — including at a domain it does not own.'
-          : 'Every address they use. Their mail finds them by these.'}
-      </span>
-
-      <label class="field entity-fields__row">
-        <span>Numbers</span>
-        <input
-          value={numbers()}
-          placeholder="+61 400 123 456, 02 9000 0000"
-          onInput={(e) => setNumbers(e.currentTarget.value)}
-          onBlur={commitNumbers}
-        />
-      </label>
-      <span class="field__hint">
-        {isOrg()
-          ? 'Switchboard or direct lines. A text or call finds this body by these.'
-          : 'Their phone numbers. A text or call finds them by these.'}
-      </span>
-
+      <Field
+        label="Addresses"
+        value={addresses()}
+        placeholder="comma separated"
+        onValue={setAddresses}
+        onBlur={commitAddresses}
+        hint={
+          isOrg()
+            ? 'Mail this body sends itself — legal@, info@ — including at a domain it does not own.'
+            : 'Every address they use. Their mail finds them by these.'
+        }
+      />
+      <Field
+        label="Numbers"
+        value={numbers()}
+        placeholder="+61 400 123 456, 02 9000 0000"
+        onValue={setNumbers}
+        onBlur={commitNumbers}
+        hint={
+          isOrg()
+            ? 'Switchboard or direct lines. A text or call finds this body by these.'
+            : 'Their phone numbers. A text or call finds them by these.'
+        }
+      />
       <Show when={isOrg()}>
-        <label class="field entity-fields__row">
-          <span>Domains</span>
-          <input
-            value={domainText()}
-            placeholder="acme.com, acme.com.au"
-            onInput={(e) => setDomainText(e.currentTarget.value)}
-            onBlur={commitDomains}
-          />
-        </label>
-        <span class="field__hint">
-          Anyone mailing from these is this organisation’s. Subdomains are separate — add
-          <code> mail.acme.com</code> too if it uses one.
-        </span>
+        <Field
+          label="Domains"
+          value={domainText()}
+          placeholder="acme.com, acme.com.au"
+          onValue={setDomainText}
+          onBlur={commitDomains}
+          hint={
+            'Anyone mailing from these is this organisation’s. Subdomains are separate — add ' +
+            'mail.acme.com too if it uses one.'
+          }
+        />
       </Show>
     </div>
   );

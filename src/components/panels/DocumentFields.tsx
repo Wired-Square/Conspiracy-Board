@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import type { Card } from '../../types/board';
 import { storage } from '../../storage';
 import { documentFacts } from '../../lib/mediaFacts';
@@ -39,19 +40,19 @@ export function DocumentFields(props: { card: Card }) {
         when={doc().file}
         fallback={
           <div class="field__row">
-            <button onClick={() => void onPick()}>Attach file</button>
+            <Button onClick={() => void onPick()}>Attach file</Button>
           </div>
         }
       >
         {(file) => (
           <div class="field__row">
-            <button onClick={() => void storage.openMedia(file())}>Open {doc().name ?? 'file'}</button>
-            <button class="link-button" onClick={() => void onPick()}>
+            <Button onClick={() => void storage.openMedia(file())}>Open {doc().name ?? 'file'}</Button>
+            <Button tone="plain" onClick={() => void onPick()}>
               Replace
-            </button>
-            <button class="link-button" onClick={() => updateCard(props.card.id, { document: {} })}>
+            </Button>
+            <Button tone="plain" onClick={() => updateCard(props.card.id, { document: {} })}>
               Remove
-            </button>
+            </Button>
           </div>
         )}
       </Show>

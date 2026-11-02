@@ -1,4 +1,5 @@
 import { For, Show } from 'solid-js';
+import { Button, Field } from '@wired-square/kit';
 import type { Card, EmailAddress, EmailMeta } from '../../types/board';
 import {
   addressDomain,
@@ -119,9 +120,9 @@ function EmailExtras(props: { meta: EmailMeta }) {
                     fallback={<span class="attach-list__item attach-list__item--dead">📎 {a.name}</span>}
                   >
                     {(file) => (
-                      <button class="link-button attach-list__item" onClick={() => void storage.openMedia(file())}>
+                      <Button tone="plain" class="attach-list__item" onClick={() => void storage.openMedia(file())}>
                         📎 {a.name}
-                      </button>
+                      </Button>
                     )}
                   </Show>
                 </li>
@@ -137,9 +138,9 @@ function EmailExtras(props: { meta: EmailMeta }) {
               mail client. A future build may render it in place. */}
           <Show when={props.meta.emlFile}>
             {(eml) => (
-              <button class="link-button" onClick={() => void storage.openMedia(eml())}>
+              <Button tone="plain" onClick={() => void storage.openMedia(eml())}>
                 ✉ Open email
-              </button>
+              </Button>
             )}
           </Show>
           {/* Offered for cards dragged out of Mail, where the message is known to
@@ -187,35 +188,27 @@ function EditableEmailFields(props: { card: Card; meta: EmailMeta }) {
     <div class="field email-fields">
       <span>Email details</span>
 
-      <label class="field email-fields__row">
-        <span>From</span>
-        <input
-          value={from()}
-          placeholder="Jane Doe <jane@example.com>"
-          onInput={(e) => setFrom(e.currentTarget.value)}
-          onBlur={() => commit({ from: parseAddress(from()) })}
-        />
-      </label>
-
-      <label class="field email-fields__row">
-        <span>To</span>
-        <input
-          value={to()}
-          placeholder="comma separated"
-          onInput={(e) => setTo(e.currentTarget.value)}
-          onBlur={() => commit({ to: parseAddressList(to()) })}
-        />
-      </label>
-
-      <label class="field email-fields__row">
-        <span>Cc</span>
-        <input
-          value={cc()}
-          placeholder="comma separated"
-          onInput={(e) => setCc(e.currentTarget.value)}
-          onBlur={() => commit({ cc: parseAddressList(cc()) })}
-        />
-      </label>
+      <Field
+        label="From"
+        value={from()}
+        placeholder="Jane Doe <jane@example.com>"
+        onValue={setFrom}
+        onBlur={() => commit({ from: parseAddress(from()) })}
+      />
+      <Field
+        label="To"
+        value={to()}
+        placeholder="comma separated"
+        onValue={setTo}
+        onBlur={() => commit({ to: parseAddressList(to()) })}
+      />
+      <Field
+        label="Cc"
+        value={cc()}
+        placeholder="comma separated"
+        onValue={setCc}
+        onBlur={() => commit({ cc: parseAddressList(cc()) })}
+      />
 
       <EmailExtras meta={props.meta} />
     </div>

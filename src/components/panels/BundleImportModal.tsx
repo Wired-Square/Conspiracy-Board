@@ -1,6 +1,6 @@
 import { Index, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
-import { Modal } from '../ui/Modal';
+import { Button, Dialog, DialogActions } from '@wired-square/kit';
 import { closeDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
 import type { Board } from '../../types/board';
@@ -44,23 +44,7 @@ export function BundleImportModal(props: { boards: Board[] }) {
   };
 
   return (
-    <Modal
-      title="Import bundle"
-      onClose={close}
-      footer={
-        <>
-          <span class="modal__status">
-            {selectedCount()} of {count(rows().length, 'board')} selected
-          </span>
-          <button class="link-button" onClick={close}>
-            Cancel
-          </button>
-          <button disabled={busy() || selectedCount() === 0} onClick={() => void onImport()}>
-            {busy() ? 'Importing…' : 'Import'}
-          </button>
-        </>
-      }
-    >
+    <Dialog title="Import bundle" onClose={close}>
       <p class="hint">
         Each ticked board is added as a new board — rename one to keep a new version beside
         the old. Untick any you don’t want.
@@ -76,7 +60,7 @@ export function BundleImportModal(props: { boards: Board[] }) {
                 onChange={(e) => setRow(i, { selected: e.currentTarget.checked })}
               />
               <input
-                class="import-offer__rename"
+                class="app-field__input import-offer__rename"
                 value={r().name}
                 placeholder="Board name"
                 onInput={(e) => setRow(i, { name: e.currentTarget.value })}
@@ -85,6 +69,17 @@ export function BundleImportModal(props: { boards: Board[] }) {
           )}
         </Index>
       </ul>
-    </Modal>
+      <p class="dialog-status">
+        {selectedCount()} of {count(rows().length, 'board')} selected
+      </p>
+      <DialogActions
+        onCancel={close}
+        confirm={
+          <Button tone="primary" disabled={busy() || selectedCount() === 0} onClick={() => void onImport()}>
+            {busy() ? 'Importing…' : 'Import'}
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }

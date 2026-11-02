@@ -3,13 +3,12 @@ import { createStore } from '@wired-square/store';
 // A reusable "ask the user for something" dialog, promise-based so any caller —
 // including the native menu handler, which lives outside the UI — can `await
 // prompt(...)` / `await confirm(...)` and act on the answer. One request at a
-// time; <PromptHost> renders it on the shared Modal and resolves the promise.
+// time; <PromptHost> renders it as a dialog and resolves the promise.
 
 type Common = {
   title: string;
   message?: string;
   confirmLabel?: string;
-  cancelLabel?: string;
   /** Style the confirm button as destructive (Delete). */
   danger?: boolean;
 };

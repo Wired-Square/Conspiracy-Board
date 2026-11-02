@@ -1,13 +1,13 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { cx } from '@wired-square/kit/core';
+import { Button, Dialog, SearchInput, TabButton } from '@wired-square/kit';
+import { plus } from '@wired-square/icons/solid';
 import type { CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
-import { Modal } from '../ui/Modal';
 import { autofocus } from '../ui/autofocus';
 import { fromStore } from '@wired-square/store/solid';
 
-/** A "＋ New …" row, offered on the tab it belongs to. Its value is a sentinel the
+/** A "New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */
 export type PickerCreateOption = { kind: CardKind; label: string; value: string };
 
@@ -66,47 +66,48 @@ export function EntityPickerDialog(props: Props) {
   };
 
   return (
-    <Modal title="Link to…" onClose={props.onClose}>
+    <Dialog title="Link to…" onClose={props.onClose}>
       <div class="entity-picker">
         <Show when={activeKind()} fallback={<p class="hint">Nothing to link to yet.</p>}>
           {(kind) => (
             <>
-              <div class="entity-picker__tabs" role="tablist">
+              <div class="app-tablist" role="group" aria-label="Kind">
                 <For each={tabs()}>
                   {(k) => (
-                    <button
-                      role="tab"
-                      aria-selected={k === kind()}
-                      class={cx('entity-picker__tab', k === kind() && 'is-active')}
+                    <TabButton
+                      selected={k === kind()}
                       onClick={() => {
                         setActive(k);
                         setFilter('');
                       }}
                     >
-                      <Show when={KIND_META[k].icon}>
-                        <span class="entity-picker__tab-icon">{KIND_META[k].icon}</span>
-                      </Show>
+                      <Show when={KIND_META[k].icon}>{(icon) => <span aria-hidden="true">{icon()} </span>}</Show>
                       {KIND_META[k].label}
                       <span class="entity-picker__tab-count">{counts().get(k) ?? 0}</span>
-                    </button>
+                    </TabButton>
                   )}
                 </For>
               </div>
 
-              <input
+              <SearchInput
                 class="entity-picker__filter"
+                label="Filter"
                 ref={autofocus}
                 value={filter()}
                 placeholder={`Filter ${KIND_META[kind()].label.toLowerCase()}…`}
-                onInput={(e) => setFilter(e.currentTarget.value)}
+                onValue={setFilter}
               />
 
               <ul class="email-addr__list entity-picker__list">
                 <For each={creates()}>
                   {(o) => (
                     <li>
-                      <button class="entity-picker__row entity-picker__row--create" onClick={() => pick(o.value)}>
-                        <span class="entity-picker__row-icon">＋</span>
+                      <button
+                        type="button"
+                        class="app-menu__item entity-picker__row entity-picker__row--create"
+                        onClick={() => pick(o.value)}
+                      >
+                        <span class="entity-picker__row-icon">{plus()}</span>
                         <span class="entity-picker__row-title">{o.label}</span>
                       </button>
                     </li>
@@ -115,7 +116,7 @@ export function EntityPickerDialog(props: Props) {
                 <For each={list()}>
                   {(c) => (
                     <li>
-                      <button class="entity-picker__row" onClick={() => pick(c.id)}>
+                      <button type="button" class="app-menu__item entity-picker__row" onClick={() => pick(c.id)}>
                         <Show when={KIND_META[c.kind].icon}>
                           <span class="entity-picker__row-icon">{KIND_META[c.kind].icon}</span>
                         </Show>
@@ -132,6 +133,11 @@ export function EntityPickerDialog(props: Props) {
           )}
         </Show>
       </div>
-    </Modal>
+      <div class="app-dialog__actions">
+        <Button tone="plain" onClick={props.onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Dialog>
   );
 }

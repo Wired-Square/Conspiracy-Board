@@ -40,8 +40,8 @@ function deltaE(a: string, b: string): number {
 
 /** The ungraded strand's colour, read from the stylesheet so this cannot drift. */
 function stringColour(): string {
-  const found = /--string:\s*(#[0-9a-f]{6})/i.exec(css);
-  if (!found) throw new Error('--string not found in index.css');
+  const found = /--cb-string:\s*(#[0-9a-f]{6})/i.exec(css);
+  if (!found) throw new Error('--cb-string not found in index.css');
   return found[1];
 }
 
@@ -108,7 +108,7 @@ describe('the palette is distinct', () => {
     const string = stringColour();
     for (const g of GRADES) {
       const d = deltaE(GRADE_META[g].colour, string);
-      expect(d, `${g} is too close to --string (ΔE ${d.toFixed(1)})`).toBeGreaterThan(FLOOR);
+      expect(d, `${g} is too close to --cb-string (ΔE ${d.toFixed(1)})`).toBeGreaterThan(FLOOR);
     }
   });
 });

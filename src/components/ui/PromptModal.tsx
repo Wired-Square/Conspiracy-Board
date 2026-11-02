@@ -1,11 +1,11 @@
 import { Show, createSignal, onMount } from 'solid-js';
-import { Modal } from './Modal';
+import { Button, Dialog, DialogActions, Field } from '@wired-square/kit';
 import { promptStore, type PromptRequest } from '../../store/promptStore';
 import { fromStore } from '@wired-square/store/solid';
 
 /**
- * Renders the one active prompt/confirm request (see promptStore) on the shared
- * Modal and resolves its promise. Keyed on the request, so each one mounts a fresh
+ * Renders the one active prompt/confirm request (see promptStore) as a dialog and
+ * resolves its promise. Keyed on the request, so each one mounts a fresh
  * dialog with its own input state.
  */
 export function PromptHost() {
@@ -37,45 +37,36 @@ function PromptDialog(props: { request: PromptRequest }) {
   };
 
   return (
-    <Modal
-      title={request.title}
-      onClose={cancel}
-      footer={
-        <>
-          <button class="link-button" onClick={cancel}>
-            {request.cancelLabel ?? 'Cancel'}
-          </button>
-          <button class={request.danger ? 'is-danger' : ''} onClick={submit} disabled={!submittable()}>
-            {request.confirmLabel ?? 'OK'}
-          </button>
-        </>
-      }
-    >
+    <Dialog title={request.title} onClose={cancel}>
       <Show when={request.message}>
         <p>{request.message}</p>
       </Show>
       {request.kind === 'text' && (
-        <label class="field">
-          <Show when={request.label}>
-            <span>{request.label}</span>
-          </Show>
-          <input
-            // Selects the prefilled text on open, so Rename is type-over and New is ready.
-            ref={(el) =>
-              onMount(() => {
-                el.focus();
-                el.select();
-              })
-            }
-            value={value()}
-            placeholder={request.placeholder}
-            onInput={(e) => setValue(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submit();
-            }}
-          />
-        </label>
+        <Field
+          label={request.label ?? request.title}
+          // Selects the prefilled text on open, so Rename is type-over and New is ready.
+          ref={(el) =>
+            onMount(() => {
+              el.focus();
+              el.select();
+            })
+          }
+          value={value()}
+          placeholder={request.placeholder}
+          onValue={setValue}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+        />
       )}
-    </Modal>
+      <DialogActions
+        onCancel={cancel}
+        confirm={
+          <Button tone={request.danger ? 'danger' : 'primary'} onClick={submit} disabled={!submittable()}>
+            {request.confirmLabel ?? 'OK'}
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }

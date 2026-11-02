@@ -1,8 +1,8 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
-import { Modal } from '../ui/Modal';
+import { Button, Dialog, DialogActions, Notice, Select, TabPanel, Tabs, TextArea } from '@wired-square/kit';
 import { camera } from '../board/camera';
-import { NEW_CLUSTER, emailImportStore } from '../../store/emailImportStore';
+import { NEW_CLUSTER, emailImportStore, type ImportTab } from '../../store/emailImportStore';
 import { boardStore } from '../../store/boardStore';
 import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta } from '../../lib/email/meta';
@@ -15,6 +15,11 @@ import { formatOccurredAt } from '../../lib/dates';
 import { storage } from '../../storage';
 import type { Card } from '../../types/board';
 import { fromStore } from '@wired-square/store/solid';
+
+const TABS: { id: ImportTab; label: string }[] = [
+  { id: 'files', label: 'Files' },
+  { id: 'paste', label: 'Paste' },
+];
 
 export function EmailImportModal() {
   // Mounted only while open (see App), so there is no self-hide guard here and
@@ -97,7 +102,7 @@ export function EmailImportModal() {
     }
   };
 
-  // This modal is reached from "+ Add > Email", so it has to be able to add an
+  // This modal is reached from "Add > Email", so it has to be able to add an
   // email that isn't being imported from anywhere.
   const onAddBlank = () => {
     close();
@@ -113,86 +118,53 @@ export function EmailImportModal() {
   };
 
   return (
-    <Modal
-      title="Add email"
-      onClose={close}
-      footer={
-        <>
-          <span class="modal__status">{status()}</span>
-          <button class="link-button" onClick={close}>
-            Cancel
-          </button>
-          <button
-            disabled={
-              busy() ||
-              tooMany() ||
-              (newCount() === 0 && !plan().entityDrafts.length && !plan().patches.length && !reclusterCount())
-            }
-            onClick={() => void onAdd()}
-          >
-            {label()}
-          </button>
-        </>
-      }
-    >
-      <div class="modal__tabs">
-        <button class={tab() === 'files' ? 'is-active' : ''} onClick={() => setTab('files')}>
-          Files
-        </button>
-        <button class={tab() === 'paste' ? 'is-active' : ''} onClick={() => setTab('paste')}>
-          Paste
-        </button>
-        <button class="link-button modal__tabs-aside" onClick={onAddBlank}>
+    <Dialog title="Add email" wide onClose={close}>
+      <div class="email-import__tabs">
+        <Tabs tabs={TABS} selected={tab()} onChange={setTab} aria-label="Import from" />
+        <Button tone="plain" onClick={onAddBlank}>
           Or add a blank email card
-        </button>
+        </Button>
       </div>
 
-      <Show
-        when={tab() === 'files'}
-        fallback={
-          <div class="field">
-            <span>Raw message</span>
-            <textarea
-              rows={8}
-              value={paste()}
-              placeholder="Paste the raw message including headers — in Gmail: ⋮ → Show original"
-              onInput={(e) => setPaste(e.currentTarget.value)}
-            />
-            <div class="field__row">
-              <button onClick={() => void parsePaste(paste())} disabled={busy() || !paste().trim()}>
-                Parse
-              </button>
-            </div>
-          </div>
-        }
-      >
+      <TabPanel id="files" selected={tab()}>
         <div class="field">
           <span>.eml or .mbox files</span>
           <div class="field__row">
-            <button onClick={() => void onPickFiles()} disabled={busy()}>
+            <Button onClick={() => void onPickFiles()} disabled={busy()}>
               Choose files…
-            </button>
+            </Button>
           </div>
           <p class="hint">
             You can also drop email files into the Inbox folder (File ▸ Show Inbox Folder) —
             they import on their own.
           </p>
         </div>
-      </Show>
+      </TabPanel>
+      <TabPanel id="paste" selected={tab()}>
+        <TextArea
+          label="Raw message"
+          rows={8}
+          value={paste()}
+          placeholder="Paste the raw message including headers — in Gmail: ⋮ → Show original"
+          onValue={setPaste}
+        />
+        <div class="field__row">
+          <Button onClick={() => void parsePaste(paste())} disabled={busy() || !paste().trim()}>
+            Parse
+          </Button>
+        </div>
+      </TabPanel>
 
-      <label class="field">
-        <span>Add to cluster</span>
-        <select value={clusterId() ?? ''} onChange={(e) => setClusterId(e.currentTarget.value || null)}>
-          <option value="">— none —</option>
-          <option value={NEW_CLUSTER}>New cluster</option>
-          <For each={clusters()}>{(c) => <option value={c.id}>{c.label}</option>}</For>
-        </select>
-      </label>
+      <Select label="Add to cluster" value={clusterId() ?? ''} onValue={(id) => setClusterId(id || null)}>
+        <option value="">— none —</option>
+        <option value={NEW_CLUSTER}>New cluster</option>
+        <For each={clusters()}>{(c) => <option value={c.id}>{c.label}</option>}</For>
+      </Select>
 
       <Show when={errors().length > 0}>
         <div class="field">
           <span>Skipped</span>
-          <ul class="modal__errors">
+          <ul class="email-import__errors">
             <For each={errors().slice(0, 8)}>{(e) => <li>{e}</li>}</For>
             <Show when={errors().length > 8}>
               <li>…and {errors().length - 8} more</li>
@@ -202,10 +174,10 @@ export function EmailImportModal() {
       </Show>
 
       <Show when={tooMany()}>
-        <p class="modal__warn">
+        <Notice tone="warn">
           {newCount()} messages is more than this board can comfortably hold — import
           up to {MAX_MESSAGES} at a time.
-        </p>
+        </Notice>
       </Show>
 
       <Show when={offer().people.shown.length > 0}>
@@ -294,7 +266,26 @@ export function EmailImportModal() {
           </ul>
         </div>
       </Show>
-    </Modal>
+      <Show when={status()}>
+        <p class="dialog-status">{status()}</p>
+      </Show>
+      <DialogActions
+        onCancel={close}
+        confirm={
+          <Button
+            tone="primary"
+            disabled={
+              busy() ||
+              tooMany() ||
+              (newCount() === 0 && !plan().entityDrafts.length && !plan().patches.length && !reclusterCount())
+            }
+            onClick={() => void onAdd()}
+          >
+            {label()}
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }
 
@@ -322,6 +313,7 @@ function OfferRow(props: {
         </span>
       </label>
       <select
+        class="app-field__input import-offer__target"
         value={props.choice.target}
         // Aiming a row somewhere is itself the decision to use it; making the
         // user tick it as well would be asking the same question twice.

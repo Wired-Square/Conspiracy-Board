@@ -20,5 +20,5 @@ export default defineConfig({
   // css: the stylesheet is stubbed to '' by default, which would quietly empty
   // the `?raw` import grades.test.ts reads --string out of. Processing it costs
   // one file: nothing else in the suite imports CSS.
-  test: { environment: 'node', include: ['src/**/*.test.ts'], css: true },
+  test: { environment: 'node', include: ['src/**/*.test.ts'], css: true, setupFiles: ['src/testing/topLayer.ts'] },
 });

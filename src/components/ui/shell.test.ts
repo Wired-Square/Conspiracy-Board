@@ -34,7 +34,7 @@ test('a text prompt opens prefilled and focused, and Enter resolves the trimmed 
   typeInto(host, '  New  ');
   input(host).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(await answer).toBe('New');
-  expect(host.querySelector('.modal')).toBeNull();
+  expect(host.querySelector('dialog')).toBeNull();
 });
 
 test('a request that displaces another cancels it and opens with fresh input', async () => {

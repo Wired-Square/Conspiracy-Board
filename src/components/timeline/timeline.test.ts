@@ -91,7 +91,7 @@ test('the kind filter stays open across picks and hides the kinds unticked', () 
   option('Email').click();
   expect(option('Email').getAttribute('aria-checked')).toBe('false');
   expect(chip('mail')).toBeNull();
-  expect(button('Filter').className).toBe('is-active');
+  expect(button('Filter').classList.contains('is-active')).toBe(true);
   expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', inline: 'center', block: 'nearest' });
   button('Reset').click();
   expect(chip('mail')).not.toBeNull();
