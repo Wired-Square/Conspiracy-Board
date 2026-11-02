@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { KIND_META } from '../../lib/kinds';
 import type { CardKind } from '../../types/board';
 import { createDismissal } from '../ui/createDismissal';
@@ -30,7 +31,7 @@ export function TimelineKindFilter(props: Props) {
 
   return (
     <div class="timeline__filter" ref={wrapper}>
-      <button
+      <Button
         ref={trigger}
         class={props.hidden.size ? 'is-active' : ''}
         aria-haspopup="menu"
@@ -39,7 +40,7 @@ export function TimelineKindFilter(props: Props) {
         title="Show or hide card kinds on the timeline"
       >
         Filter
-      </button>
+      </Button>
       <Show when={open()}>
         <div class="timeline__filter-menu" role="menu" aria-label="Show on timeline">
           <For each={props.kinds}>
@@ -47,9 +48,10 @@ export function TimelineKindFilter(props: Props) {
               const shown = () => !props.hidden.has(k);
               return (
                 <button
+                  type="button"
                   role="menuitemcheckbox"
                   aria-checked={shown()}
-                  class="timeline__filter-option"
+                  class="app-menu__item timeline__filter-option"
                   onClick={() => props.onToggle(k)}
                 >
                   <span class="timeline__filter-check" aria-hidden="true">
@@ -61,7 +63,12 @@ export function TimelineKindFilter(props: Props) {
               );
             }}
           </For>
-          <button class="timeline__filter-reset" onClick={() => props.onReset()} disabled={props.hidden.size === 0}>
+          <button
+            type="button"
+            class="app-menu__item timeline__filter-reset"
+            onClick={() => props.onReset()}
+            disabled={props.hidden.size === 0}
+          >
             Reset
           </button>
         </div>

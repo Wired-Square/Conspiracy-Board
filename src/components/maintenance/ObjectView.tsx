@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { size, count } from '@wired-square/kit/core';
 import { storage } from '../../storage';
 import type { DocStatus } from '../../storage/StorageAdapter';
@@ -238,9 +239,9 @@ function MediaFileRow(props: RowProps) {
         <span class="record-row__who">
           <Show when={props.row.owner} fallback="no card">
             {(owner) => (
-              <button class="link-button" onClick={() => props.onSelect(owner().cardId)}>
+              <Button tone="plain" class="cb-link" onClick={() => props.onSelect(owner().cardId)}>
                 {owner().mediaKind} on {owner().cardKind}
-              </button>
+              </Button>
             )}
           </Show>
           {' · '}
@@ -269,35 +270,35 @@ function MediaFileRow(props: RowProps) {
       </Show>
 
       <span class="maintenance-row__actions">
-        <button class="link-button" onClick={() => props.onDetails(props.row)}>
+        <Button tone="plain" onClick={() => props.onDetails(props.row)}>
           Details
-        </button>
+        </Button>
         <Show when={canAdopt()}>
-          <button class="link-button" onClick={() => props.onAdopt(file)} disabled={props.busy}>
+          <Button tone="plain" onClick={() => props.onAdopt(file)} disabled={props.busy}>
             Add as card
-          </button>
+          </Button>
         </Show>
         <Show when={props.row.owner}>
           {(owner) => (
-            <button class="link-button" onClick={() => props.onReprocess(owner().cardId)} disabled={props.busy}>
+            <Button tone="plain" onClick={() => props.onReprocess(owner().cardId)} disabled={props.busy}>
               Reprocess
-            </button>
+            </Button>
           )}
         </Show>
         <Show when={props.row.onDisk}>
-          <button
-            class="link-button"
+          <Button
+            tone="plain"
             onClick={() => void storage.reindexMedia([file])}
             title="Re-read this file's text into the search index"
           >
             Reindex
-          </button>
-          <button class="link-button" onClick={() => props.onVerify(file)} disabled={props.check === 'checking'}>
+          </Button>
+          <Button tone="plain" onClick={() => props.onVerify(file)} disabled={props.check === 'checking'}>
             {props.check === 'checking' ? 'Verifying…' : 'Verify'}
-          </button>
-          <button class="link-button" onClick={() => void storage.openMedia(file)}>
+          </Button>
+          <Button tone="plain" onClick={() => void storage.openMedia(file)}>
             Open
-          </button>
+          </Button>
         </Show>
       </span>
     </li>

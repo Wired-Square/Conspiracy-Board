@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from 'solid-js';
+import { Button, Field, Select, TextArea, Tick } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import { openDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
@@ -79,10 +80,7 @@ function CardEditorForm(props: { card: Card }) {
 
   return (
     <>
-      <label class="field">
-        <span>Title</span>
-        <input value={title()} onInput={(e) => setTitle(e.currentTarget.value)} onBlur={flushTitle} />
-      </label>
+      <Field label="Title" value={title()} onValue={setTitle} onBlur={flushTitle} />
 
       {/* An actor is not a moment: a person does not *happen*, so `occurredAt`
           has nothing to mean on one. It is why the timeline excludes them by
@@ -94,31 +92,36 @@ function CardEditorForm(props: { card: Card }) {
         <WhenField card={props.card} locked={props.card.kind === 'email' && isImportedCard(props.card)} />
       </Show>
 
-      <div class="field">
-        <span>Kind</span>
-        <Show
-          when={canChangeKind(props.card)}
-          fallback={
-            // Locked: an actor is a legal entity and an import is what its file is
-            // — neither is a mis-classification to fix here (see canChangeKind).
+      <Show
+        when={canChangeKind(props.card)}
+        fallback={
+          // Locked: an actor is a legal entity and an import is what its file is
+          // — neither is a mis-classification to fix here (see canChangeKind).
+          <div class="field">
+            <span>Kind</span>
             <span class="kind-locked">
               <Show when={kindMeta().icon}>
                 <span aria-hidden="true">{kindMeta().icon} </span>
               </Show>
               {kindMeta().label}
             </span>
-          }
+            <span class="field__hint">{kindMeta().hint}</span>
+          </div>
+        }
+      >
+        {/* Options come from CARD_KINDS rather than being spelled out here, so a
+            new kind cannot be added to the model and forgotten in the one place
+            it is chosen — KIND_META's Record makes that a compile error. (The
+            cast below is unavoidable: a change event carries a string.) */}
+        <Select
+          label="Kind"
+          hint={kindMeta().hint}
+          value={props.card.kind}
+          onValue={(kind) => switchKind(kind as CardKind)}
         >
-          {/* Options come from CARD_KINDS rather than being spelled out here, so a
-              new kind cannot be added to the model and forgotten in the one place
-              it is chosen — KIND_META's Record makes that a compile error. (The
-              cast below is unavoidable: a change event carries a string.) */}
-          <select value={props.card.kind} onChange={(e) => switchKind(e.currentTarget.value as CardKind)}>
-            <For each={CARD_KINDS}>{(kind) => <option value={kind}>{KIND_META[kind].label}</option>}</For>
-          </select>
-        </Show>
-        <span class="field__hint">{kindMeta().hint}</span>
-      </div>
+          <For each={CARD_KINDS}>{(kind) => <option value={kind}>{KIND_META[kind].label}</option>}</For>
+        </Select>
+      </Show>
 
       {/* Any dated thing can also *be* an event — a document, a text, a photo. The
           box spawns a graded event card carrying this one's moment, so the timeline
@@ -176,12 +179,12 @@ function CardEditorForm(props: { card: Card }) {
                     <Show
                       when={c.id === primaryClusterId(props.card.clusterIds)}
                       fallback={
-                        <button
-                          class="link-button"
+                        <Button
+                          tone="plain"
                           onClick={() => updateCard(id, { clusterIds: asPrimary(props.card.clusterIds, c.id) })}
                         >
                           Make primary
-                        </button>
+                        </Button>
                       }
                     >
                       <span class="cluster-picker__primary">primary</span>
@@ -210,25 +213,22 @@ function CardEditorForm(props: { card: Card }) {
             library — all in the dialog, so this stays one link (see
             ImageEditorModal). */}
         <div class="field__row">
-          <button class="link-button" onClick={() => openDialog({ imageEditorCardId: id })}>
+          <Button tone="plain" onClick={() => openDialog({ imageEditorCardId: id })}>
             {imageSrc() ? 'Adjust image…' : 'Add image…'}
-          </button>
+          </Button>
           <Show when={imageSrc()}>
-            <button
-              class="link-button"
+            <Button
+              tone="plain"
               onClick={() => updateCard(id, { imageFile: null, imageUrl: null, imageCrop: null, imageMeta: null })}
             >
               Remove
-            </button>
+            </Button>
           </Show>
         </div>
         <Show when={props.card.imageMeta}>{(meta) => <MetaList facts={imageFacts(meta())} />}</Show>
       </div>
 
-      <label class="field field--grow">
-        <span>Notes (markdown)</span>
-        <textarea value={notes()} onInput={(e) => setNotes(e.currentTarget.value)} onBlur={flushNotes} rows={8} />
-      </label>
+      <TextArea label="Notes (markdown)" value={notes()} onValue={setNotes} onBlur={flushNotes} rows={8} />
 
       {/* The preview reads the draft, so it stays live without a store write. */}
       <Show when={notes().trim()}>
@@ -259,17 +259,12 @@ function CardEditorForm(props: { card: Card }) {
 function EventToggle(props: { cardId: string }) {
   const isEvent = fromStore(boardStore, (s) => !!eventFor(s.cards, props.cardId));
   return (
-    <label class="field field--check">
-      <input
-        type="checkbox"
-        checked={isEvent()}
-        onChange={(e) => boardStore.getState().setIsEvent(props.cardId, e.currentTarget.checked)}
-      />
-      <span>
-        This is an event
-        <span class="field__hint"> — a moment on the timeline, and a graded event card strung to this.</span>
-      </span>
-    </label>
+    <Tick
+      label="This is an event"
+      hint="a moment on the timeline, and a graded event card strung to this."
+      checked={isEvent()}
+      onChange={(on) => boardStore.getState().setIsEvent(props.cardId, on)}
+    />
   );
 }
 
@@ -292,19 +287,20 @@ function DeleteCard(props: { cardId: string }) {
       <Show
         when={confirming()}
         fallback={
-          <button class="card-delete" onClick={() => setConfirming(true)}>
+          <Button class="card-delete" onClick={() => setConfirming(true)}>
             Delete card
-          </button>
+          </Button>
         }
       >
-        <button
-          class="card-delete card-delete--confirm"
+        <Button
+          tone="danger"
+          class="card-delete"
           ref={autofocus}
           onBlur={() => setConfirming(false)}
           onClick={() => boardStore.getState().deleteCard(props.cardId)}
         >
           Really delete?{strungNote(connections(), props.cardId)}
-        </button>
+        </Button>
       </Show>
     </div>
   );

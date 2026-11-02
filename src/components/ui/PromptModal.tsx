@@ -1,4 +1,5 @@
 import { Show, createSignal, onMount } from 'solid-js';
+import { Button, Field } from '@wired-square/kit';
 import { Modal } from './Modal';
 import { promptStore, type PromptRequest } from '../../store/promptStore';
 import { fromStore } from '@wired-square/store/solid';
@@ -42,12 +43,12 @@ function PromptDialog(props: { request: PromptRequest }) {
       onClose={cancel}
       footer={
         <>
-          <button class="link-button" onClick={cancel}>
+          <Button tone="plain" onClick={cancel}>
             {request.cancelLabel ?? 'Cancel'}
-          </button>
-          <button class={request.danger ? 'is-danger' : ''} onClick={submit} disabled={!submittable()}>
+          </Button>
+          <Button tone={request.danger ? 'danger' : 'primary'} onClick={submit} disabled={!submittable()}>
             {request.confirmLabel ?? 'OK'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -55,26 +56,22 @@ function PromptDialog(props: { request: PromptRequest }) {
         <p>{request.message}</p>
       </Show>
       {request.kind === 'text' && (
-        <label class="field">
-          <Show when={request.label}>
-            <span>{request.label}</span>
-          </Show>
-          <input
-            // Selects the prefilled text on open, so Rename is type-over and New is ready.
-            ref={(el) =>
-              onMount(() => {
-                el.focus();
-                el.select();
-              })
-            }
-            value={value()}
-            placeholder={request.placeholder}
-            onInput={(e) => setValue(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submit();
-            }}
-          />
-        </label>
+        <Field
+          label={request.label ?? request.title}
+          // Selects the prefilled text on open, so Rename is type-over and New is ready.
+          ref={(el) =>
+            onMount(() => {
+              el.focus();
+              el.select();
+            })
+          }
+          value={value()}
+          placeholder={request.placeholder}
+          onValue={setValue}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+        />
       )}
     </Modal>
   );

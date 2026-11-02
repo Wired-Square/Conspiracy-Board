@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { boardStore, type Deleted } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 
@@ -10,7 +11,7 @@ function label(deleted: Deleted): string {
 }
 
 /**
- * The way back from a delete: a pill beside BackgroundTaskIndicator offering
+ * The way back from a delete: a pill at the foot of the window offering
  * Undo for a few seconds after a card or cluster is deleted, while that delete is
  * still the last edit. Cmd+Z (see startUndoShortcut) undoes it either way.
  */
@@ -32,9 +33,9 @@ export function UndoToast() {
       {(shown) => (
         <div class="undo-toast" role="status" aria-live="polite">
           <span>{label(shown())}</span>
-          <button class="link-button" onClick={() => boardStore.getState().undo()}>
+          <Button tone="plain" onClick={() => boardStore.getState().undo()}>
             Undo
-          </button>
+          </Button>
         </div>
       )}
     </Show>

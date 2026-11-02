@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
+import { Button, SearchInput } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import { formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
@@ -218,7 +219,7 @@ export function TimelineDrawer() {
   return (
     <section class={cx('timeline', open() && 'is-open')}>
       <header class="timeline__bar">
-        <button class="timeline__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open()}>
+        <Button tone="plain" class="timeline__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open()}>
           <span class="timeline__chevron">{open() ? '▾' : '▸'}</span>
           <span class="panel-heading">Timeline</span>
           <span class="timeline__count">
@@ -226,19 +227,18 @@ export function TimelineDrawer() {
               ? 'no dated items'
               : `${dated().length} dated${undated().length ? ` · ${undated().length} undated` : ''}`}
           </span>
-        </button>
-        <input
+        </Button>
+        <SearchInput
           class="timeline__search"
-          type="search"
           value={tlText()}
-          onInput={(e) => {
+          onValue={(text) => {
             // Before the text lands: the strip still shows the previous result,
             // which is exactly the view worth anchoring (see captureAnchor).
             captureAnchor();
-            setTlText(e.currentTarget.value);
+            setTlText(text);
           }}
           placeholder="Search timeline…"
-          aria-label="Search the timeline (full text, including file contents)"
+          label="Search the timeline (full text, including file contents)"
         />
         <Show when={tally().presentKinds.length > 1 || hidden().size > 0}>
           <TimelineKindFilter
@@ -251,34 +251,34 @@ export function TimelineDrawer() {
         </Show>
         <Show when={events().length > 0}>
           <div class="timeline__events" aria-label="Scroll to events">
-            <button onClick={() => goToEvent('start')} title="Scroll to first event">
+            <Button onClick={() => goToEvent('start')} title="Scroll to first event">
               Start
-            </button>
-            <button onClick={() => goToEvent('prev')} disabled={cursor() === 0} title="Scroll to previous event">
+            </Button>
+            <Button onClick={() => goToEvent('prev')} disabled={cursor() === 0} title="Scroll to previous event">
               Prev
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => goToEvent('next')}
               disabled={cursor() === events().length - 1}
               title="Scroll to next event"
             >
               Next
-            </button>
-            <button onClick={() => goToEvent('end')} title="Scroll to last event">
+            </Button>
+            <Button onClick={() => goToEvent('end')} title="Scroll to last event">
               End
-            </button>
+            </Button>
           </div>
         </Show>
         <Show when={dated().length >= 2}>
           <div class="timeline__tools">
-            <button
+            <Button
               class={cx('timeline__measure-toggle', measuring() && 'is-active')}
               aria-pressed={measuring()}
               onClick={toggleMeasure}
               title="Measure the days between two cards"
             >
               Measure
-            </button>
+            </Button>
           </div>
         </Show>
       </header>
@@ -307,22 +307,23 @@ export function TimelineDrawer() {
                 )}
               </Show>
               <Show when={picks().length > 0}>
-                <button class="link-button" onClick={() => setPicks([])}>
+                <Button tone="plain" onClick={() => setPicks([])}>
                   Clear
-                </button>
+                </Button>
               </Show>
             </div>
           </Show>
           <div class="timeline__body-row">
             <Show when={undated().length > 0}>
               <div class="timeline__undated">
-                <button
+                <Button
+                  tone="plain"
                   class="timeline__undated-toggle"
                   onClick={() => setShowUndated((v) => !v)}
                   aria-expanded={showUndated()}
                 >
                   Undated · {undated().length}
-                </button>
+                </Button>
                 <Show when={showUndated()}>
                   <div class="timeline__undated-list">
                     <For each={undated()}>{(card) => chip(card, false)}</For>

@@ -1,7 +1,6 @@
 import { Match, Show, Switch, createSignal, onCleanup, onMount } from 'solid-js';
 import { BoardCanvas, CanvasPanel } from './components/board/BoardCanvas';
 import { BusyOverlay } from './components/ui/BusyOverlay';
-import { BackgroundTaskIndicator } from './components/BackgroundTaskIndicator';
 import { FirstRunModal } from './components/panels/FirstRunModal';
 import { BoardPropertiesModal } from './components/panels/BoardPropertiesModal';
 import { ManageModal } from './components/panels/ManageModal';
@@ -131,7 +130,6 @@ export default function App() {
             <LibraryMcpModal />
           </Show>
           <BusyOverlay />
-          <BackgroundTaskIndicator />
           <UndoToast />
           <PromptHost />
         </div>

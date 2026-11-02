@@ -1,4 +1,5 @@
 import { Show, onCleanup, type JSX } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { pushModal } from '../../lib/modalStack';
 
 type Props = {
@@ -18,9 +19,9 @@ export function Modal(props: Props) {
       <div class="modal" role="dialog" aria-modal="true" aria-label={props.title}>
         <header class="modal__header">
           <span class="panel-heading">{props.title}</span>
-          <button class="link-button" onClick={() => props.onClose()}>
+          <Button tone="plain" onClick={() => props.onClose()}>
             Close
-          </button>
+          </Button>
         </header>
         <div class="modal__body">{props.children}</div>
         <Show when={props.footer}>{(footer) => <footer class="modal__footer">{footer()}</footer>}</Show>

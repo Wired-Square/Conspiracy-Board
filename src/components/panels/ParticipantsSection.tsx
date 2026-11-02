@@ -39,7 +39,7 @@ export function ParticipantsSection(props: { cardId: string }) {
             <For each={relations().actors}>
               {(c) => (
                 <li>
-                  <button class="link-button participants__row" onClick={() => selectCard(c.id)}>
+                  <button type="button" class="app-menu__item participants__row" onClick={() => selectCard(c.id)}>
                     <span class="participants__icon">{KIND_META[c.kind].icon}</span>
                     <span class="participants__title">{c.title}</span>
                   </button>
@@ -74,7 +74,7 @@ function MailList(props: { label: string; arrow: string; mail: Card[]; onPick: (
         <For each={props.mail}>
           {(c) => (
             <li>
-              <button class="link-button participants__row" onClick={() => props.onPick(c.id)}>
+              <button type="button" class="app-menu__item participants__row" onClick={() => props.onPick(c.id)}>
                 <span class="participants__title">{c.title || 'Untitled'}</span>
                 <Show when={c.occurredAt}>
                   {(at) => <span class="participants__when">{formatOccurredAt(at(), c.occurredAtPrecision)}</span>}

@@ -1,4 +1,5 @@
 import { Show, createResource } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { size } from '@wired-square/kit/core';
 import { storage } from '../../storage';
 import type { DocStatus, MediaMeta } from '../../storage/StorageAdapter';
@@ -88,7 +89,7 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
       onClose={props.onClose}
       footer={
         props.row.onDisk ? (
-          <button onClick={() => void storage.openMedia(props.row.file)}>Open file</button>
+          <Button onClick={() => void storage.openMedia(props.row.file)}>Open file</Button>
         ) : undefined
       }
     >
@@ -98,9 +99,9 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
         {(owner) => (
           <p class="media-details__owner">
             Used by{' '}
-            <button class="link-button" onClick={() => showCard(owner().cardId)}>
+            <Button tone="plain" class="cb-link" onClick={() => showCard(owner().cardId)}>
               {owner().title || 'Untitled'}
-            </button>{' '}
+            </Button>{' '}
             ({owner().mediaKind} on {owner().cardKind})
           </p>
         )}

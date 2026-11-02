@@ -1,6 +1,7 @@
 import { For, Show, Switch, Match, createMemo, createSignal } from 'solid-js';
 import type { BoardSummary } from '../../storage/StorageAdapter';
 import { count } from '@wired-square/kit/core';
+import { Button } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { storage } from '../../storage';
 import { closeDialog } from '../../store/dialogStore';
@@ -63,12 +64,12 @@ export function BundleExportModal() {
           <span class="modal__status">
             {selected().size} of {count(rows().length, 'board')} selected
           </span>
-          <button class="link-button" onClick={close}>
+          <Button tone="plain" onClick={close}>
             Cancel
-          </button>
-          <button disabled={busy() || selected().size === 0} onClick={() => void onExport()}>
+          </Button>
+          <Button tone="primary" disabled={busy() || selected().size === 0} onClick={() => void onExport()}>
             {busy() ? 'Exporting…' : 'Export'}
-          </button>
+          </Button>
         </>
       }
     >

@@ -1,4 +1,5 @@
 import { For, Show, createResource } from 'solid-js';
+import { Button, Field } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { autofocus } from '../ui/autofocus';
 import { formatOccurredAt } from '../../lib/dates';
@@ -20,34 +21,28 @@ export function BoardPropertiesModal(props: { onClose: () => void }) {
 
   return (
     <Modal title="Board properties" onClose={props.onClose}>
-      <label class="field">
-        <span>Title</span>
-        {/* Saved as typed, like the cluster label, so there is no OK/Cancel
-            semantic to invent. */}
-        <input
-          ref={autofocus}
-          value={title()}
-          placeholder={DEFAULT_BOARD_TITLE}
-          onInput={(e) => setTitle(e.currentTarget.value)}
-          onBlur={flushTitle}
-        />
-      </label>
+      {/* Saved as typed, like the cluster label, so there is no OK/Cancel
+          semantic to invent. */}
+      <Field
+        label="Title"
+        ref={autofocus}
+        value={title()}
+        placeholder={DEFAULT_BOARD_TITLE}
+        onValue={setTitle}
+        onBlur={flushTitle}
+      />
       <p class="hint">Last saved {formatOccurredAt(meta().updatedAt, 'minute')}.</p>
 
-      <label class="field">
-        <span>Local country code</span>
-        {/* Saved as typed like Title; lib/phone normalises it. What a leading
-            national 0 folds to when matching and showing numbers. */}
-        <input
-          value={countryCode()}
-          placeholder="+61"
-          onInput={(e) => setCountryCode(e.currentTarget.value)}
-          onBlur={flushCountryCode}
-        />
-        <span class="field__hint">
-          A leading 0 in a phone number folds to this, so 0403… matches +61 403…. Defaults to Australia.
-        </span>
-      </label>
+      {/* Saved as typed like Title; lib/phone normalises it. What a leading
+          national 0 folds to when matching and showing numbers. */}
+      <Field
+        label="Local country code"
+        value={countryCode()}
+        placeholder="+61"
+        onValue={setCountryCode}
+        onBlur={flushCountryCode}
+        hint="A leading 0 in a phone number folds to this, so 0403… matches +61 403…. Defaults to Australia."
+      />
 
       <BoardFile />
 
@@ -112,9 +107,9 @@ function BoardFile() {
       {(id) => (
         <div class="field">
           <span>File</span>
-          <button class="link-button board-file" onClick={() => void reveal(id())} title={path.latest!}>
+          <Button tone="plain" class="board-file" onClick={() => void reveal(id())} title={path.latest!}>
             {path.latest}
-          </button>
+          </Button>
           <span class="field__hint">
             Saved here as you edit. Click to show it in Finder.
           </span>

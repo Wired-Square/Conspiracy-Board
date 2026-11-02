@@ -1,4 +1,5 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { closeDialog } from '../../store/dialogStore';
@@ -219,12 +220,12 @@ export function ImageEditorModal(props: { cardId: string }) {
       <Show when={busy()}>
         <span class="modal__status">{busy()}</span>
       </Show>
-      <button class="link-button" onClick={close}>
+      <Button tone="plain" onClick={close}>
         Cancel
-      </button>
-      <button onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
+      </Button>
+      <Button tone="primary" onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
         Save
-      </button>
+      </Button>
     </>
   );
 
@@ -238,12 +239,12 @@ export function ImageEditorModal(props: { cardId: string }) {
           hidden
           onChange={(e) => void onFile(e.currentTarget.files?.[0])}
         />
-        <button onClick={() => fileInput.click()}>File</button>
+        <Button onClick={() => fileInput.click()}>File</Button>
         <Show when={existing().length > 0}>
-          <button onClick={() => setPickerOpen(true)}>Object</button>
+          <Button onClick={() => setPickerOpen(true)}>Object</Button>
         </Show>
         <input
-          class="field--grow"
+          class="app-field__input"
           placeholder="…or paste an image URL"
           value={urlInput()}
           onInput={(e) => setUrlInput(e.currentTarget.value)}
@@ -251,9 +252,9 @@ export function ImageEditorModal(props: { cardId: string }) {
             if (e.key === 'Enter') void onLoadUrl();
           }}
         />
-        <button onClick={() => void onLoadUrl()} disabled={!urlInput().trim() || busy() != null}>
+        <Button onClick={() => void onLoadUrl()} disabled={!urlInput().trim() || busy() != null}>
           Load
-        </button>
+        </Button>
       </div>
       <Show when={pickerOpen()}>
         <ObjectPickerDialog

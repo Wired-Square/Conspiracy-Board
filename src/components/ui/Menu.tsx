@@ -1,4 +1,5 @@
 import { Index, Show, createEffect, createSignal } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import { createDismissal } from './createDismissal';
 
@@ -88,7 +89,7 @@ export function Menu(props: Props) {
 
   return (
     <div class="menu" ref={wrapper}>
-      <button
+      <Button
         ref={trigger}
         class="menu__trigger"
         aria-haspopup="menu"
@@ -100,7 +101,7 @@ export function Menu(props: Props) {
         <span class="menu__caret" aria-hidden="true">
           ▾
         </span>
-      </button>
+      </Button>
 
       <Show when={open()}>
         <div class="menu__list" role="menu" aria-label={props.label} onKeyDown={onListKeyDown}>
@@ -111,7 +112,8 @@ export function Menu(props: Props) {
                 role={chooser() ? 'menuitemradio' : 'menuitem'}
                 aria-checked={chooser() ? props.selectedLabel === item().label : undefined}
                 tabIndex={-1}
-                class={cx('menu__item', props.selectedLabel === item().label && 'is-selected')}
+                type="button"
+                class={cx('app-menu__item menu__item', props.selectedLabel === item().label && 'is-selected')}
                 disabled={item().disabled}
                 onClick={() => select(item())}
                 onMouseEnter={() => !item().disabled && setActiveIndex(i)}

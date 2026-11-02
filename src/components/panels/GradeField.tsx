@@ -1,4 +1,5 @@
 import { For } from 'solid-js';
+import { Select } from '@wired-square/kit';
 import { GRADES, GRADE_META, gradeTint } from '../../lib/grades';
 import type { Grade } from '../../types/board';
 
@@ -15,26 +16,24 @@ import type { Grade } from '../../types/board';
  */
 export function GradeField(props: { grade?: Grade; onChange: (grade: Grade | undefined) => void }) {
   return (
-    <label class="field">
-      <span>Grade</span>
-      <select
-        class="grade-select"
-        value={props.grade ?? ''}
-        style={props.grade ? gradeTint(props.grade) : undefined}
-        onChange={(e) => props.onChange((e.currentTarget.value || undefined) as Grade | undefined)}
-      >
-        <option value="">— ungraded —</option>
-        <For each={GRADES}>{(g) => <option value={g}>{GRADE_META[g].label}</option>}</For>
-      </select>
-      <span class="field__hint">
-        {props.grade
+    <Select
+      label="Grade"
+      class="grade-select"
+      value={props.grade ?? ''}
+      style={props.grade ? gradeTint(props.grade) : undefined}
+      onValue={(grade) => props.onChange((grade || undefined) as Grade | undefined)}
+      hint={
+        props.grade
           ? GRADE_META[props.grade].definition
           : // Absence is not a finding. "Unresolved" says the record was read and
             // does not settle it; ungraded says nobody has looked yet, and the
             // board must not quietly upgrade the second into the first.
-            'Nobody has graded this yet — which is not the same as Unresolved.'}
-      </span>
-    </label>
+            'Nobody has graded this yet — which is not the same as Unresolved.'
+      }
+    >
+      <option value="">— ungraded —</option>
+      <For each={GRADES}>{(g) => <option value={g}>{GRADE_META[g].label}</option>}</For>
+    </Select>
   );
 }
 

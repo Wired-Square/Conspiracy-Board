@@ -64,7 +64,7 @@ test('Escape closes a menu over a dialog without closing the dialog', () => {
 
 test('the search box writes the store once typing settles, and clears on a board switch', () => {
   vi.useFakeTimers();
-  const search = host.querySelector<HTMLInputElement>('.toolbar__search')!;
+  const search = host.querySelector<HTMLInputElement>('.toolbar__search input')!;
   actions.setSearchQuery.mockClear();
   search.value = 'mal';
   search.dispatchEvent(new Event('input', { bubbles: true }));

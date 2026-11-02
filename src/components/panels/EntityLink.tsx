@@ -1,4 +1,5 @@
 import { Index, Show, createMemo, createSignal, type Accessor } from 'solid-js';
+import { Button, IconButton } from '@wired-square/kit';
 import type { Card, CardKind, EmailAddress } from '../../types/board';
 import { buildRoster, type AddressMatch, type Roster } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
@@ -52,22 +53,22 @@ export type LinkRowContext = {
 function EntityChip(props: { card: Card; inference?: boolean; onSelect: () => void; onUnlink: () => void }) {
   return (
     <span class="email-addr__chip">
-      <button
-        class="link-button email-addr__entity"
+      <Button
+        tone="plain"
+        class="email-addr__entity"
         style={props.inference ? gradeTint('inference') : undefined}
         onClick={() => props.onSelect()}
       >
         <span class="email-addr__icon">{KIND_META[props.card.kind].icon}</span>
         {props.card.title || 'Untitled'}
-      </button>
-      <button
+      </Button>
+      <IconButton
         class="email-addr__unlink"
-        title={`Unlink ${props.card.title || 'Untitled'}`}
-        aria-label="Unlink"
+        label={`Unlink ${props.card.title || 'Untitled'}`}
         onClick={() => props.onUnlink()}
       >
         ×
-      </button>
+      </IconButton>
     </span>
   );
 }
@@ -133,9 +134,9 @@ export function ParticipantLine(props: { party: EmailAddress; ctx: LinkRowContex
         )}
       </Show>
       <Show when={canAddPerson() || canAddOrg()}>
-        <button class="link-button email-addr__link" onClick={() => setPicking(true)}>
+        <Button tone="plain" class="email-addr__link" onClick={() => setPicking(true)}>
           Link…
-        </button>
+        </Button>
       </Show>
       <Show when={picking()}>
         <EntityPickerDialog

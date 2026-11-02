@@ -1,3 +1,4 @@
+import { Button } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
@@ -58,9 +59,9 @@ export function ManageModal() {
       title="Manage board"
       onClose={close}
       footer={
-        <button class="is-danger" onClick={() => void remove()}>
+        <Button tone="danger" onClick={() => void remove()}>
           Delete board…
-        </button>
+        </Button>
       }
     >
       <div class="field">
@@ -68,8 +69,8 @@ export function ManageModal() {
         <p class="manage__name">{title() || 'Untitled board'}</p>
       </div>
       <div class="manage__actions">
-        <button onClick={() => void rename()}>Rename…</button>
-        <button onClick={() => void reveal()}>Show in Finder</button>
+        <Button onClick={() => void rename()}>Rename…</Button>
+        <Button onClick={() => void reveal()}>Show in Finder</Button>
       </div>
     </Modal>
   );

@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import { Button, IconButton } from '@wired-square/kit';
 import { touches } from '../../lib/connections';
 import { KIND_META } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
@@ -36,8 +37,9 @@ export function ConnectionsSection(props: { cardId: string }) {
             <div class="connection">
               <div class="connection-row">
                 <span class="connection-arrow">{outgoing() ? '→' : '←'}</span>
-                <button
-                  class="link-button email-addr__entity connection-target"
+                <Button
+                  tone="plain"
+                  class="email-addr__entity connection-target"
                   onClick={() => {
                     const o = other();
                     if (o) selectCard(o.id);
@@ -47,20 +49,20 @@ export function ConnectionsSection(props: { cardId: string }) {
                     {(icon) => <span class="email-addr__icon">{icon()}</span>}
                   </Show>
                   {other()?.title || '(unknown)'}
-                </button>
+                </Button>
                 {/* The string's label, editable in place — its own paper tag on the
                     board reads from this, so a rename lands there live (see projection,
                     updateConnection). Blank clears it back to an unlabelled string. */}
                 <input
-                  class="connection-label"
+                  class="app-field__input connection-label"
                   value={label()}
                   placeholder="label…"
                   onBlur={(e) => updateConnection(id, { label: e.currentTarget.value.trim() || undefined })}
                   onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                 />
-                <button class="cluster-delete" onClick={() => deleteConnection(id)} title="Remove connection">
+                <IconButton class="cluster-delete" label="Remove connection" onClick={() => deleteConnection(id)}>
                   ×
-                </button>
+                </IconButton>
               </div>
               {/* A link is a claim in its own right — "Acme owns Bam" is asserted
                   by the string, not by either card it ties — so it is graded on
@@ -73,9 +75,9 @@ export function ConnectionsSection(props: { cardId: string }) {
 
       <Show when={hasOthers()}>
         <div class="connection-add">
-          <button class="link-button connection-add__button" onClick={() => setPicking(true)}>
+          <Button tone="plain" onClick={() => setPicking(true)}>
             ＋ Link to a card…
-          </button>
+          </Button>
         </div>
       </Show>
 

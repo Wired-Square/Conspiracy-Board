@@ -2,7 +2,7 @@ import { Show } from 'solid-js';
 import { jobsStore } from '../store/jobsStore';
 import { fromStore } from '@wired-square/store/solid';
 
-// A small, non-blocking pill that background indexing is running — the search index
+// A small, non-blocking status in the toolbar that background indexing is running — the search index
 // reading text out of imported files. Unlike BusyOverlay, it never covers the screen:
 // the user keeps working while files are read. Shows nothing when idle.
 export function BackgroundTaskIndicator() {

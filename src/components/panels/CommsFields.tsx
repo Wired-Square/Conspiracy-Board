@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { Field, TextArea } from '@wired-square/kit';
 import type { Card, CallMeta, EmailAddress, MessageMeta } from '../../types/board';
 import { formatAddress, formatAddressList, parseAddress, parseAddressList } from '../../lib/email/addresses';
 import { emptyCallMeta, emptyMessageMeta } from '../../lib/comms';
@@ -88,55 +89,47 @@ export function CommsFields(props: { card: Card }) {
     <div class="field email-fields">
       <span>{isCall() ? 'Call details' : 'Message details'}</span>
 
-      <label class="field email-fields__row">
-        <span>From</span>
-        <input
-          value={from()}
-          placeholder="Jane Doe <0400 123 456>"
-          onInput={(e) => setFrom(e.currentTarget.value)}
-          onBlur={() => commitParticipants({ from: parseAddress(from()) })}
-        />
-      </label>
+      <Field
+        label="From"
+        value={from()}
+        placeholder="Jane Doe <0400 123 456>"
+        onValue={setFrom}
+        onBlur={() => commitParticipants({ from: parseAddress(from()) })}
+      />
       <Linked parties={meta().from?.address ? [meta().from!] : []} />
 
-      <label class="field email-fields__row">
-        <span>To</span>
-        <input
-          value={to()}
-          placeholder="comma separated"
-          onInput={(e) => setTo(e.currentTarget.value)}
-          onBlur={() => commitParticipants({ to: parseAddressList(to()) })}
-        />
-      </label>
+      <Field
+        label="To"
+        value={to()}
+        placeholder="comma separated"
+        onValue={setTo}
+        onBlur={() => commitParticipants({ to: parseAddressList(to()) })}
+      />
       <Linked parties={meta().to} />
 
       <Show when={!isCall()}>
-        <label class="field email-fields__row">
-          <span>Message</span>
-          <textarea
-            value={body()}
-            rows={3}
-            placeholder="What was said (or leave it to the screenshot)"
-            onInput={(e) => setBody(e.currentTarget.value)}
-            onBlur={() => patchMessage({ body: body() })}
-          />
-        </label>
+        <TextArea
+          label="Message"
+          value={body()}
+          rows={3}
+          placeholder="What was said (or leave it to the screenshot)"
+          onValue={setBody}
+          onBlur={() => patchMessage({ body: body() })}
+        />
       </Show>
 
       <Show when={isCall()}>
-        <label class="field email-fields__row">
-          <span>Duration</span>
-          <input
-            value={durationMin()}
-            inputmode="numeric"
-            placeholder="minutes"
-            onInput={(e) => setDurationMin(e.currentTarget.value)}
-            onBlur={() => {
-              const mins = Number(durationMin().trim());
-              patchCall({ durationSecs: Number.isFinite(mins) && mins > 0 ? Math.round(mins * 60) : undefined });
-            }}
-          />
-        </label>
+        <Field
+          label="Duration"
+          value={durationMin()}
+          inputmode="numeric"
+          placeholder="minutes"
+          onValue={setDurationMin}
+          onBlur={() => {
+            const mins = Number(durationMin().trim());
+            patchCall({ durationSecs: Number.isFinite(mins) && mins > 0 ? Math.round(mins * 60) : undefined });
+          }}
+        />
       </Show>
     </div>
   );

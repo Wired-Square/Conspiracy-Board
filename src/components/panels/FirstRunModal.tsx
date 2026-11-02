@@ -3,6 +3,7 @@
 // generated from.
 import logo from '../../../src-tauri/icons/icon.svg';
 import { Show } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 
@@ -34,20 +35,20 @@ export function FirstRunModal() {
             string yet. Where shall we begin?
           </p>
           <div class="first-run__choices">
-            <button class="first-run__choice" onClick={() => void actions.newBoard()}>
+            <Button class="first-run__choice" onClick={() => void actions.newBoard()}>
               <span class="first-run__choice-title">Start from scratch</span>
               <span class="first-run__choice-note">An empty corkboard to fill.</span>
-            </button>
-            <button class="first-run__choice" onClick={() => void actions.importBoard()}>
+            </Button>
+            <Button class="first-run__choice" onClick={() => void actions.importBoard()}>
               <span class="first-run__choice-title">Import a board</span>
               <span class="first-run__choice-note">From an exported bundle.</span>
-            </button>
-            <button class="first-run__choice" onClick={() => void actions.installExampleBoard()}>
+            </Button>
+            <Button class="first-run__choice" onClick={() => void actions.installExampleBoard()}>
               <span class="first-run__choice-title">Example board</span>
               <span class="first-run__choice-note">
                 “The Nightingale File” — ready to explore.
               </span>
-            </button>
+            </Button>
           </div>
           <Show when={lastError()}>
             <p class="modal__warn">{lastError()}</p>

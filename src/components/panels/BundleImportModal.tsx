@@ -1,5 +1,6 @@
 import { Index, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
+import { Button } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { closeDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
@@ -52,12 +53,12 @@ export function BundleImportModal(props: { boards: Board[] }) {
           <span class="modal__status">
             {selectedCount()} of {count(rows().length, 'board')} selected
           </span>
-          <button class="link-button" onClick={close}>
+          <Button tone="plain" onClick={close}>
             Cancel
-          </button>
-          <button disabled={busy() || selectedCount() === 0} onClick={() => void onImport()}>
+          </Button>
+          <Button tone="primary" disabled={busy() || selectedCount() === 0} onClick={() => void onImport()}>
             {busy() ? 'Importing…' : 'Import'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -76,7 +77,7 @@ export function BundleImportModal(props: { boards: Board[] }) {
                 onChange={(e) => setRow(i, { selected: e.currentTarget.checked })}
               />
               <input
-                class="import-offer__rename"
+                class="app-field__input import-offer__rename"
                 value={r().name}
                 placeholder="Board name"
                 onInput={(e) => setRow(i, { name: e.currentTarget.value })}

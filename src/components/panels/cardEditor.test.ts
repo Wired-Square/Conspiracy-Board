@@ -57,7 +57,7 @@ const replaceCard = (next: Card) =>
 const escape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!;
 const field = (label: string) =>
-  [...host.querySelectorAll<HTMLElement>('.field')].find((f) => f.firstElementChild?.textContent === label)!;
+  [...host.querySelectorAll<HTMLElement>('.field, .app-field')].find((f) => f.firstElementChild?.textContent === label)!;
 const type = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => {
   el.value = value;
   el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -104,12 +104,12 @@ test('the notes preview renders the draft as markdown', () => {
 test('the grade picker shows the chosen grade’s definition', () => {
   open([card('a')]);
   const grade = field('Grade');
-  expect(grade.querySelector('.field__hint')!.textContent).toContain('Nobody has graded this yet');
+  expect(grade.querySelector('.app-field__note')!.textContent).toContain('Nobody has graded this yet');
   choose(grade.querySelector('select')!, 'admitted');
   expect(actions.updateCard).toHaveBeenCalledWith('a', { grade: 'admitted' });
   replaceCard(card('a', { grade: 'admitted' }));
   expect(grade.querySelector('select')!.value).toBe('admitted');
-  expect(grade.querySelector('.field__hint')!.textContent).toBe(GRADE_META.admitted.definition);
+  expect(grade.querySelector('.app-field__note')!.textContent).toBe(GRADE_META.admitted.definition);
 });
 
 test('the connection picker stacks over the editor, and Escape closes only the top', () => {

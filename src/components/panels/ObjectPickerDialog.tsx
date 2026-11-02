@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import { Button, SearchInput } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import type { Card, CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META } from '../../lib/kinds';
@@ -92,12 +93,12 @@ export function ObjectPickerDialog(props: Props) {
 
   const footer = (
     <>
-      <button class="link-button" onClick={() => props.onClose()}>
+      <Button tone="plain" onClick={() => props.onClose()}>
         Cancel
-      </button>
-      <button onClick={() => current() && choose(current()!.file)} disabled={!current()}>
+      </Button>
+      <Button tone="primary" onClick={() => current() && choose(current()!.file)} disabled={!current()}>
         Use image
-      </button>
+      </Button>
     </>
   );
 
@@ -107,7 +108,7 @@ export function ObjectPickerDialog(props: Props) {
         <div class="entity-picker__tabs" role="tablist">
           <For each={tabs()}>
             {(t) => (
-              <button
+              <Button
                 role="tab"
                 aria-selected={t.key === active()}
                 class={cx('entity-picker__tab', t.key === active() && 'is-active')}
@@ -118,17 +119,18 @@ export function ObjectPickerDialog(props: Props) {
                 </Show>
                 {t.label}
                 <span class="entity-picker__tab-count">{t.count}</span>
-              </button>
+              </Button>
             )}
           </For>
         </div>
 
-        <input
+        <SearchInput
           class="entity-picker__filter"
+          label="Filter"
           ref={autofocus}
           value={filter()}
           placeholder="Filter by name, text, date…"
-          onInput={(e) => setFilter(e.currentTarget.value)}
+          onValue={setFilter}
         />
 
         <Show when={current()} fallback={<p class="object-picker__empty hint">Nothing matches.</p>}>
@@ -143,8 +145,7 @@ export function ObjectPickerDialog(props: Props) {
                     {(o) => {
                       const [first, ...rest] = o.cards;
                       return (
-                        <button
-                          type="button"
+                        <Button
                           class={cx('image-picker__item', o.file === shown().file && 'is-active')}
                           title={rest.length ? `${first.title || 'Untitled'} +${rest.length}` : first.title || 'Untitled'}
                           aria-pressed={o.file === shown().file}
@@ -155,7 +156,7 @@ export function ObjectPickerDialog(props: Props) {
                           <Show when={rest.length > 0}>
                             <span class="image-picker__count">+{rest.length}</span>
                           </Show>
-                        </button>
+                        </Button>
                       );
                     }}
                   </For>

@@ -101,7 +101,8 @@ function RecordRow(props: RowProps) {
   return (
     <li>
       <button
-        class={cx('record-row', props.selected && 'is-selected', props.loose && 'is-loose')}
+        type="button"
+        class={cx('app-menu__item record-row', props.selected && 'is-selected', props.loose && 'is-loose')}
         style={{ '--accent': props.clusterColor ?? NO_CLUSTER_ACCENT }}
         onClick={() => props.onPick(props.card.id)}
         title={props.card.title}

@@ -1,4 +1,5 @@
 import { Show, createSignal } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { errorMessage } from '../../lib/errors';
 import { libraryMcp, type LibraryMcpStatus } from '../../platform/libraryMcp';
@@ -36,7 +37,7 @@ export function LibraryMcpModal() {
       <p class="hint">Read-only access to this library for an AI client on this Mac.</p>
       <label class="field field--check">
         <input
-          class="library-mcp__toggle"
+          class="app-switch library-mcp__toggle"
           type="checkbox"
           role="switch"
           checked={enabled()}
@@ -49,9 +50,9 @@ export function LibraryMcpModal() {
         {(error) => (
           <div class="modal__warn library-mcp__warn" role="alert">
             <span>{error()}</span>
-            <button disabled={busy()} onClick={() => void run(libraryMcp.enable)}>
+            <Button disabled={busy()} onClick={() => void run(libraryMcp.enable)}>
               Retry
-            </button>
+            </Button>
           </div>
         )}
       </Show>
@@ -71,9 +72,9 @@ export function LibraryMcpModal() {
             </Show>
             <div class="field">
               <div>
-                <button disabled={busy()} onClick={() => void run(libraryMcp.rotateToken)}>
+                <Button disabled={busy()} onClick={() => void run(libraryMcp.rotateToken)}>
                   Rotate token
-                </button>
+                </Button>
               </div>
               <span class="field__hint">
                 The token is kept in your Keychain, so it stays the same across relaunches until you rotate it.
@@ -101,7 +102,7 @@ function CopyField(props: { label: string; value: string; onError: (message: str
       <span>{props.label}</span>
       <div class="library-mcp__value">
         <code>{props.value}</code>
-        <button onClick={() => void copy()}>{copied() ? 'Copied' : 'Copy'}</button>
+        <Button onClick={() => void copy()}>{copied() ? 'Copied' : 'Copy'}</Button>
       </div>
     </div>
   );

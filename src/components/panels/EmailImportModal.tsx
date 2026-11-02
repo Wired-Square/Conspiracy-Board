@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
+import { Button, Select, TextArea } from '@wired-square/kit';
 import { Modal } from '../ui/Modal';
 import { camera } from '../board/camera';
 import { NEW_CLUSTER, emailImportStore } from '../../store/emailImportStore';
@@ -119,10 +120,11 @@ export function EmailImportModal() {
       footer={
         <>
           <span class="modal__status">{status()}</span>
-          <button class="link-button" onClick={close}>
+          <Button tone="plain" onClick={close}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            tone="primary"
             disabled={
               busy() ||
               tooMany() ||
@@ -131,47 +133,47 @@ export function EmailImportModal() {
             onClick={() => void onAdd()}
           >
             {label()}
-          </button>
+          </Button>
         </>
       }
     >
       <div class="modal__tabs">
-        <button class={tab() === 'files' ? 'is-active' : ''} onClick={() => setTab('files')}>
+        <Button class={tab() === 'files' ? 'is-active' : ''} onClick={() => setTab('files')}>
           Files
-        </button>
-        <button class={tab() === 'paste' ? 'is-active' : ''} onClick={() => setTab('paste')}>
+        </Button>
+        <Button class={tab() === 'paste' ? 'is-active' : ''} onClick={() => setTab('paste')}>
           Paste
-        </button>
-        <button class="link-button modal__tabs-aside" onClick={onAddBlank}>
+        </Button>
+        <Button tone="plain" class="modal__tabs-aside" onClick={onAddBlank}>
           Or add a blank email card
-        </button>
+        </Button>
       </div>
 
       <Show
         when={tab() === 'files'}
         fallback={
-          <div class="field">
-            <span>Raw message</span>
-            <textarea
+          <>
+            <TextArea
+              label="Raw message"
               rows={8}
               value={paste()}
               placeholder="Paste the raw message including headers — in Gmail: ⋮ → Show original"
-              onInput={(e) => setPaste(e.currentTarget.value)}
+              onValue={setPaste}
             />
             <div class="field__row">
-              <button onClick={() => void parsePaste(paste())} disabled={busy() || !paste().trim()}>
+              <Button onClick={() => void parsePaste(paste())} disabled={busy() || !paste().trim()}>
                 Parse
-              </button>
+              </Button>
             </div>
-          </div>
+          </>
         }
       >
         <div class="field">
           <span>.eml or .mbox files</span>
           <div class="field__row">
-            <button onClick={() => void onPickFiles()} disabled={busy()}>
+            <Button onClick={() => void onPickFiles()} disabled={busy()}>
               Choose files…
-            </button>
+            </Button>
           </div>
           <p class="hint">
             You can also drop email files into the Inbox folder (File ▸ Show Inbox Folder) —
@@ -180,14 +182,11 @@ export function EmailImportModal() {
         </div>
       </Show>
 
-      <label class="field">
-        <span>Add to cluster</span>
-        <select value={clusterId() ?? ''} onChange={(e) => setClusterId(e.currentTarget.value || null)}>
-          <option value="">— none —</option>
-          <option value={NEW_CLUSTER}>New cluster</option>
-          <For each={clusters()}>{(c) => <option value={c.id}>{c.label}</option>}</For>
-        </select>
-      </label>
+      <Select label="Add to cluster" value={clusterId() ?? ''} onValue={(id) => setClusterId(id || null)}>
+        <option value="">— none —</option>
+        <option value={NEW_CLUSTER}>New cluster</option>
+        <For each={clusters()}>{(c) => <option value={c.id}>{c.label}</option>}</For>
+      </Select>
 
       <Show when={errors().length > 0}>
         <div class="field">
@@ -322,6 +321,7 @@ function OfferRow(props: {
         </span>
       </label>
       <select
+        class="app-field__input import-offer__target"
         value={props.choice.target}
         // Aiming a row somewhere is itself the decision to use it; making the
         // user tick it as well would be asking the same question twice.

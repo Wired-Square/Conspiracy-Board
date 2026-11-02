@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import { Button, SearchInput } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import type { CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
@@ -74,7 +75,7 @@ export function EntityPickerDialog(props: Props) {
               <div class="entity-picker__tabs" role="tablist">
                 <For each={tabs()}>
                   {(k) => (
-                    <button
+                    <Button
                       role="tab"
                       aria-selected={k === kind()}
                       class={cx('entity-picker__tab', k === kind() && 'is-active')}
@@ -88,24 +89,29 @@ export function EntityPickerDialog(props: Props) {
                       </Show>
                       {KIND_META[k].label}
                       <span class="entity-picker__tab-count">{counts().get(k) ?? 0}</span>
-                    </button>
+                    </Button>
                   )}
                 </For>
               </div>
 
-              <input
+              <SearchInput
                 class="entity-picker__filter"
+                label="Filter"
                 ref={autofocus}
                 value={filter()}
                 placeholder={`Filter ${KIND_META[kind()].label.toLowerCase()}…`}
-                onInput={(e) => setFilter(e.currentTarget.value)}
+                onValue={setFilter}
               />
 
               <ul class="email-addr__list entity-picker__list">
                 <For each={creates()}>
                   {(o) => (
                     <li>
-                      <button class="entity-picker__row entity-picker__row--create" onClick={() => pick(o.value)}>
+                      <button
+                        type="button"
+                        class="app-menu__item entity-picker__row entity-picker__row--create"
+                        onClick={() => pick(o.value)}
+                      >
                         <span class="entity-picker__row-icon">＋</span>
                         <span class="entity-picker__row-title">{o.label}</span>
                       </button>
@@ -115,7 +121,7 @@ export function EntityPickerDialog(props: Props) {
                 <For each={list()}>
                   {(c) => (
                     <li>
-                      <button class="entity-picker__row" onClick={() => pick(c.id)}>
+                      <button type="button" class="app-menu__item entity-picker__row" onClick={() => pick(c.id)}>
                         <Show when={KIND_META[c.kind].icon}>
                           <span class="entity-picker__row-icon">{KIND_META[c.kind].icon}</span>
                         </Show>

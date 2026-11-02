@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { Button } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import type { Card } from '../../types/board';
 import { formatOccurredAt } from '../../lib/dates';
@@ -22,7 +23,7 @@ export function TimelineItem(props: Props) {
   // thick accent bar, see .timeline-item--event) rather than a paper chip.
   const isEvent = () => props.card.kind === 'event';
   return (
-    <button
+    <Button
       class={cx('timeline-item', isEvent() && 'timeline-item--event', props.selected && 'is-selected', props.measureMark && 'is-measured')}
       style={{ '--accent': props.clusterColor ?? NO_CLUSTER_ACCENT }}
       data-card-id={props.card.id}
@@ -66,6 +67,6 @@ export function TimelineItem(props: Props) {
         </Show>
         {props.card.title || 'Untitled'}
       </span>
-    </button>
+    </Button>
   );
 }

@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, on } from 'solid-js';
+import { Button, SearchInput } from '@wired-square/kit';
 import { count } from '@wired-square/kit/core';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
@@ -18,6 +19,7 @@ import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
 import { Menu } from '../ui/Menu';
 import { LibraryMcpIndicator } from '../LibraryMcpIndicator';
+import { BackgroundTaskIndicator } from '../BackgroundTaskIndicator';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
 
@@ -93,14 +95,13 @@ export function Toolbar() {
         />
         {/* One search for whichever view is showing: it dims the board's
             non-matches and drops the record's, the objects view's and the
-            timeline's. type="search" gives the native clear affordance. */}
-        <input
+            timeline's. */}
+        <SearchInput
           class="toolbar__search"
-          type="search"
+          label="Search"
           value={searchText()}
-          onInput={(e) => setSearchText(e.currentTarget.value)}
+          onValue={setSearchText}
           placeholder={`Search ${VIEW_META[view()].label.toLowerCase()}…`}
-          aria-label="Search"
         />
         <div class="toolbar__actions">
           {/* The Objects view isn't a place you add cards — its files come from
@@ -129,15 +130,16 @@ export function Toolbar() {
           {/* Only in board view — Tidy arranges what the board draws. It untangles
               the string and pulls the cards in; the record has no positions. */}
           <Show when={view() === 'board'}>
-            <button onClick={tidy} title="Untangle the string and bring the cards together">
+            <Button onClick={tidy} title="Untangle the string and bring the cards together">
               Tidy
-            </button>
+            </Button>
           </Show>
           {/* Board management lives in the native File menu now
               (src-tauri/src/menu.rs); autosave means there is no Save item to
               miss. A failed save is what's worth showing — the strip below. */}
         </div>
         <LibraryMcpIndicator />
+        <BackgroundTaskIndicator />
       </div>
       <Show when={lastError()}>
         <div class="toolbar__error" role="alert">
