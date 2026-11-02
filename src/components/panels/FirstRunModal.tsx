@@ -11,8 +11,7 @@ import { fromStore } from '@wired-square/store/solid';
 // example — so this is where a first board comes from: an empty one to fill, or
 // the worked example to look around.
 //
-// Pending for good, so Escape can't dismiss it: there is no board behind it, and a
-// choice is required.
+// Undismissible: there is no board behind it, and a choice is required.
 export function FirstRunModal() {
   const actions = boardStore.getState();
   // An error from any of these actions (a failed import most likely) would
@@ -21,7 +20,7 @@ export function FirstRunModal() {
   const lastError = fromStore(boardStore, (s) => s.lastError);
 
   return (
-    <Dialog aria-label="Start a board" pending onClose={() => {}}>
+    <Dialog aria-label="Start a board" undismissible>
       <header class="first-run__header">
         <img class="first-run__logo" src={logo} alt="" width={34} height={34} />
         <h2 class="app-dialog__title">Start a board</h2>

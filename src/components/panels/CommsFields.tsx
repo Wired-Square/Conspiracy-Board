@@ -110,6 +110,7 @@ export function CommsFields(props: { card: Card }) {
       <Show when={!isCall()}>
         <TextArea
           label="Message"
+          variant="prose"
           value={body()}
           rows={3}
           placeholder="What was said (or leave it to the screenshot)"

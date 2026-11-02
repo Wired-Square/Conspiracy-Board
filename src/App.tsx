@@ -20,8 +20,6 @@ import { PromptHost } from './components/ui/PromptModal';
 import { fromStore } from '@wired-square/store/solid';
 import { startInbox } from './platform/inbox';
 import { startUndoShortcut } from './platform/undoShortcut';
-import { startDialogEscape } from './platform/dialogEscape';
-import { startInputModality } from './platform/inputModality';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
@@ -43,8 +41,6 @@ export default function App() {
     for (const start of [
       startInbox,
       startUndoShortcut,
-      startDialogEscape,
-      startInputModality,
       startBoardMenu,
       startImportProgress,
       startJobProgress,

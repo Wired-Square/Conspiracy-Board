@@ -98,11 +98,9 @@ export function BundleExportModal() {
           </div>
         </Match>
       </Switch>
-      <p class="dialog-status">
-        {selected().size} of {count(rows().length, 'board')} selected
-      </p>
       <DialogActions
         onCancel={close}
+        status={`${selected().size} of ${count(rows().length, 'board')} selected`}
         confirm={
           <Button tone="primary" disabled={busy() || selected().size === 0} onClick={() => void onExport()}>
             {busy() ? 'Exporting…' : 'Export'}

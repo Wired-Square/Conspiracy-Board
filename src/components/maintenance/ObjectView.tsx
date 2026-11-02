@@ -134,7 +134,7 @@ export function ObjectView() {
     <div class="record maintenance">
       <div class="record__bar">
         <span class="panel-heading">Objects</span>
-        <Menu aria-label="Maintenance" trigger="Maintenance" chevron>
+        <Menu tone="default" aria-label="Maintenance" trigger="Maintenance" chevron>
           <MenuItem disabled={busy()} onSelect={() => void reprocessEverything()}>
             Reprocess all
           </MenuItem>
@@ -237,7 +237,7 @@ function MediaFileRow(props: RowProps) {
         <span class="record-row__who">
           <Show when={props.row.owner} fallback="no card">
             {(owner) => (
-              <Button tone="plain" class="cb-link" onClick={() => props.onSelect(owner().cardId)}>
+              <Button tone="link" onClick={() => props.onSelect(owner().cardId)}>
                 {owner().mediaKind} on {owner().cardKind}
               </Button>
             )}

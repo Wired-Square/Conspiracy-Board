@@ -87,7 +87,7 @@ function CardEditorForm(props: { card: Card }) {
 
   return (
     <>
-      <Field label="Title" value={title()} onValue={setTitle} onBlur={flushTitle} />
+      <Field label="Title" autofocus value={title()} onValue={setTitle} onBlur={flushTitle} />
 
       {/* An actor is not a moment: a person does not *happen*, so `occurredAt`
           has nothing to mean on one. It is why the timeline excludes them by
@@ -235,7 +235,7 @@ function CardEditorForm(props: { card: Card }) {
         <Show when={props.card.imageMeta}>{(meta) => <MetaList facts={imageFacts(meta())} />}</Show>
       </div>
 
-      <TextArea label="Notes (markdown)" value={notes()} onValue={setNotes} onBlur={flushNotes} rows={8} />
+      <TextArea label="Notes (markdown)" variant="prose" value={notes()} onValue={setNotes} onBlur={flushNotes} rows={8} />
 
       {/* The preview reads the draft, so it stays live without a store write. */}
       <Show when={notes().trim()}>

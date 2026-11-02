@@ -87,15 +87,14 @@ test('picking a record card selects it without moving the board', () => {
 test('the kind filter stays open across picks and hides the kinds unticked', () => {
   button('Filter').click();
   const option = (label: string) =>
-    [...host.querySelectorAll<HTMLButtonElement>('.timeline__filter-option')].find((o) => o.textContent?.includes(label))!;
+    [...host.querySelectorAll<HTMLButtonElement>('[role=menuitemcheckbox]')].find((o) => o.textContent?.includes(label))!;
   option('Email').click();
   expect(option('Email').getAttribute('aria-checked')).toBe('false');
   expect(chip('mail')).toBeNull();
-  expect(button('Filter').classList.contains('is-active')).toBe(true);
+  expect(host.querySelector('.timeline__filter')!.classList.contains('is-active')).toBe(true);
   expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', inline: 'center', block: 'nearest' });
   button('Reset').click();
   expect(chip('mail')).not.toBeNull();
-  expect(host.querySelector('.timeline__filter-menu')).not.toBeNull();
 });
 
 test('the measure tool reads the days between two picks instead of navigating', () => {

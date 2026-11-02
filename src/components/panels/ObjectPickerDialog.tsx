@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { Button, Dialog, DialogActions, SearchInput, TabButton } from '@wired-square/kit';
+import { Button, Dialog, DialogActions, SearchInput, TabPanel, Tabs } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import type { Card, CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META } from '../../lib/kinds';
@@ -61,14 +61,23 @@ export function ObjectPickerDialog(props: Props) {
   // "All" first, then only the kinds that actually have a picture — an empty tab is
   // a dead end here (unlike the link picker, nothing is created from this one). Each
   // tab is a ready-to-render descriptor, so the JSX below has no per-kind branching.
+  const tab = (id: CardKind | 'all', label: string, count: number, icon?: string) => ({
+    id,
+    label: () => (
+      <>
+        <Show when={icon}>
+          <span aria-hidden="true">{icon} </span>
+        </Show>
+        {label}
+        <span class="entity-picker__tab-count">{count}</span>
+      </>
+    ),
+  });
   const tabs = createMemo(() => [
-    { key: 'all' as const, label: 'All', icon: undefined as string | undefined, count: props.objects.length },
-    ...CARD_KINDS.filter((k) => (counts().get(k) ?? 0) > 0).map((k) => ({
-      key: k,
-      label: KIND_META[k].label,
-      icon: KIND_META[k].icon,
-      count: counts().get(k) ?? 0,
-    })),
+    tab('all', 'All', props.objects.length),
+    ...CARD_KINDS.filter((k) => (counts().get(k) ?? 0) > 0).map((k) =>
+      tab(k, KIND_META[k].label, counts().get(k) ?? 0, KIND_META[k].icon),
+    ),
   ]);
 
   const visible = createMemo(() => {
@@ -93,17 +102,7 @@ export function ObjectPickerDialog(props: Props) {
   return (
     <Dialog title="Choose an object" wide onClose={props.onClose}>
       <div class="object-picker">
-        <div class="app-tablist" role="group" aria-label="Kind">
-          <For each={tabs()}>
-            {(t) => (
-              <TabButton selected={t.key === active()} onClick={() => setActive(t.key)}>
-                <Show when={t.icon}>{(icon) => <span aria-hidden="true">{icon()} </span>}</Show>
-                {t.label}
-                <span class="entity-picker__tab-count">{t.count}</span>
-              </TabButton>
-            )}
-          </For>
-        </div>
+        <Tabs aria-label="Kind" group="object-kind" tabs={tabs()} selected={active()} onChange={setActive} />
 
         <SearchInput
           class="entity-picker__filter"
@@ -114,6 +113,7 @@ export function ObjectPickerDialog(props: Props) {
           onValue={setFilter}
         />
 
+        <TabPanel id={active()} selected={active()} group="object-kind">
         <Show when={current()} fallback={<p class="object-picker__empty hint">Nothing matches.</p>}>
           {(shown) => {
             // The representative object of the shown image, and how many others share it.
@@ -165,6 +165,7 @@ export function ObjectPickerDialog(props: Props) {
             );
           }}
         </Show>
+        </TabPanel>
       </div>
       <DialogActions
         onCancel={props.onClose}

@@ -10,7 +10,7 @@ export function BusyOverlay() {
   const status = fromStore(boardStore, (s) => s.importStatus);
   return (
     <Show when={status()}>
-      <Dialog aria-label="Working" pending onClose={() => {}}>
+      <Dialog aria-label="Working" class="busy-dialog" undismissible>
         <div class="busy-overlay" role="status" aria-live="polite">
           <span class="spinner" aria-hidden="true" />
           <span class="busy-overlay__text">{status()}</span>

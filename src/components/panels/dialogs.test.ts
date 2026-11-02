@@ -127,7 +127,7 @@ test('bundle import adopts only the ticked boards, under their edited names', as
   typeInto(names[1], '  Two  ');
   expect(document.contains(names[1])).toBe(true);
   host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click();
-  expect(host.querySelector('.dialog-status')?.textContent).toBe('1 of 2 boards selected');
+  expect(host.querySelector('.app-dialog__status')?.textContent).toBe('1 of 2 boards selected');
 
   button(host, 'Import').click();
   await settle();

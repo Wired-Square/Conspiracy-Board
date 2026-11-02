@@ -27,15 +27,18 @@ const trigger = (label: string) =>
   [...host.querySelectorAll<HTMLButtonElement>('.app-menu__trigger')].find((b) => b.textContent?.trim().startsWith(label))!;
 const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 const key = (target: EventTarget, key: string) =>
-  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
 
-test('the view chooser marks the current view and switches on a pick, closing first', () => {
-  trigger('Board').click();
-  expect(trigger('Board').getAttribute('aria-expanded')).toBe('true');
-  expect(items().map((i) => i.getAttribute('aria-current'))).toEqual(['page', null, null]);
-  items()[1].click();
-  expect(actions.setView).toHaveBeenCalledWith('record');
-  expect(items()).toHaveLength(0);
+test('the view chooser opens on the current view and switches on a pick, closing first', () => {
+  boardStore.setState({ view: 'record' });
+  trigger('Record').click();
+  expect(trigger('Record').getAttribute('aria-expanded')).toBe('true');
+  const views = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
+  expect(views().map((i) => i.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
+  expect(document.activeElement).toBe(views()[1]);
+  views()[0].click();
+  expect(actions.setView).toHaveBeenCalledWith('board');
+  expect(views()).toHaveLength(0);
 });
 
 test('a menu moves focus with the arrow keys and closes on an outside pointerdown', () => {

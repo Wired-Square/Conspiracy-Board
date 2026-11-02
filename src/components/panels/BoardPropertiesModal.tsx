@@ -1,5 +1,5 @@
 import { For, Show, createResource } from 'solid-js';
-import { Button, Dialog, Field } from '@wired-square/kit';
+import { Button, Dialog, DialogActions, Field } from '@wired-square/kit';
 import { autofocus } from '../ui/autofocus';
 import { formatOccurredAt } from '../../lib/dates';
 import { DEFAULT_BOARD_TITLE } from '../../data/emptyBoard';
@@ -67,9 +67,7 @@ export function BoardPropertiesModal(props: { onClose: () => void }) {
           a claim, and a document exists whether or not you like it.
         </span>
       </div>
-      <div class="app-dialog__actions">
-        <Button onClick={props.onClose}>Close</Button>
-      </div>
+      <DialogActions onCancel={props.onClose} />
     </Dialog>
   );
 }

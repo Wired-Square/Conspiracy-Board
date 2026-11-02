@@ -285,11 +285,9 @@ export function ImageEditorModal(props: { cardId: string }) {
           />
         </Show>
       </div>
-      <Show when={busy()}>
-        <p class="dialog-status">{busy()}</p>
-      </Show>
       <DialogActions
         onCancel={close}
+        status={busy()}
         confirm={
           <Button tone="primary" onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
             Save

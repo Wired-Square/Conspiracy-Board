@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { Button, Dialog, SearchInput, TabButton } from '@wired-square/kit';
+import { Dialog, DialogActions, SearchInput, TabPanel, Tabs } from '@wired-square/kit';
 import { plus } from '@wired-square/icons/solid';
 import type { CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
@@ -71,23 +71,25 @@ export function EntityPickerDialog(props: Props) {
         <Show when={activeKind()} fallback={<p class="hint">Nothing to link to yet.</p>}>
           {(kind) => (
             <>
-              <div class="app-tablist" role="group" aria-label="Kind">
-                <For each={tabs()}>
-                  {(k) => (
-                    <TabButton
-                      selected={k === kind()}
-                      onClick={() => {
-                        setActive(k);
-                        setFilter('');
-                      }}
-                    >
+              <Tabs
+                aria-label="Kind"
+                group="entity-kind"
+                tabs={tabs().map((k) => ({
+                  id: k,
+                  label: () => (
+                    <>
                       <Show when={KIND_META[k].icon}>{(icon) => <span aria-hidden="true">{icon()} </span>}</Show>
                       {KIND_META[k].label}
                       <span class="entity-picker__tab-count">{counts().get(k) ?? 0}</span>
-                    </TabButton>
-                  )}
-                </For>
-              </div>
+                    </>
+                  ),
+                }))}
+                selected={kind()}
+                onChange={(k) => {
+                  setActive(k);
+                  setFilter('');
+                }}
+              />
 
               <SearchInput
                 class="entity-picker__filter"
@@ -98,6 +100,7 @@ export function EntityPickerDialog(props: Props) {
                 onValue={setFilter}
               />
 
+              <TabPanel id={kind()} selected={kind()} group="entity-kind">
               <ul class="email-addr__list entity-picker__list">
                 <For each={creates()}>
                   {(o) => (
@@ -129,15 +132,12 @@ export function EntityPickerDialog(props: Props) {
                   <li class="entity-picker__empty hint">Nothing here.</li>
                 </Show>
               </ul>
+              </TabPanel>
             </>
           )}
         </Show>
       </div>
-      <div class="app-dialog__actions">
-        <Button tone="plain" onClick={props.onClose}>
-          Cancel
-        </Button>
-      </div>
+      <DialogActions onCancel={props.onClose} />
     </Dialog>
   );
 }
