@@ -13,6 +13,7 @@
   --app-accent: var(--cb-string);
   --app-accent-contrast: #fff8ee;
   --app-accent-sunken: #a8331f;
+  --app-accent-disabled: color-mix(in srgb, var(--app-accent) 25%, var(--app-surface));
   --app-good: #7fb069;
   --app-warn: #d99a2b;
   --app-bad: #e0664d;
