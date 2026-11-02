@@ -18,11 +18,14 @@ importers:
         specifier: 0.1.0
         version: 0.1.0(solid-js@1.9.18)
       '@wired-square/kit':
-        specifier: 0.3.4
-        version: 0.3.4(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))
+        specifier: 0.3.7
+        version: 0.3.7(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))
       '@wired-square/store':
         specifier: ^0.1.0
         version: 0.1.0(solid-js@1.9.18)
+      '@wired-square/tokens':
+        specifier: 0.4.0
+        version: 0.4.0
       d3-force:
         specifier: ^3.0.0
         version: 3.0.0
@@ -663,8 +666,8 @@ packages:
       solid-js:
         optional: true
 
-  '@wired-square/kit@0.3.4':
-    resolution: {integrity: sha512-2v86O/dNLtN91jM7M23kE7uJlFyuEgKK5BpqrCjcwqGmy4yY88cfgcVZBDRhFBWRotN9G6gxoZijx3z5k6NiqQ==}
+  '@wired-square/kit@0.3.7':
+    resolution: {integrity: sha512-+FtprunTDxepnd0Q6Vk8DoqJS6RzwuJ4MUsEgNfiF7MH7wEMXgDaPM4jBCtumGhwwQy3htFBqr0DnmDPjGSGYg==}
     peerDependencies:
       solid-js: ^1.9.11
       vitest: ^4.0.0 || ^5.0.0
@@ -690,6 +693,9 @@ packages:
         optional: true
       solid-js:
         optional: true
+
+  '@wired-square/tokens@0.4.0':
+    resolution: {integrity: sha512-0EavNozMDTKEvN+5barMr1KzTsXuraKQ4BktVZBRIfg6deXMCq2zb1SzNnQPJLKSdH2hy8ycLi1cgxxRzdETYA==}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -1697,7 +1703,7 @@ snapshots:
     optionalDependencies:
       solid-js: 1.9.18
 
-  '@wired-square/kit@0.3.4(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))':
+  '@wired-square/kit@0.3.7(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))':
     dependencies:
       solid-js: 1.9.18
     optionalDependencies:
@@ -1710,6 +1716,8 @@ snapshots:
   '@wired-square/store@0.1.0(solid-js@1.9.18)':
     optionalDependencies:
       solid-js: 1.9.18
+
+  '@wired-square/tokens@0.4.0': {}
 
   assertion-error@2.0.1: {}
 

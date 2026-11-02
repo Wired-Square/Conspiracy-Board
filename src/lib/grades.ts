@@ -84,7 +84,7 @@ export const GRADE_META: Record<Grade, GradeMeta> = {
   },
   refuted: {
     label: 'Refuted',
-    // Deliberately nothing like --string (#c8402f). An ungraded strand is
+    // Deliberately nothing like --cb-string (#c8402f). An ungraded strand is
     // already red, so a brick-red REFUTED would be the most important link on
     // the board wearing the most ordinary colour on it.
     definition: 'Contradicted by the record.',
