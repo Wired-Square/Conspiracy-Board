@@ -1193,6 +1193,10 @@ body {
   border-color: rgba(111, 174, 111, 0.4);
 }
 
+.maintenance-row__status svg {
+  vertical-align: -0.125em;
+}
+
 .maintenance-row__actions {
   --cb-control-pad-x: 0.45rem;
   flex: 0 0 auto;
@@ -1467,6 +1471,11 @@ body {
   color: var(--app-text);
   font-size: 0.74rem;
   max-width: 22rem;
+}
+
+.menu-check {
+  float: right;
+  margin: 0.15em 0 0 var(--cb-space-3);
 }
 
 /* ---- Busy overlay ---- */
@@ -2129,8 +2138,7 @@ body {
 
 .timeline__chevron {
   color: var(--app-text-muted);
-  font-size: 0.7rem;
-  width: 0.8rem;
+  font-size: 0.8rem;
 }
 
 .timeline__count {

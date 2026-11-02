@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
 import { Button, Popover } from '@wired-square/kit';
+import { check } from '@wired-square/icons/solid';
 import { KIND_META } from '../../lib/kinds';
 import type { CardKind } from '../../types/board';
 
@@ -58,7 +59,7 @@ export function TimelineKindFilter(props: Props) {
                     onClick={() => props.onToggle(k)}
                   >
                     <span class="timeline__filter-check" aria-hidden="true">
-                      {shown() ? '☑' : '☐'}
+                      {shown() && check()}
                     </span>
                     {KIND_META[k].label}
                     <span class="timeline__filter-count">{props.counts.get(k) ?? 0}</span>

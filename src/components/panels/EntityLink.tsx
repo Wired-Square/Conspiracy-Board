@@ -1,5 +1,6 @@
 import { Index, Show, createMemo, createSignal, type Accessor } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
+import { x } from '@wired-square/icons/solid';
 import type { Card, CardKind, EmailAddress } from '../../types/board';
 import { buildRoster, type AddressMatch, type Roster } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
@@ -47,8 +48,8 @@ export type LinkRowContext = {
   onUnlink: (party: EmailAddress, entityId: string) => void;
 };
 
-/** The card a party resolves to, as a link, with an ✕ to unlink it. Tinted like an
- *  inference when the tie is only the domain. The ✕ is a sibling of the chip, not
+/** The card a party resolves to, as a link, with an x to unlink it. Tinted like an
+ *  inference when the tie is only the domain. The x is a sibling of the chip, not
  *  nested: a button cannot contain a button. */
 function EntityChip(props: { card: Card; inference?: boolean; onSelect: () => void; onUnlink: () => void }) {
   return (
@@ -67,7 +68,7 @@ function EntityChip(props: { card: Card; inference?: boolean; onSelect: () => vo
         label={`Unlink ${props.card.title || 'Untitled'}`}
         onClick={() => props.onUnlink()}
       >
-        ×
+        {x()}
       </IconButton>
     </span>
   );
@@ -76,7 +77,7 @@ function EntityChip(props: { card: Card; inference?: boolean; onSelect: () => vo
 /**
  * One party: its text (the record — always shown, so every address/number reads as
  * its own line), then the person *and* the organisation it resolves to, each a chip
- * with an unlink ✕, then a "Link…" for whichever kind is still missing.
+ * with an unlink x, then a "Link…" for whichever kind is still missing.
  */
 export function ParticipantLine(props: { party: EmailAddress; ctx: LinkRowContext }) {
   const resolved = createMemo(() => props.ctx.resolve(props.ctx.roster(), props.party.address));

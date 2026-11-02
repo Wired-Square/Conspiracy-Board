@@ -66,7 +66,9 @@ test('Verify marks the row, and a row survives a re-audit', async () => {
   button(scan, 'Verify').click();
   await settle();
   expect(storage.verifyMedia).toHaveBeenCalledWith('scan.pdf');
-  expect(scan.textContent).toContain('verified ✓');
+  const verified = scan.querySelector('.maintenance-row__status.is-ok')!;
+  expect(verified.textContent?.trim()).toBe('verified');
+  expect(verified.querySelector('svg')).not.toBeNull();
   mediaAuditStore.setState({ rows: rows.map((r) => ({ ...r })) });
   expect(row('Scan')).toBe(scan);
 });

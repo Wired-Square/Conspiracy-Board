@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, on } from 'solid-js';
 import { Button, Menu, MenuItem, SearchInput } from '@wired-square/kit';
 import { count } from '@wired-square/kit/core';
+import { check, plus } from '@wired-square/icons/solid';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
 import { DOCUMENT_FILE_FILTER, IMAGE_FILE_FILTER } from '../../lib/fileTypes';
@@ -89,6 +90,7 @@ export function Toolbar() {
             {(v) => (
               <MenuItem current={v === view()} onSelect={() => setView(v)}>
                 {VIEW_META[v].label}
+                {v === view() && check({ class: 'menu-check' })}
               </MenuItem>
             )}
           </For>
@@ -105,13 +107,21 @@ export function Toolbar() {
         />
         <div class="toolbar__actions">
           {/* The Objects view isn't a place you add cards — its files come from
-              import and the disk — so "+ Add" gives way to a count of what's there. */}
+              import and the disk — so Add gives way to a count of what's there. */}
           <Show when={view() !== 'object'} fallback={<ObjectsBadge />}>
             {/* Ordered as the board is built: the actors you are investigating,
                 then the record, then what you make of it. 'Card' stays first and
                 unqualified because it is the one you reach for without thinking —
                 it makes an evidence card, and the editor can change its kind. */}
-            <Menu aria-label="Add" trigger="+ Add" chevron>
+            <Menu
+              aria-label="Add"
+              trigger={
+                <>
+                  {plus()} Add
+                </>
+              }
+              chevron
+            >
               <MenuItem onSelect={() => addCard()}>Card</MenuItem>
               <MenuItem onSelect={() => void pickAndImport(IMAGE_FILE_FILTER)}>Image</MenuItem>
               <MenuItem onSelect={() => add('person')}>Person</MenuItem>
@@ -148,7 +158,7 @@ export function Toolbar() {
 }
 
 /**
- * The Objects view's file count, standing where "+ Add" would be. Reads the shared
+ * The Objects view's file count, standing where Add would be. Reads the shared
  * media audit so it agrees with the list, and shows the view's transient operation line
  * ("· Reprocessing…") while a bulk action runs. The count is the library total, not the
  * filtered view — the list itself reflects the search and the "Only issues" filter.

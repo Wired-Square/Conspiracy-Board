@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { Button, Menu, MenuItem, Notice } from '@wired-square/kit';
 import { size, count } from '@wired-square/kit/core';
+import { check } from '@wired-square/icons/solid';
 import { storage } from '../../storage';
 import type { DocStatus } from '../../storage/StorageAdapter';
 import { mediaSrc } from '../../storage/media';
@@ -253,7 +254,7 @@ function MediaFileRow(props: RowProps) {
         <span class="maintenance-row__status is-missing">checksum ✗</span>
       </Show>
       <Show when={props.check === 'ok'}>
-        <span class="maintenance-row__status is-ok">verified ✓</span>
+        <span class="maintenance-row__status is-ok">verified {check()}</span>
       </Show>
       <Show when={indexFailure(props.index)}>
         {(why) => (

@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { Button, SearchInput } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
+import { chevronDown, chevronRight } from '@wired-square/icons/solid';
 import { formatDayKey, formatOccurredAt } from '../../lib/dates';
 import { clusterColor, primaryClusterId } from '../../lib/clusters';
 import {
@@ -220,7 +221,7 @@ export function TimelineDrawer() {
     <section class={cx('timeline', open() && 'is-open')}>
       <header class="timeline__bar">
         <Button tone="plain" class="timeline__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open()}>
-          <span class="timeline__chevron">{open() ? '▾' : '▸'}</span>
+          {(open() ? chevronDown : chevronRight)({ class: 'timeline__chevron' })}
           <span class="panel-heading">Timeline</span>
           <span class="timeline__count">
             {dated().length === 0

@@ -65,7 +65,7 @@ export function RecordView() {
         fallback={
           <p class="hint record__empty">
             The mail and documents a board argues from live here. Import an mbox with{' '}
-            <strong>+ Add › Email</strong>, or drop messages into the Inbox folder
+            <strong>Add › Email</strong>, or drop messages into the Inbox folder
             (File ▸ Show Inbox Folder) and they import on their own.
           </p>
         }

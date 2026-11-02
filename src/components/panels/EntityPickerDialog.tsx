@@ -1,12 +1,13 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Button, Dialog, SearchInput, TabButton } from '@wired-square/kit';
+import { plus } from '@wired-square/icons/solid';
 import type { CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
 import { autofocus } from '../ui/autofocus';
 import { fromStore } from '@wired-square/store/solid';
 
-/** A "＋ New …" row, offered on the tab it belongs to. Its value is a sentinel the
+/** A "New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */
 export type PickerCreateOption = { kind: CardKind; label: string; value: string };
 
@@ -106,7 +107,7 @@ export function EntityPickerDialog(props: Props) {
                         class="app-menu__item entity-picker__row entity-picker__row--create"
                         onClick={() => pick(o.value)}
                       >
-                        <span class="entity-picker__row-icon">＋</span>
+                        <span class="entity-picker__row-icon">{plus()}</span>
                         <span class="entity-picker__row-title">{o.label}</span>
                       </button>
                     </li>

@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from 'solid-js';
-import { Button, Dialog, Field, Select, TextArea, Tick } from '@wired-square/kit';
+import { Button, Dialog, Field, IconButton, Select, TextArea, Tick } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
+import { x } from '@wired-square/icons/solid';
 import { openDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
 import { strungNote } from '../../lib/connections';
@@ -47,9 +48,9 @@ export function CardEditor() {
         <Dialog aria-label="Edit card" wide onClose={close}>
           <header class="card-editor__head">
             <h2 class="app-dialog__title">Edit card</h2>
-            <Button tone="plain" onClick={close}>
-              Close
-            </Button>
+            <IconButton label="Close" onClick={close}>
+              {x()}
+            </IconButton>
           </header>
           {/* Keyed on the id, so the title/notes drafts commit to the card they
               were typed for when the selection moves. */}

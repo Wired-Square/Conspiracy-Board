@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
+import { plus, trash } from '@wired-square/icons/solid';
 import { touches } from '../../lib/connections';
 import { KIND_META } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
@@ -61,7 +62,7 @@ export function ConnectionsSection(props: { cardId: string }) {
                   onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                 />
                 <IconButton class="cluster-delete" label="Remove connection" onClick={() => deleteConnection(id)}>
-                  ×
+                  {trash()}
                 </IconButton>
               </div>
               {/* A link is a claim in its own right — "Acme owns Bam" is asserted
@@ -76,7 +77,7 @@ export function ConnectionsSection(props: { cardId: string }) {
       <Show when={hasOthers()}>
         <div class="connection-add">
           <Button tone="plain" onClick={() => setPicking(true)}>
-            ＋ Link to a card…
+            {plus()} Link to a card…
           </Button>
         </div>
       </Show>

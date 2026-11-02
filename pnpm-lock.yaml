@@ -17,6 +17,9 @@ importers:
       '@wired-square/canvas':
         specifier: 0.1.0
         version: 0.1.0(solid-js@1.9.18)
+      '@wired-square/icons':
+        specifier: 0.1.1
+        version: 0.1.1(solid-js@1.9.18)
       '@wired-square/kit':
         specifier: 0.3.7
         version: 0.3.7(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))
@@ -660,6 +663,14 @@ packages:
 
   '@wired-square/canvas@0.1.0':
     resolution: {integrity: sha512-kkwbayn6uO5KDAgBnNhrm/2dn/VPDipu1sdFNfb3hlmSFhYe6eG4OaNNlmNJ9fZXfWiNRYWHstHpH3QwhuxPbw==}
+    peerDependencies:
+      solid-js: ^1.9.11
+    peerDependenciesMeta:
+      solid-js:
+        optional: true
+
+  '@wired-square/icons@0.1.1':
+    resolution: {integrity: sha512-Kwt2UqDG92Kv/pqgZGazAZ2XyJ6QUVTihAWHTTT5iaHfZNrbxt8Z2nlpi/fTVUQidE9yQCp0d6iZJJ+KN1iHng==}
     peerDependencies:
       solid-js: ^1.9.11
     peerDependenciesMeta:
@@ -1700,6 +1711,10 @@ snapshots:
       tinyrainbow: 3.1.0
 
   '@wired-square/canvas@0.1.0(solid-js@1.9.18)':
+    optionalDependencies:
+      solid-js: 1.9.18
+
+  '@wired-square/icons@0.1.1(solid-js@1.9.18)':
     optionalDependencies:
       solid-js: 1.9.18
 

@@ -102,7 +102,7 @@ export function EmailImportModal() {
     }
   };
 
-  // This modal is reached from "+ Add > Email", so it has to be able to add an
+  // This modal is reached from "Add > Email", so it has to be able to add an
   // email that isn't being imported from anywhere.
   const onAddBlank = () => {
     close();

@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
+import { chevronDown, chevronRight, plus, trash } from '@wired-square/icons/solid';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDraft } from '../createDraft';
@@ -16,12 +17,12 @@ export function ClusterPanel() {
     <div class="cluster-panel">
       <Button tone="plain" class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
         <span class="panel-heading">Clusters</span>
-        <span aria-hidden="true">{open() ? '▾' : '▸'}</span>
+        {open() ? chevronDown() : chevronRight()}
       </Button>
       <Show when={open()}>
         <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
         <Button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
-          + Add cluster
+          {plus()} Add cluster
         </Button>
       </Show>
     </div>
@@ -53,7 +54,7 @@ function ClusterRow(props: { cluster: Cluster }) {
         onBlur={flushLabel}
       />
       <IconButton class="cluster-delete" label="Delete cluster" onClick={() => deleteCluster(id)}>
-        ×
+        {trash()}
       </IconButton>
     </div>
   );

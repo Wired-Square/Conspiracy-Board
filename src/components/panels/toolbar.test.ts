@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 const trigger = (label: string) =>
-  [...host.querySelectorAll<HTMLButtonElement>('.app-menu__trigger')].find((b) => b.textContent?.startsWith(label))!;
+  [...host.querySelectorAll<HTMLButtonElement>('.app-menu__trigger')].find((b) => b.textContent?.trim().startsWith(label))!;
 const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 const key = (target: EventTarget, key: string) =>
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
@@ -39,7 +39,7 @@ test('the view chooser marks the current view and switches on a pick, closing fi
 });
 
 test('a menu moves focus with the arrow keys and closes on an outside pointerdown', () => {
-  trigger('+ Add').click();
+  trigger('Add').click();
   expect(document.activeElement).toBe(items()[0]);
   key(items()[0], 'ArrowDown');
   expect(document.activeElement?.textContent).toBe('Image');
@@ -53,10 +53,10 @@ test('Escape closes a menu over a dialog without closing the dialog', () => {
   const closeDialog = vi.fn();
   const under = document.body.appendChild(document.createElement('div'));
   const disposeDialog = render(() => createComponent(Dialog, { title: 'Under', onClose: closeDialog, children: '' }), under);
-  trigger('+ Add').click();
+  trigger('Add').click();
   key(items()[0], 'Escape');
   expect(items()).toHaveLength(0);
-  expect(document.activeElement).toBe(trigger('+ Add'));
+  expect(document.activeElement).toBe(trigger('Add'));
   expect(closeDialog).not.toHaveBeenCalled();
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   expect(closeDialog).toHaveBeenCalledOnce();
@@ -79,11 +79,11 @@ test('the search box writes the store once typing settles, and clears on a board
   expect(actions.setSearchQuery).toHaveBeenLastCalledWith('');
 });
 
-test('Tidy shows only on the board, and the objects view swaps + Add for its badge', () => {
+test('Tidy shows only on the board, and the objects view swaps Add for its badge', () => {
   const tidy = () => [...host.querySelectorAll('button')].find((b) => b.textContent === 'Tidy');
   expect(tidy()).toBeDefined();
   boardStore.setState({ view: 'object' });
   expect(tidy()).toBeUndefined();
-  expect(trigger('+ Add')).toBeUndefined();
+  expect(trigger('Add')).toBeUndefined();
   expect(host.querySelector('.objects-badge')?.textContent).toContain('Objects');
 });
