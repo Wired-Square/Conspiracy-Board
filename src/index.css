@@ -40,13 +40,16 @@
   --app-canvas-minimap-view: transparent;
 
   --cb-string: #c8402f;
+  --cb-string-wash: color-mix(in srgb, var(--cb-string) 16%, transparent);
+  --cb-warn-wash: color-mix(in srgb, var(--app-warn) 7%, transparent);
   --cb-paper: #f4ecd8;
+  --cb-film: #f7f5f0;
   --cb-card-ink: #221a10;
   --cb-card-ink-muted: #6f6252;
-  --cb-film: #f7f5f0;
   --cb-lift-rest: 0 1px 1px rgb(0 0 0 / 0.3), 0 3px 6px -2px rgb(0 0 0 / 0.35), 0 10px 18px -8px rgb(0 0 0 / 0.55);
   --cb-lift-raised: 0 2px 2px rgb(0 0 0 / 0.25), 0 8px 14px -4px rgb(0 0 0 / 0.4), 0 22px 32px -12px rgb(0 0 0 / 0.6);
   --cb-lift-held: 0 4px 4px rgb(0 0 0 / 0.2), 0 16px 24px -6px rgb(0 0 0 / 0.4), 0 36px 48px -16px rgb(0 0 0 / 0.65);
+  --cb-radius-sm: 3px;
 
   --cb-text-xs: 0.68rem;
   --cb-text-sm: 0.75rem;
@@ -54,37 +57,22 @@
   --cb-text-lg: 0.95rem;
   --cb-text-xl: 1.1rem;
 
+  --cb-space-0: 0.125rem;
   --cb-space-1: 0.25rem;
   --cb-space-2: 0.5rem;
   --cb-space-3: 0.75rem;
   --cb-space-4: 1rem;
-  --cb-space-5: 1.5rem;
-}
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  height: 100%;
-}
-
-body {
-  background: var(--app-bg);
-  color: var(--app-text);
-  font-family: var(--app-font);
-}
-
-/* Desktop density over kit's web-sized controls; a region can tighten it (the timeline bar). */
-:root {
+  /* Desktop density over kit's web-sized controls; a region can tighten it (the timeline bar). */
   --cb-control-text: var(--cb-text-md);
   --cb-control-pad-y: 0.35rem;
   --cb-control-pad-x: 0.7rem;
   --cb-control-height: calc(var(--cb-control-text) * var(--app-control-line-height) + 2 * var(--cb-control-pad-y) + 2px);
 }
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body { background: var(--app-bg); color: var(--app-text); font-family: var(--app-font); }
 
 /* Keyboard focus only (see platform/inputModality); a text field keeps its ring however it was focused. */
 :root:not([data-modality='keyboard']) :focus-visible:not(input:not([type='checkbox'], [type='radio'], [type='color']), textarea, select) {
@@ -99,48 +87,82 @@ body {
   color: var(--app-text);
 }
 
-.app-btn,
-.app-field__input {
+/* ---- Shared shapes ---- */
+.app-btn, .app-field__input, .app-field__input--multiline {
   font-size: var(--cb-control-text);
   padding-block: var(--cb-control-pad-y);
 }
 
-.app-btn {
-  padding-inline: var(--cb-control-pad-x);
-}
+.app-btn { padding-inline: var(--cb-control-pad-x); }
+.app-btn--icon { padding-inline: var(--cb-control-pad-y); }
 
-.app-btn--icon {
-  padding-inline: var(--cb-control-pad-y);
-}
-
-.app-field {
+.app-field, .hint, .app-dialog__title, .app-dialog > p, .app-tabpanel, .app-notice, .timeline__empty {
   margin: 0;
 }
 
-.app-field__input {
-  background-color: var(--app-surface-sunken);
-}
+.app-field__input { background-color: var(--app-surface-sunken); }
+.app-field__input--multiline { font-family: inherit; min-height: 0; max-width: none; }
+.app-search__input { appearance: none; }
+.cb-link { padding: 0; color: inherit; text-decoration: underline; }
 
-.app-field__input--multiline {
-  font: inherit;
-  font-size: var(--cb-control-text);
-  min-height: 0;
-  max-width: none;
-}
-
-.app-search__input {
-  appearance: none;
-}
-
-.cb-link {
-  padding: 0;
-  color: inherit;
-  text-decoration: underline;
-}
-
-.hint {
-  margin: 0;
+.hint, .field__hint, .field > .field__hint, .record__count, .record__filter, .dialog-status,
+.task-indicator, .timeline__count, .timeline__measure-range, .timeline__measure-hint,
+.first-run__choice-note, .cluster-picker__primary, .grade-legend, .email-import__errors {
   font-size: var(--cb-text-sm);
+  font-weight: 400;
+  color: var(--app-text-muted);
+}
+
+.import-offer__meta, .import-offer__more, .import-preview__meta, .record-row__who,
+.record-row__when, .participants__when, .timeline__gap {
+  font-size: var(--cb-text-xs);
+  color: var(--app-text-muted);
+}
+
+.polaroid__detail, .email-fields__id, .email-addr__text, .email-addr__entity, .record-row__title,
+.record-row__who, .entity-picker__row-title, .participants__title, .import-offer__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-picker, .email-addr__list, .attach-list, .grade-legend ul, .grade-key, .participants__list,
+.import-offer, .import-preview, .record__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cluster-picker, .email-addr__list, .attach-list, .grade-legend ul, .grade-key,
+.timeline__undated-list, .object-picker, .image-cropper, .entity-picker, .first-run__choices,
+.busy-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-space-2);
+}
+
+.field__row, .cluster-row, .cluster-picker__row, .cluster-picker__row label, .connection-row,
+.entity-picker__row, .participants__row, .record-row, .maintenance-row, .record__filter,
+.first-run__header, .library-mcp__warn, .library-mcp__value, .task-indicator, .undo-toast,
+.timeline__filter-option, .import-offer li, .import-offer__main {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-space-2);
+}
+
+.record-row__main, .import-offer__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.record-row__loose, .maintenance-row__status, .import-preview__badge, .grade-chip {
+  padding: 1px 6px 2px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--cb-radius-sm);
+  font-size: var(--cb-text-xs);
+  white-space: nowrap;
   color: var(--app-text-muted);
 }
 
@@ -153,78 +175,41 @@ body {
 }
 
 /* ---- Layout ---- */
-.app {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-}
+.app { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+.app__main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; height: 100%; }
 
-.app__main {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-}
-
-.app__canvas {
-  position: relative;
-  /* min-height: 0 lets this shrink for the timeline drawer; a fixed height
-     here would push the drawer off the bottom of the viewport. */
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.board-canvas {
-  position: absolute;
-  inset: 0;
-}
+/* min-height: 0 lets the canvas give way to the timeline drawer. */
+.app__canvas { position: relative; flex: 1 1 auto; min-height: 0; }
+.board-canvas { position: absolute; inset: 0; }
 
 /* Above the record and objects views, which cover the canvas at z-index 4. */
-.app-canvas-panel {
-  z-index: 5;
-}
+.app-canvas-panel { z-index: 5; }
+.app-canvas__node:has(.is-selected), .app-canvas__node.is-dragging { z-index: 1; }
 
-.app-canvas__node:has(.is-selected),
-.app-canvas__node.is-dragging {
-  z-index: 1;
-}
-
-/* ---- Toolbar ---- */
-/* A column so the save-error strip sits *below* the controls; as a row it was a
-   third flex item and landed beside them, its margin-top doing nothing. */
-.toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+/* ---- Toolbar and cluster panel ---- */
+.toolbar, .cluster-panel {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-lg);
-  padding: 0.5rem 0.75rem;
   box-shadow: var(--app-shadow);
 }
 
-.toolbar__row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  white-space: nowrap;
+.toolbar { display: flex; flex-direction: column; padding: var(--cb-space-2) var(--cb-space-3); }
+.toolbar__row { display: flex; align-items: center; gap: var(--cb-space-4); white-space: nowrap; }
+.toolbar__title { font-weight: 700; }
+.toolbar__actions { display: flex; flex: none; gap: var(--cb-space-2); }
+.toolbar__search { flex: 1 1 12rem; min-width: 6rem; max-width: 22rem; }
+
+.toolbar__error {
+  margin-top: var(--cb-space-2);
+  padding: var(--cb-space-2);
+  border: 1px solid var(--cb-string);
+  border-radius: var(--app-radius);
+  background: var(--cb-string-wash);
+  font-size: var(--cb-text-sm);
+  max-width: 22rem;
 }
 
-.toolbar__title {
-  font-weight: 700;
-}
-
-.toolbar__actions {
-  display: flex;
-  flex: none;
-  gap: var(--cb-space-2);
-}
-
-/* The Objects view's file count, standing where "+ Add" is on the other views. A
-   paper tag — the files are the paper — sized to the buttons beside it so the row
-   stays even. One fixed colour: a count, not an alarm. */
 .objects-badge {
   display: inline-flex;
   align-items: center;
@@ -239,50 +224,15 @@ body {
   white-space: nowrap;
 }
 
-/* Shown only while the library MCP is on; red when it is on but not listening. */
-.mcp-indicator__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--app-good);
-}
-
-.mcp-indicator.is-error {
-  border-color: var(--cb-string);
-  background: rgba(200, 64, 47, 0.16);
-}
-
-.mcp-indicator.is-error .mcp-indicator__dot {
-  background: var(--cb-string);
-}
-
-/* Grows to fill the middle of the row, pushing the actions to the right without
-   the actions rule having to know it's there. */
-.toolbar__search {
-  flex: 1 1 12rem;
-  min-width: 6rem;
-  max-width: 22rem;
-}
-
-/* ---- Cluster panel ---- */
-.cluster-panel {
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  padding: var(--cb-space-3);
-  min-width: 220px;
-  max-height: 100%;
-  overflow-y: auto;
-  box-shadow: var(--app-shadow);
-}
+.mcp-indicator__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--app-good); }
+.mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
+.mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
+.menu-check { float: right; margin: 0.15em 0 0 var(--cb-space-3); }
+.cluster-panel { padding: var(--cb-space-3); min-width: 220px; max-height: 100%; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
-.app-canvas-panel:has(> .cluster-panel) {
-  display: flex;
-  max-height: calc(100% - 12.375rem);
-}
+.app-canvas-panel:has(> .cluster-panel) { display: flex; max-height: calc(100% - 12.375rem); }
 
-/* Collapses the panel to just this header pill; the chevron mirrors the timeline. */
 .cluster-panel__toggle {
   justify-content: space-between;
   width: 100%;
@@ -290,23 +240,9 @@ body {
   padding: 0;
 }
 
-.cluster-panel__toggle:hover {
-  background: none;
-}
-
-.panel-heading {
-  font-size: var(--cb-text-sm);
-  font-weight: 600;
-  color: var(--app-text-muted);
-}
-
-.cluster-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-}
+.cluster-panel__toggle:hover { background: none; }
+.panel-heading { font-size: var(--cb-text-sm); font-weight: 600; color: var(--app-text-muted); }
+.cluster-row { margin-top: var(--cb-space-2); font-size: var(--cb-text-md); }
 
 .cluster-color {
   width: 22px;
@@ -318,51 +254,30 @@ body {
   cursor: pointer;
 }
 
-.cluster-label {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+.cluster-label { flex: 1 1 auto; min-width: 0; }
+.cluster-label:not(:hover, :focus) { background-color: transparent; border-color: transparent; }
+.cluster-delete:hover { color: var(--app-alert); }
+.cluster-add { margin-top: var(--cb-space-3); width: 100%; justify-content: center; }
 
-.cluster-label:not(:hover, :focus) {
-  background-color: transparent;
-  border-color: transparent;
-}
-
-.cluster-delete:hover {
-  color: var(--app-alert);
-}
-
-.cluster-add {
-  margin-top: var(--cb-space-3);
-  width: 100%;
-  justify-content: center;
-}
-
-/* ---- Evidence card node ---- */
+/* ---- Evidence card ---- */
 /* Tilted on the inner card, never the canvas node, so string anchors and hit-testing stay square. */
 .evidence-card {
   --accent: #888;
   --edge: 0 0 transparent;
   --lift: var(--cb-lift-rest);
   position: relative;
-  /* --card-scale is set only on actors (see tieScale); paper stays 210. */
+  /* --card-scale is set only on actors (see tieScale), so paper stays 210. */
   width: calc(210px * var(--card-scale, 1));
   background: var(--cb-paper);
   color: var(--cb-card-ink);
-  border-radius: 3px;
+  border-radius: var(--cb-radius-sm);
   box-shadow: var(--edge), var(--lift);
   transform: rotate(var(--tilt, 0deg));
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.evidence-card:hover {
-  --lift: var(--cb-lift-raised);
-}
-
-.evidence-card.is-selected {
-  --edge: 0 0 0 2px var(--cb-string);
-  --lift: var(--cb-lift-raised);
-}
+.evidence-card:hover { --lift: var(--cb-lift-raised); }
+.evidence-card.is-selected { --edge: 0 0 0 2px var(--cb-string); --lift: var(--cb-lift-raised); }
 
 .app-canvas__node.is-dragging .evidence-card {
   --lift: var(--cb-lift-held);
@@ -370,21 +285,22 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .evidence-card {
-    transition: none;
-  }
+  .evidence-card { transition: none; }
 }
 
-/* The push-pin, in the primary cluster's colour. */
-.evidence-card::before {
+.evidence-card::before, .red-string__tag::before {
   content: '';
   position: absolute;
-  top: -5px;
   left: 50%;
+  border-radius: 50%;
+  translate: -50% 0;
+  z-index: 2;
+}
+
+.evidence-card::before {
+  top: -5px;
   width: 14px;
   height: 14px;
-  margin-left: -7px;
-  border-radius: 50%;
   background: radial-gradient(
     circle at 35% 30%,
     rgb(255 255 255 / 0.85) 0 12%,
@@ -392,11 +308,8 @@ body {
     color-mix(in srgb, var(--accent) 55%, #000)
   );
   box-shadow: 1px 3px 2px rgb(0 0 0 / 0.4);
-  z-index: 2;
 }
 
-/* Membership beyond the primary: one dot per further cluster, top-right, so a
-   card in several strands says so at a glance without fighting the accent. */
 .evidence-card__cluster-dots {
   position: absolute;
   top: 7px;
@@ -406,95 +319,62 @@ body {
   z-index: 2;
 }
 
+.evidence-card--polaroid .evidence-card__cluster-dots { top: 13px; right: 13px; }
+
 .evidence-card__cluster-dots > span {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgb(0 0 0 / 0.35);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
-/* Inside the polaroid's film frame. */
-.evidence-card--polaroid .evidence-card__cluster-dots {
-  top: 13px;
-  right: 13px;
-}
-
-/* A wrapper, not the <img>, so a cropped picture can position an absolute image
-   inside a clip box (see cardImageStyle). Uncropped it just hugs the image as
-   before; cropped it takes the card's 4:3 shape and the image fills it. */
+/* A wrapper, so a cropped picture's absolute <img> has a clip box (see cardImageStyle). */
 .evidence-card__image {
-  display: block;
   position: relative;
   margin: 8px 8px 0;
   overflow: hidden;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1);
 }
-.evidence-card__image img {
-  display: block;
-  width: 100%;
-  max-height: 130px;
-  object-fit: cover;
-}
-.evidence-card__image.is-cropped {
+
+.evidence-card__image img { display: block; width: 100%; max-height: 130px; object-fit: cover; }
+
+.evidence-card__image.is-cropped, .polaroid__photo, .card-editor__preview.is-cropped,
+.image-picker__item, .image-cropper__frame {
   aspect-ratio: 4 / 3;
 }
-.evidence-card__image.is-cropped img {
-  max-height: none;
-}
 
-.evidence-card__body {
-  padding: var(--cb-space-3);
-}
+.evidence-card__image.is-cropped img { max-height: none; }
+.evidence-card__body { padding: var(--cb-space-3); }
 
-.evidence-card__title {
+.evidence-card__title, .polaroid__name {
   font-weight: 600;
   font-size: var(--cb-text-lg);
   line-height: 1.25;
-  overflow-wrap: anywhere;
-  margin-bottom: var(--cb-space-1);
 }
 
-/* The record — email and document — had faces here: cooler paper, an airmail
-   edge, a sender line. They are gone with the cards: the record is not drawn on
-   the board any more, it is a row in the Record view (see lib/kinds).
+.evidence-card__title { overflow-wrap: anywhere; margin-bottom: var(--cb-space-1); }
 
-   Evidence and event keep the default paper deliberately — they are the
-   argument, which is what a board is mostly made of, and tinting the common
-   case would leave nothing for the tint to mean. */
-/* ---- The actors: a polaroid ---- */
-/* A person and an organisation are the only cards that are *somebody* rather
-   than something said about them, and on a corkboard that has always been a
-   photograph. Film white, not the cream of the paper around it, and a wide
-   frame at the foot to write the name on. */
-/* An actor's presence follows their connections: the polaroid widens with the
-   strings tied to it (--card-scale, set per node from tieScale — 1 for a
-   loner, capped at 1.5). Width only, via the base rule above: the photo grows
-   with its aspect ratio and the caption stays readable at one size. */
-.evidence-card--polaroid {
-  background: var(--cb-film);
-  padding: 11px 11px 0;
-  border-radius: 2px;
+.evidence-card__date, .polaroid__detail {
+  font-size: var(--cb-text-xs);
+  color: var(--cb-card-ink-muted);
 }
+
+.evidence-card__date { margin-bottom: var(--cb-space-1); }
+.evidence-card__notes, .polaroid__note { font-size: var(--cb-text-sm); line-height: 1.35; }
+.evidence-card--polaroid { background: var(--cb-film); padding: 11px 11px 0; }
 
 .polaroid__photo {
-  aspect-ratio: 4 / 3;
   display: grid;
   place-items: center;
   overflow: hidden;
-  /* The clip box for a cropped image's absolute <img> (see cardImageStyle). */
   position: relative;
   container-type: inline-size;
   background: color-mix(in srgb, var(--accent) 22%, var(--cb-paper));
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
-.polaroid__photo img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+.polaroid__photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .polaroid__initials {
   font-size: 26cqi;
@@ -502,48 +382,17 @@ body {
   color: color-mix(in srgb, var(--accent) 55%, var(--cb-card-ink));
 }
 
-.polaroid__caption {
-  padding: 0.5rem 0.15rem 0.65rem;
-}
+.polaroid__caption { padding: var(--cb-space-2) var(--cb-space-0) var(--cb-space-3); }
+.polaroid__detail { margin-top: 0.1rem; }
 
-.polaroid__name {
-  font-weight: 600;
-  font-size: var(--cb-text-lg);
-}
-
-.polaroid__detail {
-  font-size: var(--cb-text-xs);
-  color: var(--cb-card-ink-muted);
-  margin-top: 0.1rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Written under the name, and kept to two lines: it is a note on a photograph,
-   not the photograph. */
 .polaroid__note {
-  margin-top: 0.35rem;
-  font-size: var(--cb-text-sm);
-  line-height: 1.35;
+  margin-top: var(--cb-space-1);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.evidence-card__date {
-  font-size: var(--cb-text-xs);
-  color: var(--cb-card-ink-muted);
-  margin-bottom: var(--cb-space-1);
-}
-
-.evidence-card__notes {
-  font-size: var(--cb-text-sm);
-  line-height: 1.35;
-}
-
-/* Source = a "hot corner" nub at the card's top-right; drag from here to link. */
 .card-source {
   position: absolute;
   width: 14px;
@@ -554,321 +403,134 @@ body {
   border-radius: 50%;
   background: var(--cb-string);
   border: 1.5px solid #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
-.evidence-card:hover .card-source,
-.evidence-card.is-selected .card-source {
-  opacity: 1;
-}
+.evidence-card:hover .card-source, .evidence-card.is-selected .card-source { opacity: 1; }
 
-/* Target = the whole card, lit while a connection is being dragged over it. It
-   never takes the pointer: the canvas finds the card under the drop itself. */
-.card-target {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
+/* Never takes the pointer: the canvas finds the card under a dropped string itself. */
+.card-target { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 
 .app-canvas.is-connecting .app-canvas__node:hover .card-target {
-  background: rgba(200, 64, 47, 0.12);
+  background: color-mix(in srgb, var(--cb-string) 12%, transparent);
   box-shadow: inset 0 0 0 2px var(--cb-string);
 }
 
-/* ---- Red string (yarn) edges ---- */
-.red-string__shadow,
-.red-string__strand,
-.red-string__sheen {
+/* ---- Red string ---- */
+.red-string__shadow, .red-string__strand, .red-string__sheen, .derived-string__strand {
   fill: none;
   stroke-linecap: round;
 }
 
-.red-string__shadow {
-  stroke: rgba(0, 0, 0, 0.4);
-  stroke-width: 6;
-  transform: translate(1.5px, 3px);
-}
+.red-string__shadow { stroke: rgb(0 0 0 / 0.4); stroke-width: 6; transform: translate(1.5px, 3px); }
 
 .red-string__strand {
-  /* Dyed by its grade when it has one; plain string when nobody has said. */
   stroke: var(--grade, var(--cb-string));
   stroke-width: 3.5;
   transition: stroke-width 0.15s ease, filter 0.15s ease;
 }
 
-.red-string__sheen {
-  stroke: #f2876f;
-  stroke-width: 1;
-  opacity: 0.55;
-}
-
-.red-string__knot {
-  fill: #7a1f17;
-  stroke: var(--cb-string);
-  stroke-width: 1.5;
-}
+.red-string__sheen { stroke: #f2876f; stroke-width: 1; opacity: 0.55; }
+.red-string__knot { fill: #7a1f17; stroke: var(--cb-string); stroke-width: 1.5; }
 
 .red-string__tag {
   position: absolute;
   background: var(--cb-paper);
   color: var(--cb-card-ink);
-  font-size: 0.7rem;
+  font-size: var(--cb-text-xs);
   font-weight: 600;
   padding: 2px 9px 3px;
-  border-radius: 3px;
+  border-radius: var(--cb-radius-sm);
   white-space: nowrap;
-  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 3px 7px rgb(0 0 0 / 0.45);
   pointer-events: all;
 }
 
-/* little pin holding the tag */
 .red-string__tag::before {
-  content: '';
-  position: absolute;
   top: -3px;
-  left: 50%;
-  transform: translateX(-50%);
   width: 6px;
   height: 6px;
-  border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff, var(--cb-string) 65%, #000 150%);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
 }
 
-/* Derived participant links (see components/board/BoardCanvas). Thin, faint and
-   unpinned — the eye should read it as a suggestion, and never mistake it for
-   the red string, which is only ever there because someone tied it. The colour
-   is the Inference grade's, handed down as --grade by the edge itself.
-
-   Solid, not dotted: a round-capped dash (`1 7`) is dozens of shaped caps per
-   strand for WebKit to rasterise, and repainting all of them every frame was the
-   bulk of drag lag (measured). A faint solid thread reads the same "suggestion"
-   at a fraction of the paint — the lightness now comes from width and opacity,
-   which cost nothing, rather than from the gaps between dots. */
-.derived-string__strand {
-  fill: none;
-  stroke: var(--grade);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  opacity: 0.45;
-}
-
-/* Highlight / dim driven by lib/highlight. */
-.app-canvas__node.dim {
-  opacity: 0.3;
-}
-
-.app-canvas__node.hl {
-  opacity: 1;
-}
-
-.app-canvas__edge.dim {
-  opacity: 0.12;
-}
+/* Solid: WebKit repainting round dash caps on every strand each frame was most of the drag lag (measured). */
+.derived-string__strand { stroke: var(--grade); stroke-width: 1.5; opacity: 0.45; }
+.app-canvas__node.dim { opacity: 0.3; }
+.app-canvas__edge.dim { opacity: 0.12; }
 
 .app-canvas__edge.hl .red-string__strand {
   stroke-width: 5;
-  filter: drop-shadow(0 0 4px rgba(200, 64, 47, 0.85));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--cb-string) 85%, transparent));
 }
 
 /* ---- Card editor ---- */
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
+.field { display: flex; flex-direction: column; gap: var(--cb-space-1); }
+.field > span { font-size: var(--cb-text-md); font-weight: 500; }
+.field--check { flex-direction: row; align-items: center; gap: var(--cb-space-2); }
+.field--check input { flex: none; }
+.field__hint { line-height: 1.4; }
+.field > .field__hint code { font-size: 0.95em; }
+.field--grow { flex: 1 1 auto; }
+.cluster-picker { gap: var(--cb-space-0); }
+.cluster-picker__row { justify-content: space-between; }
+.cluster-picker__row label { font-size: var(--cb-text-md); cursor: pointer; }
+.cluster-picker__swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.cluster-picker__primary { padding: var(--cb-space-1); }
 
-.field > span {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-/* A checkbox row: the box beside its label, rather than the input-under-heading
-   column .field lays out by default. */
-.field--check {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.field--check input {
-  flex: none;
-}
-
-/* Specificity has to beat `.field > span`. */
-.field > .field__hint,
-.field__hint {
-  font-size: var(--cb-text-sm);
-  font-weight: 400;
-  line-height: 1.4;
-  color: var(--app-text-muted);
-}
-
-.field > .field__hint code {
-  font-size: 0.95em;
-}
-
-.field--grow {
-  flex: 1 1 auto;
-}
-
-/* ---- The editor's cluster picker ---- */
-/* A checkbox list, not a select: membership is many-of, and the row has to hold
-   the swatch, the primary tag and the "Make primary" affordance beside it. */
-.cluster-picker {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.cluster-picker__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.cluster-picker__row label {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.cluster-picker__swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.cluster-picker__primary {
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-  padding: 0.2rem 0.3rem;
-}
-
-.field__row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* ---- Per-kind fields ---- */
-/* The editor's per-kind sub-sections: an email's headers, an entity's
-   addresses. Same box, different contents, so they share the rules rather than
-   one of them borrowing the other's name. */
-.email-fields,
-.entity-fields {
-  padding: 0.6rem;
+.email-fields, .entity-fields {
+  padding: var(--cb-space-2);
   border: 1px dashed var(--app-border);
   border-radius: var(--app-radius);
 }
 
-/* Nested labels are secondary to the section heading above them. */
-.email-fields__row > span,
-:is(.email-fields, .entity-fields) .app-field__label {
+.email-fields__row > span, :is(.email-fields, .entity-fields) .app-field__label {
   font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
 }
 
-.email-fields__id {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.email-fields__actions { flex-wrap: wrap; }
 
-/* Only shown for cards dragged out of Mail, where the message is known to be
-   sitting in the user's mailbox. */
 .email-fields__mail-link {
   align-self: flex-start;
-  font-size: 0.72rem;
+  font-size: var(--cb-text-sm);
   color: var(--cb-string);
   text-decoration: none;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  padding: 0.25rem 0.5rem;
+  padding: var(--cb-space-1) var(--cb-space-2);
 }
 
-.email-fields__mail-link:hover {
-  border-color: var(--cb-string);
-}
+.email-fields__mail-link:hover { border-color: var(--cb-string); }
+.email-fields__linked { margin: var(--cb-space-0) 0 0.1rem; padding-left: var(--cb-space-1); }
+.email-addr__list { gap: var(--cb-space-1); }
 
-/* Read-only address lines on an imported email. Each From/To/Cc address on its
-   own line: the address as it arrived (always shown — reading the record means
-   seeing it), the person or organisation it resolves to as a chip beside it, and
-   a Link… where no one claims it yet. */
-.email-addr__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.email-addr {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-.email-addr__text {
-  font-size: 0.78rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.email-addr__empty {
-  font-size: 0.78rem;
-  color: var(--app-text-muted);
-}
-
-/* The card the address resolves to — click to open it. Tinted from --grade only
-   when the match is a domain inference (set inline via gradeTint). */
-.email-addr__entity {
+.email-addr, .email-addr__chip, .email-addr__entity {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  min-width: 0;
   max-width: 100%;
-  padding: 0.1rem 0.45rem;
-  font-size: 0.72rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.email-addr { display: flex; flex-wrap: wrap; gap: var(--cb-space-2); }
+.email-addr__text, .email-addr__empty { font-size: var(--cb-text-sm); min-width: 0; }
+
+/* Tinted from --grade only when the match is a domain inference (see gradeTint). */
+.email-addr__entity {
+  gap: var(--cb-space-1);
+  padding: 0.1rem var(--cb-space-2);
+  font-size: var(--cb-text-sm);
+  font-weight: 400;
   border: 1px solid var(--grade, var(--app-border));
   border-radius: 999px;
   color: var(--grade, var(--app-text));
-  font-weight: 400;
 }
 
-.email-addr__icon {
-  flex: 0 0 auto;
-  opacity: 0.75;
-}
+.email-addr__chip { gap: 0.1rem; }
+.email-addr__icon, .participants__icon { flex: 0 0 auto; opacity: 0.75; }
 
-/* The entity badge and its unlink ✕, kept together on one line. The ✕ is a sibling
-   of the badge button, not nested — a button cannot contain a button. */
-.email-addr__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1rem;
-  max-width: 100%;
-}
-
-/* Remove the link a badge stands for — muted until hovered, so it never competes
-   with the badge it sits beside. */
 .email-addr__unlink {
   flex: 0 0 auto;
   display: inline-flex;
@@ -877,38 +539,22 @@ body {
   width: 1.15em;
   height: 1.15em;
   padding: 0;
-  font-size: 0.85rem;
+  font-size: var(--cb-text-md);
   line-height: 1;
   border-radius: 999px;
   opacity: 0.5;
 }
 
-.email-addr__unlink:hover {
-  opacity: 1;
-  color: var(--cb-string);
-}
+.email-addr__unlink:hover { opacity: 1; color: var(--cb-string); }
 
 .email-addr__link {
   flex: 0 0 auto;
   max-width: 45%;
-  padding: 0.1rem 0.45rem;
+  padding: 0.1rem var(--cb-space-2);
   font-size: var(--cb-text-xs);
 }
 
-.email-fields__actions {
-  flex-wrap: wrap;
-}
-
-/* Attachments as a list — each a real file that opens in the OS app. A name with
-   no file (an older import) is dimmed rather than a dead link. */
-.attach-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
+.attach-list { gap: var(--cb-space-1); }
 
 .attach-list__item {
   padding: var(--cb-space-1) var(--cb-space-2);
@@ -916,707 +562,22 @@ body {
   text-align: left;
 }
 
-.attach-list__item--dead {
+.email-addr__empty, .attach-list__item--dead, .grade-key__definition, .timeline__chevron {
   color: var(--app-text-muted);
 }
 
-/* Kind is fixed once a card is an actor or an import — shown, not chosen. */
-.kind-locked {
-  font-size: 0.82rem;
-  padding: 0.2rem 0;
-}
+.kind-locked { font-size: var(--cb-text-md); padding: var(--cb-space-1) 0; }
 
-.field__url {
-  margin-top: 0.4rem;
-}
-
-/* A wrapper, so the preview can show the real crop (its 4:3 frame) rather than the
-   whole image. Uncropped it shows the picture full, as before. */
 .card-editor__preview {
   position: relative;
   overflow: hidden;
-  width: 100%;
   border-radius: var(--app-radius);
   border: 1px solid var(--app-border);
 }
-.card-editor__preview img {
-  display: block;
-  width: 100%;
-}
-.card-editor__preview.is-cropped {
-  aspect-ratio: 4 / 3;
-}
 
-/* Read-only metadata pulled from an imported file — a document's properties, a
-   photo's EXIF. A two-column key/value grid; each row is a `display: contents`
-   wrapper so its dt/dd land in the shared columns. */
-.media-meta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.2rem 0.6rem;
-  margin: 0.5rem 0 0;
-}
+.card-editor__preview img { display: block; width: 100%; }
 
-/* The details dialog stacks an identity MetaList, the owning-card line, then a
-   "File properties" MetaList — small gaps keep the three groups distinct. */
-.media-details__owner {
-  margin: 0.7rem 0 0;
-}
-.media-details__heading {
-  display: block;
-  margin: 0.9rem 0 0;
-}
-.media-meta > div {
-  display: contents;
-}
-.media-meta dt {
-  color: var(--app-text-muted);
-  font-size: var(--cb-text-sm);
-  align-self: baseline;
-}
-.media-meta dd {
-  margin: 0;
-  font-size: 0.8rem;
-  word-break: break-word;
-}
-
-/* ---- Record view ---- */
-/* Covers the canvas rather than replacing it, so the canvas stays mounted and
-   measured (see App). Opaque, or the board would read through the list. */
-.record {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background: var(--app-surface-sunken);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Clear of the floating toolbar and cluster panel, which sit over both views. */
-.record__bar {
-  display: flex;
-  align-items: center;
-  gap: var(--cb-space-2);
-  box-sizing: content-box;
-  min-height: var(--cb-control-height);
-  padding: var(--cb-space-2) var(--cb-space-4);
-  margin: 3.6rem var(--cb-space-4) 0;
-  border-bottom: 1px solid var(--app-border);
-}
-
-.record__bar > .app-menu__trigger {
-  margin-left: auto;
-}
-
-.record__count {
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-}
-
-.record__filter {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-left: auto;
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-  cursor: pointer;
-}
-
-.record__empty {
-  padding: 1.4rem 2rem;
-  max-width: 34rem;
-}
-
-.record__list {
-  list-style: none;
-  margin: 0;
-  padding: 0.5rem 1rem 1rem;
-  overflow-y: auto;
-}
-
-/* Both the record and the Objects view fill this list, and either can run to hundreds of
-   thumbnailed rows. Let the browser skip layout and paint for the rows scrolled out of
-   view, so filtering (or clearing) the search never repaints the whole list at once and
-   the cost stays flat as the library grows. contain-intrinsic-size reserves each row's
-   ~50px (34px thumb + padding) to hold the scrollbar steady; `auto` then remembers each
-   row's real height once it has been rendered. */
-.record__list > li {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 50px;
-}
-
-.record-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.5rem 0.6rem;
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--app-radius) var(--app-radius) 0;
-}
-
-.record-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.record-row.is-selected {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/* Fixed square whether it holds a picture or a glyph, so the list never jumps
-   as it scrolls past a message that happened to carry one. */
-.record-row__thumb {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  /* Sizes a MediaIcon (drawn in em) when the row has no picture. */
-  font-size: 20px;
-  color: var(--app-text);
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-  /* The clip box for a cropped thumbnail's absolute <img> (see cardImageStyle). */
-  position: relative;
-}
-
-.record-row__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* A file's type icon (see ui/MediaIcon), sized in em off the box that holds it —
-   the 34px thumb here, or the timeline glyph's line height. */
-.media-icon {
-  position: relative;
-  display: inline-flex;
-  width: 1em;
-  height: 1em;
-  vertical-align: -0.15em;
-}
-
-.media-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* The envelope reads better a touch larger than the file glyphs. */
-.media-icon--email svg {
-  transform: scale(1.12);
-}
-
-/* Provenance clip for a file that came in on an email: a small paperclip in the
-   corner on its own disc, so it separates from the base icon under it. */
-.media-icon__clip {
-  position: absolute;
-  right: -0.22em;
-  bottom: -0.22em;
-  width: 0.68em;
-  height: 0.68em;
-  padding: 0.09em;
-  border-radius: 50%;
-  background: var(--app-surface);
-  color: var(--app-text-muted);
-}
-
-.record-row__main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.record-row__title,
-.record-row__who {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.record-row__title {
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.record-row__who {
-  font-size: 0.7rem;
-  color: var(--app-text-muted);
-}
-
-.record-row__when {
-  flex: 0 0 auto;
-  font-size: 0.68rem;
-  color: var(--app-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Amber, not red: a record nobody has linked up yet is unfinished work, not a
-   fault. Asserted is the grade for "said, not yet settled", and this is the
-   same idea about a piece of paper. */
-.record-row.is-loose {
-  background: rgba(217, 154, 43, 0.07);
-}
-
-.record-row__loose {
-  flex: 0 0 auto;
-  font-size: var(--cb-text-xs);
-  color: var(--app-warn);
-  border: 1px solid rgba(217, 154, 43, 0.45);
-  border-radius: 3px;
-  padding: 1px 6px 2px;
-  white-space: nowrap;
-}
-
-/* ---- Maintenance view ---- */
-/* Reuses the record view's shell and row parts (.record, .record__bar/list,
-   .record-row__thumb/__main/__title/__who); only the toolbar, the non-button row,
-   and the integrity badges are its own. */
-.maintenance__error,
-.maintenance__note {
-  margin: 0.6rem 1rem 0;
-}
-
-.maintenance-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.5rem 0.6rem;
-  border-left: 3px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0 var(--app-radius) var(--app-radius) 0;
-}
-
-.maintenance-row.is-missing {
-  background: rgba(200, 64, 47, 0.08);
-  border-left-color: var(--cb-string);
-}
-
-.maintenance-row.is-orphan {
-  background: rgba(217, 154, 43, 0.07);
-  border-left-color: rgba(217, 154, 43, 0.6);
-}
-
-.maintenance-row.is-unknown {
-  border-left-color: rgba(217, 154, 43, 0.4);
-}
-
-.maintenance-row__status {
-  flex: 0 0 auto;
-  font-size: var(--cb-text-xs);
-  border: 1px solid var(--app-border);
-  border-radius: 3px;
-  padding: 1px 6px 2px;
-  white-space: nowrap;
-  color: var(--app-text-muted);
-}
-
-.maintenance-row__status.is-missing {
-  color: var(--cb-string);
-  border-color: rgba(200, 64, 47, 0.5);
-}
-
-.maintenance-row__status.is-orphan,
-.maintenance-row__status.is-unknown {
-  color: #d99a2b;
-  border-color: rgba(217, 154, 43, 0.45);
-}
-
-.maintenance-row__status.is-ok {
-  color: #6fae6f;
-  border-color: rgba(111, 174, 111, 0.4);
-}
-
-.maintenance-row__status svg {
-  vertical-align: -0.125em;
-}
-
-.maintenance-row__actions {
-  --cb-control-pad-x: 0.45rem;
-  flex: 0 0 auto;
-  display: flex;
-  gap: 0.15rem;
-}
-
-/* ---- Delete card ---- */
-/* Last in the panel and set apart by a rule: the only irreversible thing here,
-   and it should take a deliberate scroll to reach rather than sit under the
-   thumb next to Close. */
-.card-editor__danger {
-  margin-top: 0.6rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid var(--app-border);
-}
-
-.card-delete {
-  width: 100%;
-  justify-content: center;
-}
-
-/* ---- Grades ---- */
-/* The tint is the grade's own colour, handed down as --grade so the strand, the
-   chip and the select all say it the same way. */
-.grade-select .app-field__input {
-  border-left: 4px solid var(--grade, var(--app-border));
-}
-
-.grade-legend {
-  font-size: 0.72rem;
-  color: var(--app-text-muted);
-}
-
-.grade-legend summary {
-  cursor: pointer;
-  padding: 0.3rem 0;
-}
-
-.grade-legend ul {
-  list-style: none;
-  margin: 0;
-  padding: 0.2rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.grade-legend li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-/* Ink is whichever of the two reads on this grade — worked out in lib/grades,
-   so a colour can be tuned without anyone remembering to re-check the text. */
-.grade-chip {
-  align-self: flex-start;
-  font-size: var(--cb-text-xs);
-  font-weight: 600;
-  padding: 1px 6px 2px;
-  border-radius: 3px;
-  color: var(--grade-ink);
-  background: var(--grade);
-}
-
-/* A path is long and nobody types one: wrap it rather than truncate, so the
-   whole thing can be read and copied. Monospace because it is a filename. */
-.board-file {
-  padding: 0;
-  text-align: left;
-  font-family: var(--app-font-mono);
-  font-size: 0.68rem;
-  line-height: 1.4;
-  word-break: break-all;
-}
-
-/* The full ladder, in board properties: swatch, name, definition. A grid so the
-   names line up and the eye can run down the colours as a scale. */
-.grade-key {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.grade-key li {
-  display: grid;
-  grid-template-columns: 0.75rem 6.5rem 1fr;
-  align-items: baseline;
-  gap: 0.5rem;
-  font-size: 0.72rem;
-}
-
-.grade-key__swatch {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 2px;
-  background: var(--grade);
-  /* Grey and the deepest green both sit close to the panel; a hairline keeps
-     every swatch a shape rather than a smudge. */
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
-}
-
-.grade-key__label {
-  font-weight: 600;
-  color: var(--grade);
-}
-
-.grade-key__definition {
-  color: var(--app-text-muted);
-}
-
-/* ---- Connections section (card editor) ---- */
-.connection {
-  padding: 0.3rem 0;
-  border-bottom: 1px solid rgba(74, 58, 34, 0.4);
-}
-
-.connection-row {
-  --cb-control-pad-y: 0.1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  padding: 0.25rem 0;
-}
-
-.connection-arrow {
-  color: var(--cb-string);
-  font-weight: 700;
-}
-
-/* The linked card as a chip (the .email-addr__entity pill) — icon then title, click to
-   open it; only its sizing in the row is bespoke, so it matches a resolved address. */
-.connection-target {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 55%;
-}
-
-.connection-target:hover {
-  border-color: var(--cb-string);
-}
-
-/* The string's own tag, edited in place — its board tag reads from this. Bare until
-   focused, so a labelled string reads as text and a blank one as a quiet invitation. */
-.connection-label {
-  flex: 1 1 40px;
-  min-width: 0;
-  font-size: 0.72rem;
-  font-style: italic;
-  color: var(--app-text-muted);
-  background: none;
-  border: none;
-  border-bottom: 1px dashed transparent;
-  border-radius: 0;
-  padding: 0.1rem 0.2rem;
-}
-
-.connection-label:hover {
-  border-bottom-color: var(--app-border);
-}
-
-.connection-label:focus {
-  outline: none;
-  font-style: normal;
-  color: var(--app-text);
-  border-bottom-color: var(--cb-string);
-}
-
-.connection-add {
-  margin-top: 0.5rem;
-}
-
-/* ---- Entity picker dialog (shared by connections and the from/to linker) ---- */
-.entity-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  min-height: 0;
-}
-
-.entity-picker__tab-count {
-  margin-inline-start: 0.3em;
-  font-size: var(--cb-text-xs);
-  opacity: 0.7;
-}
-
-.entity-picker__filter {
-  width: 100%;
-}
-
-/* On top of .email-addr__list: tighter rows and a bounded scroll for a long library. */
-.entity-picker__list {
-  gap: 0.1rem;
-  max-height: 46vh;
-  overflow-y: auto;
-}
-
-.entity-picker__row {
-  display: flex;
-  align-items: center;
-  gap: var(--cb-space-2);
-}
-
-.entity-picker__row--create {
-  color: var(--cb-string);
-  font-weight: 600;
-}
-
-.entity-picker__row-icon {
-  flex: 0 0 auto;
-  width: 1.2em;
-  text-align: center;
-  opacity: 0.8;
-}
-
-.entity-picker__row-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.entity-picker__empty {
-  padding: 0.6rem 0.5rem;
-}
-
-/* The resolved from/to parties, indented a touch under their field. */
-.email-fields__linked {
-  margin: 0.15rem 0 0.1rem;
-  padding-left: 0.3rem;
-}
-
-/* ---- Markdown ---- */
-.markdown {
-  font-size: 0.85rem;
-  line-height: 1.5;
-  background: var(--app-surface-sunken);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-  padding: 0.6rem 0.7rem;
-}
-
-.markdown :first-child {
-  margin-top: 0;
-}
-
-.markdown :last-child {
-  margin-bottom: 0;
-}
-
-.markdown a {
-  color: var(--cb-string);
-}
-
-/* A failed save is otherwise invisible until the user reloads and finds
-   their work gone, so it gets a loud strip rather than a console message. */
-.toolbar__error {
-  margin-top: 0.5rem;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--cb-string);
-  border-radius: var(--app-radius);
-  background: rgba(200, 64, 47, 0.16);
-  color: var(--app-text);
-  font-size: 0.74rem;
-  max-width: 22rem;
-}
-
-.menu-check {
-  float: right;
-  margin: 0.15em 0 0 var(--cb-space-3);
-}
-
-/* ---- Busy overlay ---- */
-.app-dialog:has(> .busy-overlay) {
-  max-width: 20rem;
-}
-
-.busy-overlay {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.9rem;
-}
-
-.busy-overlay__text {
-  font-size: 0.85rem;
-  color: var(--app-text-muted);
-}
-
-/* Border-spinner: the animation runs on the compositor, so it keeps turning even
-   while the main thread is blocked base64-ing a large bundle. */
-.spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid var(--app-border);
-  border-top-color: var(--app-text);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Background work (search indexing), in the toolbar row; distinct from the
-   full-screen .busy-overlay the user must wait on. */
-.task-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--cb-space-2);
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-  white-space: nowrap;
-}
-
-.spinner--small {
-  width: 14px;
-  height: 14px;
-  border-width: 2px;
-}
-
-/* The undo pill: the task indicator's shape, parked bottom-centre so it reads
-   as a transient offer rather than a status — and clickable, unlike it. */
-.undo-toast {
-  position: fixed;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: var(--cb-space-1) var(--cb-space-1) var(--cb-space-1) var(--cb-space-3);
-  font-size: var(--cb-text-md);
-  color: var(--app-text);
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-}
-
-/* ---- Dialogs ---- */
-.app-dialog::backdrop {
-  background: rgb(10 8 5 / 0.72);
-  opacity: 1;
-}
-
-.app-dialog[open] {
-  display: flex;
-  flex-direction: column;
-  gap: var(--cb-space-3);
-  font-size: var(--cb-text-md);
-}
-
-.app-dialog__title,
-.app-dialog > p,
-.app-tabpanel,
-.app-notice {
-  margin: 0;
-}
-
-.app-dialog__actions > :only-child {
-  margin-inline-start: auto;
-}
-
-.app-notice {
-  font-size: var(--cb-text-md);
-}
-
-.dialog-status {
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-}
-
-/* Sticky, so the editor's close stays in reach down a long card; the negative
-   margins reach over kit's 1.25rem dialog padding. */
+/* Sticky, so the close stays in reach down a long card; the negative margins reach over kit's 1.25rem dialog padding. */
 .card-editor__head {
   position: sticky;
   top: -1.25rem;
@@ -1629,57 +590,330 @@ body {
   background: var(--app-surface);
 }
 
-.first-run__header {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.card-editor__danger {
+  margin-top: var(--cb-space-2);
+  padding-top: var(--cb-space-3);
+  border-top: 1px solid var(--app-border);
 }
 
-.first-run__logo {
-  width: 34px;
-  height: 34px;
+.card-delete { width: 100%; justify-content: center; }
+
+/* ---- Media metadata ---- */
+.media-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem var(--cb-space-2);
+  margin: var(--cb-space-2) 0 0;
+}
+
+.media-meta > div { display: contents; }
+.media-meta dt { color: var(--app-text-muted); font-size: var(--cb-text-sm); align-self: baseline; }
+.media-meta dd { margin: 0; font-size: var(--cb-text-md); word-break: break-word; }
+.media-details__owner { margin: var(--cb-space-3) 0 0; }
+.media-details__heading { display: block; margin: var(--cb-space-4) 0 0; }
+
+/* ---- Grades ---- */
+.grade-select .app-field__input { border-left: 4px solid var(--grade, var(--app-border)); }
+.grade-legend summary { cursor: pointer; padding: var(--cb-space-1) 0; }
+.grade-legend ul { padding-top: 0.2rem; }
+.grade-legend li { display: flex; flex-direction: column; gap: 0.1rem; }
+
+.grade-chip {
+  align-self: flex-start;
+  font-weight: 600;
+  border: 0;
+  color: var(--grade-ink);
+  background: var(--grade);
+}
+
+.grade-key li {
+  display: grid;
+  grid-template-columns: 0.75rem 6.5rem 1fr;
+  align-items: baseline;
+  gap: var(--cb-space-2);
+  font-size: var(--cb-text-sm);
+}
+
+/* A hairline, so the greys and the deepest green near the panel stay a shape. */
+.grade-key__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--cb-radius-sm);
+  background: var(--grade);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
+.grade-key__label { font-weight: 600; color: var(--grade); }
+
+.board-file {
+  padding: 0;
+  text-align: left;
+  font-family: var(--app-font-mono);
+  font-size: var(--cb-text-xs);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+/* ---- Connections ---- */
+.connection {
+  padding: var(--cb-space-1) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 40%, transparent);
+}
+
+.connection-row {
+  --cb-control-pad-y: 0.1rem;
+  font-size: var(--cb-text-md);
+  padding: var(--cb-space-1) 0;
+}
+
+.connection-arrow { color: var(--cb-string); font-weight: 700; }
+.connection-target { flex: 0 1 auto; max-width: 55%; }
+.connection-target:hover { border-color: var(--cb-string); }
+
+.connection-label {
+  flex: 1 1 40px;
+  min-width: 0;
+  font-size: var(--cb-text-sm);
+  font-style: italic;
+  color: var(--app-text-muted);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  border-radius: 0;
+  padding: 0.1rem 0.2rem;
+}
+
+.connection-label:hover { border-bottom-color: var(--app-border); }
+
+.connection-label:focus {
+  outline: none;
+  font-style: normal;
+  color: var(--app-text);
+  border-bottom-color: var(--cb-string);
+}
+
+.connection-add { margin-top: var(--cb-space-2); }
+
+/* ---- Entity picker ---- */
+.entity-picker { min-height: 0; }
+
+.entity-picker__tab-count {
+  margin-inline-start: 0.3em;
+  font-size: var(--cb-text-xs);
+  opacity: 0.7;
+}
+
+.entity-picker__filter { width: 100%; }
+.entity-picker__list { gap: 0.1rem; max-height: 46vh; overflow-y: auto; }
+.entity-picker__row--create { color: var(--cb-string); font-weight: 600; }
+.entity-picker__row-icon { flex: 0 0 auto; width: 1.2em; text-align: center; opacity: 0.8; }
+.entity-picker__row-title { min-width: 0; }
+.entity-picker__empty { padding: var(--cb-space-2); }
+
+/* ---- Markdown ---- */
+.markdown {
+  font-size: var(--cb-text-md);
+  line-height: 1.5;
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  flex: 0 0 auto;
+  padding: var(--cb-space-2) var(--cb-space-3);
 }
 
-.first-run__choices {
+.markdown :first-child { margin-top: 0; }
+.markdown :last-child { margin-bottom: 0; }
+.markdown a { color: var(--cb-string); }
+
+/* ---- Record and Objects views ---- */
+/* Covers the canvas rather than replacing it, so the canvas stays mounted and measured (see App). */
+.record {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: var(--app-surface-sunken);
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin-top: 0.3rem;
+  overflow: hidden;
 }
+
+/* Clear of the floating toolbar and cluster panel. */
+.record__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-space-2);
+  box-sizing: content-box;
+  min-height: var(--cb-control-height);
+  padding: var(--cb-space-2) var(--cb-space-4);
+  margin: 3.6rem var(--cb-space-4) 0;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.record__bar > .app-menu__trigger, .record__filter { margin-left: auto; }
+.record__filter { gap: var(--cb-space-1); cursor: pointer; }
+.record__empty { padding: 1.5rem 2rem; max-width: 34rem; }
+.record__list { padding: var(--cb-space-2) var(--cb-space-4) var(--cb-space-4); overflow-y: auto; }
+
+/* Hundreds of thumbnailed rows: skip layout and paint off screen, reserving each row's ~50px. */
+.record__list > li { content-visibility: auto; contain-intrinsic-size: auto 50px; }
+
+.record-row, .maintenance-row {
+  gap: var(--cb-space-3);
+  padding: var(--cb-space-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--app-radius) var(--app-radius) 0;
+}
+
+.record-row:hover { background: rgb(255 255 255 / 0.04); }
+.record-row.is-selected { background: rgb(255 255 255 / 0.08); }
+.record-row.is-loose, .maintenance-row.is-orphan { background: var(--cb-warn-wash); }
+
+.record-row__thumb {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  border-radius: var(--cb-radius-sm);
+  background: rgb(0 0 0 / 0.25);
+  overflow: hidden;
+  position: relative;
+}
+
+.record-row__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.record-row__main { flex: 1 1 auto; }
+.record-row__title { font-size: var(--cb-text-md); font-weight: 600; }
+.record-row__when { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+.record-row__loose, .maintenance-row__status.is-orphan, .maintenance-row__status.is-unknown {
+  color: var(--app-warn);
+  border-color: color-mix(in srgb, var(--app-warn) 45%, transparent);
+}
+
+.record-row__loose, .maintenance-row__status { flex: 0 0 auto; }
+
+.media-icon {
+  position: relative;
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+
+.media-icon svg { width: 100%; height: 100%; display: block; }
+.media-icon--email svg { transform: scale(1.12); }
+
+.media-icon__clip {
+  position: absolute;
+  right: -0.22em;
+  bottom: -0.22em;
+  width: 0.68em;
+  height: 0.68em;
+  padding: 0.09em;
+  border-radius: 50%;
+  background: var(--app-surface);
+  color: var(--app-text-muted);
+}
+
+.maintenance__error, .maintenance__note { margin: var(--cb-space-2) var(--cb-space-4) 0; }
+.maintenance-row { border-left-color: rgb(255 255 255 / 0.08); }
+
+.maintenance-row.is-missing {
+  background: color-mix(in srgb, var(--cb-string) 8%, transparent);
+  border-left-color: var(--cb-string);
+}
+
+.maintenance-row.is-orphan {
+  border-left-color: color-mix(in srgb, var(--app-warn) 60%, transparent);
+}
+
+.maintenance-row.is-unknown {
+  border-left-color: color-mix(in srgb, var(--app-warn) 40%, transparent);
+}
+
+.maintenance-row__status.is-missing {
+  color: var(--cb-string);
+  border-color: color-mix(in srgb, var(--cb-string) 50%, transparent);
+}
+
+.maintenance-row__status.is-ok {
+  color: var(--app-good);
+  border-color: color-mix(in srgb, var(--app-good) 40%, transparent);
+}
+
+.maintenance-row__status svg { vertical-align: -0.125em; }
+
+.maintenance-row__actions {
+  --cb-control-pad-x: 0.45rem;
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--cb-space-0);
+}
+
+/* ---- Busy and background work ---- */
+.app-dialog:has(> .busy-overlay) { max-width: 20rem; }
+.busy-overlay { align-items: center; gap: var(--cb-space-4); }
+.busy-overlay__text { font-size: var(--cb-text-md); color: var(--app-text-muted); }
+
+/* A border spinner turns on the compositor, so it keeps going while the main thread is blocked. */
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--app-border);
+  border-top-color: var(--app-text);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner--small { width: 14px; height: 14px; border-width: 2px; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.task-indicator, .timeline__filter-option { white-space: nowrap; }
+
+.undo-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  padding: var(--cb-space-1) var(--cb-space-1) var(--cb-space-1) var(--cb-space-3);
+  font-size: var(--cb-text-md);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  box-shadow: var(--app-shadow);
+}
+
+/* ---- Dialogs ---- */
+.app-dialog::backdrop { background: rgb(10 8 5 / 0.72); opacity: 1; }
+
+.app-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-space-3);
+  font-size: var(--cb-text-md);
+}
+
+.app-dialog__actions > :only-child { margin-inline-start: auto; }
+.app-notice { font-size: var(--cb-text-md); }
+.first-run__logo { width: 34px; height: 34px; border-radius: var(--app-radius); flex: 0 0 auto; }
+.first-run__choices { margin-top: var(--cb-space-1); }
 
 .first-run__choice {
   flex-direction: column;
   gap: 0.2rem;
   align-items: flex-start;
   text-align: left;
-  padding: var(--cb-space-3) 0.9rem;
+  padding: var(--cb-space-3) var(--cb-space-4);
 }
 
-.first-run__choice-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
+.first-run__choice-title { font-weight: 600; font-size: var(--cb-text-lg); }
+.manage__name { margin: var(--cb-space-0) 0 0; font-weight: 600; }
+.manage__actions { display: flex; flex-wrap: wrap; gap: var(--cb-space-2); }
 
-.first-run__choice-note {
-  font-size: 0.78rem;
-  color: var(--app-text-muted);
-}
-
-/* Manage dialog: the board's name, then its actions in a row. */
-.manage__name {
-  margin: 0.15rem 0 0;
-  font-weight: 600;
-}
-
-.manage__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-/* The blank-card button sits at the tab strip's end: an escape hatch, not a third tab. */
 .email-import__tabs {
   display: flex;
   align-items: flex-end;
@@ -1687,29 +921,9 @@ body {
   gap: var(--cb-space-2);
 }
 
-.email-import__tabs .app-tablist {
-  flex: 1;
-}
-
-.email-import__errors {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 0.72rem;
-  color: var(--app-text-muted);
-}
-
-.library-mcp__warn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.library-mcp__value {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+.email-import__tabs .app-tablist { flex: 1; }
+.email-import__errors { margin: 0; padding-left: 1.1rem; }
+.library-mcp__warn { justify-content: space-between; }
 
 .library-mcp__value code {
   flex: 1;
@@ -1723,180 +937,104 @@ body {
   border-radius: var(--app-radius);
 }
 
-/* Thumbnail grid of pictures already on the board — the object picker's grid (see
-   ObjectPickerDialog), pick one to reuse it. Scrolls within the dialog so a library
-   of hundreds stays bounded and the preview below keeps its room. */
+/* ---- Object picker and image cropper ---- */
 .image-picker {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 0.5rem;
+  gap: var(--cb-space-2);
   padding: 0.1rem;
   max-height: 34vh;
   overflow-y: auto;
 }
 
+/* Letterboxed in a well: most board images are logos or documents a cover-crop would slice. */
 .image-picker__item {
   display: block;
   position: relative;
   padding: 0;
-  aspect-ratio: 4 / 3;
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  /* A recessed well so the whole picture can sit inside letterboxed (below) — most
-     board images are logos or documents, which a cover-crop would slice to an
-     unrecognisable band. */
   background: var(--app-bg);
 }
 
-.image-picker__item:hover {
-  border-color: var(--accent, var(--cb-string));
-}
+.image-picker__item:hover { border-color: var(--accent, var(--cb-string)); }
 
-/* The highlighted tile whose picture the preview is showing. */
 .image-picker__item.is-active {
   border-color: var(--cb-string);
   outline: 2px solid var(--cb-string);
   outline-offset: -1px;
 }
 
-.image-picker__item img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
+.image-picker__item img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
-/* Badge on a tile whose picture more than one object shares (a group photo). */
 .image-picker__count {
   position: absolute;
   right: 3px;
   bottom: 3px;
-  padding: 0 0.3rem;
-  font-size: 0.68rem;
+  padding: 0 var(--cb-space-1);
+  font-size: var(--cb-text-xs);
   line-height: 1.4;
-  color: var(--app-text);
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(0 0 0 / 0.6);
   border-radius: 999px;
 }
 
-/* ---- Object picker (reuse a picture already on the board) ---- */
-.object-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-/* A recessed well showing the highlighted picture whole (contain), so what you pick
-   is what you get before committing it to the crop frame. */
 .object-picker__preview {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem;
+  gap: var(--cb-space-2);
+  padding: var(--cb-space-2);
   background: var(--app-bg);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
 }
 
-.object-picker__preview img {
-  max-width: 100%;
-  max-height: 30vh;
-  object-fit: contain;
-}
+.object-picker__preview img { max-width: 100%; max-height: 30vh; object-fit: contain; }
 
 .object-picker__caption {
-  font-size: 0.85rem;
+  font-size: var(--cb-text-md);
   color: var(--app-text-muted);
   text-align: center;
 }
 
-/* "+N others share this image" — dimmer than the representative's name. */
-.object-picker__more {
-  color: var(--app-text-muted);
-}
+.object-picker__date { opacity: 0.75; }
+.object-picker__empty { padding: var(--cb-space-4) 0; text-align: center; }
 
-.object-picker__date {
-  opacity: 0.75;
-}
-
-.object-picker__empty {
-  padding: 1rem 0;
-  text-align: center;
-}
-
-/* ---- Image cropper (the card-image dialog) ---- */
-.image-cropper {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-/* The frame is the card's 4:3 shape: what you see here is what the card shows. */
 .image-cropper__frame {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 4 / 3;
   width: 100%;
   border-radius: var(--app-radius);
   border: 1px solid var(--app-border);
-  /* Dark, so an image mid-drag reads against film, not a gap. */
-  background: #2b2620;
+  background: var(--app-surface-sunken);
   cursor: grab;
-  /* Own the drag: no page scroll or image drag stealing the gesture. */
   touch-action: none;
   user-select: none;
 }
-.image-cropper__frame:active {
-  cursor: grabbing;
-}
-.image-cropper__frame img {
-  /* Sizing and offset come inline from the pan/zoom state. */
-  pointer-events: none;
-}
+
+.image-cropper__frame:active { cursor: grabbing; }
+.image-cropper__frame img { pointer-events: none; }
 
 .image-cropper__empty {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: var(--cb-space-4);
   text-align: center;
   color: var(--app-text-muted);
-  font-size: 0.8rem;
+  font-size: var(--cb-text-md);
 }
 
-/* ---- Participants (derived, read-only) ---- */
-/* Dotted in the Inference violet, like the strands on the canvas: the same
-   claim, said in a list. The colour comes down as --grade from the component. */
-.participants__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 200px;
-  overflow-y: auto;
-  border-left: 2px dotted var(--grade);
-}
+/* ---- Participants ---- */
+.participants__list { max-height: 200px; overflow-y: auto; border-left: 2px dotted var(--grade); }
+.participants__row { padding: var(--cb-space-1) var(--cb-space-2); }
+.participants__row:hover { color: var(--cb-string); }
 
-/* These are real links — the record's own, immutable, but you click one to open
-   the card. So they read as links: brighter than the surrounding note, and the
-   string colour on hover, rather than muted body text. */
-.participants__row {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: var(--cb-space-1) var(--cb-space-2);
-}
-
-.participants__row:hover {
-  color: var(--cb-string);
-}
-
-/* "→ Sent (3)". The arrow carries the fact; the count says how much of it. */
 .participants__direction {
   display: block;
-  margin-top: 0.5rem;
+  margin-top: var(--cb-space-2);
   font-size: var(--cb-text-sm);
   font-weight: 600;
   color: var(--grade);
@@ -1905,154 +1043,38 @@ body {
 .participants__when {
   flex: 0 0 auto;
   margin-left: auto;
-  padding-left: 0.4rem;
-  font-size: 0.62rem;
-  color: var(--app-text-muted);
+  padding-left: var(--cb-space-2);
   font-variant-numeric: tabular-nums;
 }
 
-.participants__icon {
-  flex: 0 0 auto;
-  opacity: 0.75;
-}
-
-/* Bounded, so a long subject line cannot widen the sidebar. */
-.participants__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---- Import offer ---- */
-/* The only rows in this modal that decide anything — the preview below merely
-   describes. Each row is a control, so it reads across where a preview line
-   reads down. */
-.import-offer {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 180px;
+/* ---- Import offer and preview ---- */
+.import-offer, .import-preview {
   overflow-y: auto;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
 }
 
-.import-offer li {
+.import-offer { max-height: 180px; }
+.import-preview { max-height: 220px; }
+
+.import-offer li, .import-preview li {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.55rem;
+  gap: var(--cb-space-2);
+  padding: var(--cb-space-2);
   border-bottom: 1px solid var(--app-border);
 }
 
-.import-offer li:last-child {
-  border-bottom: none;
-}
+.import-offer li:last-child, .import-preview li:last-child { border-bottom: none; }
+.import-offer__main { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+.import-offer__label, .import-preview__title { font-size: var(--cb-text-sm); font-weight: 600; }
+.import-offer__rename { flex: 1 1 auto; min-width: 0; }
+.import-offer__target { flex: 0 0 auto; width: auto; max-width: 45%; }
+.import-preview li { flex-direction: column; gap: 0.1rem; }
+.import-preview li.is-dupe { opacity: 0.5; }
+.import-preview__badge { align-self: flex-start; margin-top: var(--cb-space-0); }
+.import-preview__badge.is-completes { border-color: var(--app-good); color: var(--app-good); }
 
-/* The tick and its label are one target: the row is a yes/no before it is
-   anything else. */
-.import-offer__main {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.import-offer__text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.import-offer__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.import-offer__meta {
-  font-size: 0.68rem;
-  color: var(--app-text-muted);
-}
-
-/* The rename field on an import row: fills the row beside its tick, and may shrink
-   so a long name can't push the checkbox off. */
-.import-offer__rename {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* Where the row goes. Bounded, so a long card title can't push the tick off. */
-.import-offer__target {
-  flex: 0 0 auto;
-  width: auto;
-  max-width: 45%;
-}
-
-.import-offer__more {
-  font-size: 0.68rem;
-  color: var(--app-text-muted);
-}
-
-/* ---- Import preview ---- */
-.import-preview {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-}
-
-.import-preview li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.4rem 0.55rem;
-  border-bottom: 1px solid var(--app-border);
-}
-
-.import-preview li:last-child {
-  border-bottom: none;
-}
-
-.import-preview li.is-dupe {
-  opacity: 0.5;
-}
-
-.import-preview__title {
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.import-preview__meta {
-  font-size: 0.68rem;
-  color: var(--app-text-muted);
-}
-
-.import-preview__badge {
-  align-self: flex-start;
-  margin-top: 0.15rem;
-  padding: 0.05rem 0.3rem;
-  border: 1px solid var(--app-border);
-  border-radius: 3px;
-  font-size: var(--cb-text-xs);
-  color: var(--app-text-muted);
-}
-
-/* Not a skip — this one is about to gain a body it never had. */
-.import-preview__badge.is-completes {
-  border-color: #3bd17a;
-  color: #3bd17a;
-}
-
-/* ---- Timeline drawer ---- */
+/* ---- Timeline ---- */
 .timeline {
   flex: 0 0 auto;
   height: 34px;
@@ -2064,14 +1086,12 @@ body {
   overflow: hidden;
 }
 
-.timeline.is-open {
-  height: 220px;
-}
+.timeline.is-open { height: 220px; }
 
 .timeline__bar {
   --cb-control-text: var(--cb-text-sm);
   --cb-control-pad-y: 0.2rem;
-  --cb-control-pad-x: 0.5rem;
+  --cb-control-pad-x: var(--cb-space-2);
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -2087,135 +1107,68 @@ body {
   color: var(--app-text);
 }
 
-/* Header-bar control groups beside the Timeline heading/count: the kind filter,
-   milestone navigation, and the measure toggle. */
-.timeline__events,
-.timeline__tools,
-.timeline__filter {
+.timeline__chevron { font-size: var(--cb-text-md); }
+
+.timeline__events, .timeline__tools, .timeline__filter {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  padding: 0 0.75rem;
+  gap: var(--cb-space-1);
+  padding: 0 var(--cb-space-3);
 }
 
-.timeline__events {
-  gap: 0.25rem; /* between the Start/Prev/Next/End buttons */
+/* Collapsed, the tools have nothing to act on; the toggle and search stay live. */
+.timeline:not(.is-open) :is(.timeline__filter, .timeline__events, .timeline__tools) {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
-/* Lighter than the measure toggle's --cb-string fill: this is a persistent view
-   filter, lit only while a kind is hidden, not a modal tool you're inside. */
-.timeline__filter > button.is-active {
-  background: var(--app-border);
-  color: var(--app-text);
-}
+.timeline__filter > button.is-active { background: var(--app-border); color: var(--app-text); }
 
 .timeline__filter-menu {
   display: flex;
   flex-direction: column;
   min-width: 11rem;
-  padding: 0.25rem;
+  padding: var(--cb-space-1);
 }
 
-.timeline__filter-option {
-  display: flex;
-  align-items: center;
-  gap: var(--cb-space-2);
+.timeline__filter-option, .timeline__filter-reset, .timeline__undated-toggle {
   font-size: var(--cb-text-sm);
-  white-space: nowrap;
 }
 
-.timeline__filter-check {
-  width: 1rem;
-}
+.timeline__filter-check { width: 1rem; }
 
 .timeline__filter-count {
   margin-left: auto;
-  padding-left: 0.75rem;
+  padding-left: var(--cb-space-3);
   color: var(--app-text-muted);
 }
 
 .timeline__filter-reset {
   margin-top: var(--cb-space-1);
-  font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
   border-top: 1px solid var(--app-border);
   border-radius: 0;
 }
 
-.timeline__filter-reset:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
+.timeline__filter-reset:disabled { opacity: 0.4; cursor: default; }
+.timeline__search { flex: 0 0 auto; width: 12rem; max-width: 30vw; margin: 0 var(--cb-space-2); }
+.timeline__body, .timeline__body-row { flex: 1 1 auto; min-height: 0; display: flex; }
+.timeline__body { flex-direction: column; border-top: 1px solid var(--app-border); }
 
-/* The timeline's own full-text search box, in the header bar. */
-.timeline__search {
-  flex: 0 0 auto;
-  width: 12rem;
-  max-width: 30vw;
-  margin: 0 var(--cb-space-2);
-}
-
-/* Collapsed: the kind filter, milestone nav and measure tool have nothing to act on
-   while the strip is hidden, so they dim and stop responding until you expand. The
-   toggle and the search stay live — searching opens the drawer to its results. */
-.timeline:not(.is-open) .timeline__filter,
-.timeline:not(.is-open) .timeline__events,
-.timeline:not(.is-open) .timeline__tools {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.timeline__chevron {
-  color: var(--app-text-muted);
-  font-size: 0.8rem;
-}
-
-.timeline__count {
-  font-size: var(--cb-text-sm);
-  color: var(--app-text-muted);
-}
-
-.timeline__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--app-border);
-}
-
-/* The undated column and the strip, side by side; the measure bar (when shown)
-   stacks above them inside .timeline__body. */
-.timeline__body-row {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-}
-
-/* The measure tool's readout, spanning the drawer above the strip. */
 .timeline__measure {
   flex: 0 0 auto;
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.4rem 0.75rem;
+  gap: var(--cb-space-3);
+  padding: var(--cb-space-2) var(--cb-space-3);
   border-bottom: 1px solid var(--app-border);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.78rem;
+  background: rgb(255 255 255 / 0.03);
+  font-size: var(--cb-text-sm);
 }
 
-.timeline__measure-result strong {
-  font-size: 1.05rem;
-  color: var(--app-text);
-}
-
-.timeline__measure-range {
-  margin-left: 0.5rem;
-  color: var(--app-text-muted);
-}
-
-.timeline__measure-hint {
-  color: var(--app-text-muted);
-}
+.timeline__measure-result strong { font-size: var(--cb-text-xl); }
+.timeline__measure-range { margin-left: var(--cb-space-2); }
 
 .timeline__measure-toggle.is-active {
   background: var(--cb-string);
@@ -2223,77 +1176,47 @@ body {
   color: var(--app-bg);
 }
 
-/* Undated cards get their own column: they have no place in an ordering, but
-   they still need to be reachable. */
 .timeline__undated {
   flex: 0 0 auto;
   max-width: 240px;
   display: flex;
   flex-direction: column;
-  padding: 0.6rem;
+  padding: var(--cb-space-2);
   border-right: 1px dashed var(--app-border);
   overflow-y: auto;
 }
 
-.timeline__undated-toggle {
-  flex: 0 0 auto;
-  border: 1px dashed var(--app-border);
-  font-size: var(--cb-text-sm);
-}
-
-.timeline__undated-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-}
+.timeline__undated-toggle { flex: 0 0 auto; border: 1px dashed var(--app-border); }
+.timeline__undated-list { gap: var(--cb-space-1); margin-top: var(--cb-space-2); }
 
 .timeline__strip {
   flex: 1 1 auto;
   display: flex;
   align-items: stretch;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
+  gap: var(--cb-space-3);
+  padding: var(--cb-space-2) var(--cb-space-3);
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-.timeline__empty {
-  align-self: center;
-  margin: 0;
-}
-
-.timeline__group {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
+.timeline__empty { align-self: center; }
+.timeline__group { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--cb-space-2); }
 
 .timeline__day {
   font-size: var(--cb-text-sm);
   font-weight: 600;
   color: var(--app-text-muted);
   border-bottom: 1px solid var(--app-border);
-  padding-bottom: 0.25rem;
+  padding-bottom: var(--cb-space-1);
   white-space: nowrap;
 }
 
-.timeline__chips {
-  display: flex;
-  gap: 0.4rem;
-  align-items: flex-start;
-}
+.timeline__chips { display: flex; gap: var(--cb-space-2); align-items: flex-start; }
 
-/* Elapsed-time cue between day groups — the one thing a uniform strip loses.
-   Sits on the chip row, not the middle of the drawer, so it reads as belonging
-   to the gap between the two groups it separates. */
 .timeline__gap {
   flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 1.9rem;
-  font-size: 0.65rem;
-  color: var(--app-text-muted);
   white-space: nowrap;
   opacity: 0.7;
 }
@@ -2304,36 +1227,29 @@ body {
   width: 150px;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.4rem 0.5rem;
+  align-items: stretch;
+  gap: var(--cb-space-0);
+  padding: var(--cb-space-2);
   background: var(--cb-paper);
   color: var(--cb-card-ink);
   border: 1px solid transparent;
   border-left: 3px solid var(--accent);
-  border-radius: 4px;
-  align-items: stretch;
+  border-radius: var(--cb-radius-sm);
   text-align: left;
   font: inherit;
 }
 
-.timeline-item:hover {
-  border-color: var(--accent);
-}
+.timeline-item:hover { border-color: var(--accent); }
 
-/* The selected chip, and the measure tool's two endpoints, wear the same outline. */
-.timeline-item.is-selected,
-.timeline-item.is-measured {
+.timeline-item.is-selected, .timeline-item.is-measured {
   outline: 2px solid var(--cb-string);
   outline-offset: 1px;
 }
 
-.timeline-item__when {
-  font-size: var(--cb-text-xs);
-  color: var(--cb-card-ink-muted);
-}
+.timeline-item__when { font-size: var(--cb-text-xs); color: var(--cb-card-ink-muted); }
 
 .timeline-item__title {
-  font-size: 0.76rem;
+  font-size: var(--cb-text-sm);
   font-weight: 600;
   line-height: 1.25;
   display: -webkit-box;
@@ -2342,33 +1258,18 @@ body {
   overflow: hidden;
 }
 
-.timeline-item__glyph {
-  margin-right: 0.25rem;
-  opacity: 0.7;
-}
+.timeline-item__glyph { margin-right: var(--cb-space-1); opacity: 0.7; }
 
-/* A dated event is a milestone, not a document about one: a full accent outline
-   with a thick left bar (the "moment" marker) makes it stand out among the paper
-   chips, whatever its cluster colour. Stretches to its day group's height so it
-   reads as a bar rather than a chip. */
 .timeline-item--event {
   align-self: stretch;
   border-color: var(--accent);
   border-left-width: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.3);
 }
 
-.timeline-item--event .timeline-item__title {
-  font-weight: 800;
-}
+.timeline-item--event .timeline-item__title { font-weight: 800; }
+.timeline-item--event .timeline-item__glyph { color: var(--accent); opacity: 1; }
 
-.timeline-item--event .timeline-item__glyph {
-  color: var(--accent);
-  opacity: 1;
-}
-
-/* Days since the previous event — a milestone-to-milestone reading, so it wears
-   the event accent and sits above the date. */
 .timeline-item__since {
   align-self: flex-start;
   font-size: var(--cb-text-xs);
@@ -2376,11 +1277,10 @@ body {
   color: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 999px;
-  padding: 0 0.35rem;
+  padding: 0 var(--cb-space-1);
   opacity: 0.9;
 }
 
-/* The measure tool's endpoint badge, A (earlier) or B (later), in the top-right. */
 .timeline-item__measure-mark {
   position: absolute;
   top: -7px;
@@ -2390,7 +1290,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.62rem;
+  font-size: var(--cb-text-xs);
   font-weight: 800;
   color: var(--app-bg);
   background: var(--cb-string);
