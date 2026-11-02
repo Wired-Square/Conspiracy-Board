@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { Button, Dialog, Notice } from '@wired-square/kit';
+import { Button, Dialog, DialogActions, Notice } from '@wired-square/kit';
 import { errorMessage } from '../../lib/errors';
 import { libraryMcp, type LibraryMcpStatus } from '../../platform/libraryMcp';
 import { closeDialog } from '../../store/dialogStore';
@@ -77,9 +77,7 @@ export function LibraryMcpModal() {
           </>
         )}
       </Show>
-      <div class="app-dialog__actions">
-        <Button onClick={close}>Close</Button>
-      </div>
+      <DialogActions onCancel={close} />
     </Dialog>
   );
 }

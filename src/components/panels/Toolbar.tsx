@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createSignal, on } from 'solid-js';
-import { Button, Menu, MenuItem, SearchInput } from '@wired-square/kit';
+import { Button, Menu, MenuItem, MenuItemRadio, SearchInput } from '@wired-square/kit';
 import { count } from '@wired-square/kit/core';
-import { check, plus } from '@wired-square/icons/solid';
+import { plus } from '@wired-square/icons/solid';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
 import { DOCUMENT_FILE_FILTER, IMAGE_FILE_FILTER } from '../../lib/fileTypes';
@@ -85,13 +85,12 @@ export function Toolbar() {
             it is about), the record (what you argue from), and the objects (the
             files themselves). A chooser labelled with the current view, mirroring
             the native View menu — the same dropdown +Add uses. */}
-        <Menu aria-label={`View: ${VIEW_META[view()].label}`} trigger={VIEW_META[view()].label} chevron>
+        <Menu tone="default" aria-label={`View: ${VIEW_META[view()].label}`} trigger={VIEW_META[view()].label} chevron>
           <For each={VIEW_ORDER}>
             {(v) => (
-              <MenuItem current={v === view()} onSelect={() => setView(v)}>
+              <MenuItemRadio checked={v === view()} onSelect={() => setView(v)}>
                 {VIEW_META[v].label}
-                {v === view() && check({ class: 'menu-check' })}
-              </MenuItem>
+              </MenuItemRadio>
             )}
           </For>
         </Menu>
@@ -114,6 +113,7 @@ export function Toolbar() {
                 unqualified because it is the one you reach for without thinking —
                 it makes an evidence card, and the editor can change its kind. */}
             <Menu
+              tone="default"
               aria-label="Add"
               trigger={
                 <>

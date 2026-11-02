@@ -64,48 +64,23 @@
   --cb-space-4: 1rem;
 
   /* Desktop density over kit's web-sized controls; a region can tighten it (the timeline bar). */
-  --cb-control-text: var(--cb-text-md);
-  --cb-control-pad-y: 0.35rem;
-  --cb-control-pad-x: 0.7rem;
-  --cb-control-height: calc(var(--cb-control-text) * var(--app-control-line-height) + 2 * var(--cb-control-pad-y) + 2px);
+  --app-control-pad-y: 0.375rem;
+  --app-control-pad-x: 0.5rem;
+  --app-control-text: 0.8125rem;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--app-bg); color: var(--app-text); font-family: var(--app-font); }
 
-/* Keyboard focus only (see platform/inputModality); a text field keeps its ring however it was focused. */
-:root:not([data-modality='keyboard']) :focus-visible:not(input:not([type='checkbox'], [type='radio'], [type='color']), textarea, select) {
-  outline: none;
-  box-shadow: none;
-}
-
-/* kit's trigger is plain; matched to the bordered buttons beside it (kit gap, reported). */
-.app-menu__trigger:not(:hover, [aria-expanded='true']) {
-  background: var(--app-surface);
-  border-color: var(--app-border-strong);
-  color: var(--app-text);
-}
-
 /* ---- Shared shapes ---- */
-.app-btn, .app-field__input, .app-field__input--multiline {
-  font-size: var(--cb-control-text);
-  padding-block: var(--cb-control-pad-y);
-}
-
-.app-btn { padding-inline: var(--cb-control-pad-x); }
-.app-btn--icon { padding-inline: var(--cb-control-pad-y); }
-
-.app-field, .hint, .app-dialog__title, .app-dialog > p, .app-tabpanel, .app-notice, .timeline__empty {
+.hint, .app-dialog__title, .app-dialog > p, .app-tabpanel, .app-notice, .timeline__empty {
   margin: 0;
 }
 
 .app-field__input { background-color: var(--app-surface-sunken); }
-.app-field__input--multiline { font-family: inherit; min-height: 0; max-width: none; }
-.app-search__input { appearance: none; }
-.cb-link { padding: 0; color: inherit; text-decoration: underline; }
 
-.hint, .field__hint, .field > .field__hint, .record__count, .record__filter, .dialog-status,
+.hint, .field__hint, .field > .field__hint, .record__count, .record__filter,
 .task-indicator, .timeline__count, .timeline__measure-range, .timeline__measure-hint,
 .first-run__choice-note, .cluster-picker__primary, .grade-legend, .email-import__errors {
   font-size: var(--cb-text-sm);
@@ -118,6 +93,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   font-size: var(--cb-text-xs);
   color: var(--app-text-muted);
 }
+
+.record-row__who .app-btn--link { color: inherit; }
 
 .polaroid__detail, .email-fields__id, .email-addr__text, .email-addr__entity, .record-row__title,
 .record-row__who, .entity-picker__row-title, .participants__title, .import-offer__label {
@@ -144,7 +121,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .field__row, .cluster-row, .cluster-picker__row, .cluster-picker__row label, .connection-row,
 .entity-picker__row, .participants__row, .record-row, .maintenance-row, .record__filter,
 .first-run__header, .library-mcp__warn, .library-mcp__value, .task-indicator, .undo-toast,
-.timeline__filter-option, .import-offer li, .import-offer__main {
+.import-offer li, .import-offer__main {
   display: flex;
   align-items: center;
   gap: var(--cb-space-2);
@@ -213,12 +190,12 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .objects-badge {
   display: inline-flex;
   align-items: center;
-  padding: var(--cb-control-pad-y) var(--cb-control-pad-x);
+  padding: var(--app-control-pad-y) calc(var(--app-control-pad-x) + 0.25rem);
   border: 1px solid transparent;
   border-radius: var(--app-radius);
   background: var(--cb-paper);
   color: var(--cb-card-ink);
-  font-size: var(--cb-control-text);
+  font-size: var(--app-control-text);
   font-weight: 600;
   line-height: var(--app-control-line-height);
   white-space: nowrap;
@@ -227,7 +204,6 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--app-good); }
 .mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
-.menu-check { float: right; margin: 0.15em 0 0 var(--cb-space-3); }
 .cluster-panel { padding: var(--cb-space-3); min-width: 220px; max-height: 100%; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
@@ -661,7 +637,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 }
 
 .connection-row {
-  --cb-control-pad-y: 0.1rem;
+  --app-control-pad-y: 0.1rem;
   font-size: var(--cb-text-md);
   padding: var(--cb-space-1) 0;
 }
@@ -742,7 +718,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   align-items: center;
   gap: var(--cb-space-2);
   box-sizing: content-box;
-  min-height: var(--cb-control-height);
+  min-height: calc(var(--app-control-text) * var(--app-control-line-height) + 2 * var(--app-control-pad-y) + 2px);
   padding: var(--cb-space-2) var(--cb-space-4);
   margin: 3.6rem var(--cb-space-4) 0;
   border-bottom: 1px solid var(--app-border);
@@ -844,14 +820,14 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .maintenance-row__status svg { vertical-align: -0.125em; }
 
 .maintenance-row__actions {
-  --cb-control-pad-x: 0.45rem;
+  --app-control-pad-x: 0.2rem;
   flex: 0 0 auto;
   display: flex;
   gap: var(--cb-space-0);
 }
 
 /* ---- Busy and background work ---- */
-.app-dialog:has(> .busy-overlay) { max-width: 20rem; }
+.busy-dialog { max-width: 20rem; }
 .busy-overlay { align-items: center; gap: var(--cb-space-4); }
 .busy-overlay__text { font-size: var(--cb-text-md); color: var(--app-text-muted); }
 
@@ -871,7 +847,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   to { transform: rotate(360deg); }
 }
 
-.task-indicator, .timeline__filter-option { white-space: nowrap; }
+.task-indicator { white-space: nowrap; }
 
 .undo-toast {
   position: fixed;
@@ -929,8 +905,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: var(--cb-control-pad-y) var(--cb-space-2);
-  font-size: var(--cb-control-text);
+  padding: var(--app-control-pad-y) var(--cb-space-2);
+  font-size: var(--app-control-text);
   line-height: var(--app-control-line-height);
   background: var(--app-surface-sunken);
   border: 1px solid var(--app-border);
@@ -1089,9 +1065,9 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .timeline.is-open { height: 220px; }
 
 .timeline__bar {
-  --cb-control-text: var(--cb-text-sm);
-  --cb-control-pad-y: 0.2rem;
-  --cb-control-pad-x: var(--cb-space-2);
+  --app-control-text: var(--cb-text-sm);
+  --app-control-pad-y: 0.2rem;
+  --app-control-pad-x: var(--cb-space-1);
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -1123,20 +1099,9 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   pointer-events: none;
 }
 
-.timeline__filter > button.is-active { background: var(--app-border); color: var(--app-text); }
+.timeline__filter.is-active > .app-menu__trigger { background: var(--app-border); color: var(--app-text); }
 
-.timeline__filter-menu {
-  display: flex;
-  flex-direction: column;
-  min-width: 11rem;
-  padding: var(--cb-space-1);
-}
-
-.timeline__filter-option, .timeline__filter-reset, .timeline__undated-toggle {
-  font-size: var(--cb-text-sm);
-}
-
-.timeline__filter-check { width: 1rem; }
+.timeline__filter [role=menuitemcheckbox] { display: flex; align-items: center; white-space: nowrap; }
 
 .timeline__filter-count {
   margin-left: auto;
@@ -1144,14 +1109,13 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   color: var(--app-text-muted);
 }
 
-.timeline__filter-reset {
+.timeline__filter [role=menuitem] {
   margin-top: var(--cb-space-1);
   color: var(--app-text-muted);
   border-top: 1px solid var(--app-border);
   border-radius: 0;
 }
 
-.timeline__filter-reset:disabled { opacity: 0.4; cursor: default; }
 .timeline__search { flex: 0 0 auto; width: 12rem; max-width: 30vw; margin: 0 var(--cb-space-2); }
 .timeline__body, .timeline__body-row { flex: 1 1 auto; min-height: 0; display: flex; }
 .timeline__body { flex-direction: column; border-top: 1px solid var(--app-border); }
@@ -1186,7 +1150,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   overflow-y: auto;
 }
 
-.timeline__undated-toggle { flex: 0 0 auto; border: 1px dashed var(--app-border); }
+.timeline__undated-toggle { flex: 0 0 auto; border: 1px dashed var(--app-border); font-size: var(--cb-text-sm); }
 .timeline__undated-list { gap: var(--cb-space-1); margin-top: var(--cb-space-2); }
 
 .timeline__strip {

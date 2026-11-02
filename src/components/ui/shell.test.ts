@@ -6,6 +6,7 @@ import { boardStore } from '../../store/boardStore';
 import { prompt } from '../../store/promptStore';
 import { PromptHost } from './PromptModal';
 import { UndoToast } from './UndoToast';
+import { BusyOverlay } from './BusyOverlay';
 
 let dispose: (() => void) | undefined;
 function mount(component: Component) {
@@ -48,6 +49,14 @@ test('a request that displaces another cancels it and opens with fresh input', a
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   expect(await second).toBeNull();
+});
+
+test('Escape leaves a pending dialog open', () => {
+  boardStore.setState({ importStatus: 'Storing media…' });
+  const host = mount(BusyOverlay);
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  expect(host.querySelector('dialog')?.open).toBe(true);
+  boardStore.setState({ importStatus: null });
 });
 
 test('the undo toast shows each delete and hides ten seconds after the last', () => {

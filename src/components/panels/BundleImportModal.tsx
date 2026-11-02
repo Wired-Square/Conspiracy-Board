@@ -69,11 +69,9 @@ export function BundleImportModal(props: { boards: Board[] }) {
           )}
         </Index>
       </ul>
-      <p class="dialog-status">
-        {selectedCount()} of {count(rows().length, 'board')} selected
-      </p>
       <DialogActions
         onCancel={close}
+        status={`${selectedCount()} of ${count(rows().length, 'board')} selected`}
         confirm={
           <Button tone="primary" disabled={busy() || selectedCount() === 0} onClick={() => void onImport()}>
             {busy() ? 'Importing…' : 'Import'}

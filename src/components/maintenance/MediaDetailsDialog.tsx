@@ -90,7 +90,7 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
         {(owner) => (
           <p class="media-details__owner">
             Used by{' '}
-            <Button tone="plain" class="cb-link" onClick={() => showCard(owner().cardId)}>
+            <Button tone="link" onClick={() => showCard(owner().cardId)}>
               {owner().title || 'Untitled'}
             </Button>{' '}
             ({owner().mediaKind} on {owner().cardKind})

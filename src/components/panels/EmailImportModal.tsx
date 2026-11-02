@@ -266,11 +266,9 @@ export function EmailImportModal() {
           </ul>
         </div>
       </Show>
-      <Show when={status()}>
-        <p class="dialog-status">{status()}</p>
-      </Show>
       <DialogActions
         onCancel={close}
+        status={status()}
         confirm={
           <Button
             tone="primary"

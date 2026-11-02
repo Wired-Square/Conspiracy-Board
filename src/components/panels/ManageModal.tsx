@@ -1,4 +1,4 @@
-import { Button, Dialog } from '@wired-square/kit';
+import { Button, Dialog, DialogActions } from '@wired-square/kit';
 import { closeDialog } from '../../store/dialogStore';
 import { storage } from '../../storage';
 import { prompt, confirm } from '../../store/promptStore';
@@ -63,12 +63,14 @@ export function ManageModal() {
         <Button onClick={() => void rename()}>Rename…</Button>
         <Button onClick={() => void reveal()}>Show in Finder</Button>
       </div>
-      <div class="app-dialog__actions">
-        <Button tone="danger" onClick={() => void remove()}>
-          Delete board…
-        </Button>
-        <Button onClick={close}>Close</Button>
-      </div>
+      <DialogActions
+        onCancel={close}
+        destructive={
+          <Button tone="danger" onClick={() => void remove()}>
+            Delete board…
+          </Button>
+        }
+      />
     </Dialog>
   );
 }
