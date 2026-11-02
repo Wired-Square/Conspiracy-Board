@@ -16,7 +16,6 @@ import { fromStore } from '@wired-square/store/solid';
 import { createDocHits } from '../createDocHits';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
-import { CanvasPanel } from '../board/BoardCanvas';
 
 // The media library's housekeeping surface: every file on disk, reconciled with
 // what the boards reference, plus a way to re-run the processing that first read
@@ -133,7 +132,8 @@ export function ObjectView() {
 
   return (
     <div class="record maintenance">
-      <CanvasPanel position="top-right">
+      <div class="record__bar">
+        <span class="panel-heading">Objects</span>
         <Menu aria-label="Maintenance" trigger="Maintenance" chevron>
           <MenuItem disabled={busy()} onSelect={() => void reprocessEverything()}>
             Reprocess all
@@ -152,7 +152,7 @@ export function ObjectView() {
           </Show>
           <MenuItem onSelect={() => void storage.openMediaDir()}>Media folder</MenuItem>
         </Menu>
-      </CanvasPanel>
+      </div>
 
       <Notice tone="bad" class="maintenance__error">
         {error()}

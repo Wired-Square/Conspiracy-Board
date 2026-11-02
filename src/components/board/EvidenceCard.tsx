@@ -3,11 +3,12 @@ import { cx } from '@wired-square/kit/core';
 import type { CardNodeData } from '../../types/canvas';
 import type { Card } from '../../types/board';
 import { formatOccurredAt } from '../../lib/dates';
-import { KIND_META, isEntityKind, isGradedKind } from '../../lib/kinds';
+import { isEntityKind, isGradedKind } from '../../lib/kinds';
 import { GRADE_META, gradeTint } from '../../lib/grades';
 import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
+import { cardTilt, initials } from '../../lib/paper';
 
 function notesPreview(notes: string): string {
   const text = notes.replace(/[#*_`>\-]/g, '').replace(/\s+/g, ' ').trim();
@@ -40,8 +41,8 @@ function PolaroidFace(props: { card: Card }) {
         <Show
           when={image()}
           fallback={
-            <span class="polaroid__blank" aria-hidden="true">
-              {KIND_META[props.card.kind].icon}
+            <span class="polaroid__initials" aria-hidden="true">
+              {initials(props.card.title)}
             </span>
           }
         >
@@ -66,7 +67,6 @@ function PaperFace(props: { card: Card }) {
   const image = () => cardImageSrc(props.card);
   return (
     <>
-      <div class="evidence-card__accent" />
       <Show when={image()}>
         {(src) => (
           <div class={cx('evidence-card__image', props.card.imageCrop && 'is-cropped')}>
@@ -101,7 +101,11 @@ export function EvidenceCard(props: { data: CardNodeData; selected: boolean }) {
     <div
       class={cx('evidence-card', actor() && 'evidence-card--polaroid', props.selected && 'is-selected')}
       // --card-scale only when derived (actors); the stylesheet's var(--card-scale, 1) owns the default.
-      style={{ '--accent': props.data.clusterColor ?? NO_CLUSTER_ACCENT, '--card-scale': props.data.tieScale?.toString() }}
+      style={{
+        '--accent': props.data.clusterColor ?? NO_CLUSTER_ACCENT,
+        '--card-scale': props.data.tieScale?.toString(),
+        '--tilt': `${cardTilt(card().id)}deg`,
+      }}
     >
       <Show when={actor()} fallback={<PaperFace card={card()} />}>
         <PolaroidFace card={card()} />

@@ -30,7 +30,8 @@
   --app-shadow: 0 6px 20px rgb(0 0 0 / 0.4);
   --app-focus: 0 0 0 2px color-mix(in srgb, var(--app-accent) 75%, transparent);
 
-  --app-canvas-bg: radial-gradient(circle at 30% 20%, #2c2114, var(--app-bg) 70%);
+  --app-canvas-bg: radial-gradient(ellipse at 50% 45%, transparent 55%, rgb(0 0 0 / 0.3)),
+    radial-gradient(circle at 30% 20%, #2c2114, var(--app-bg) 70%);
   --app-canvas-dot: #3a3026;
   --app-canvas-connection: var(--cb-string);
   --app-canvas-chrome-hover: var(--app-border);
@@ -41,6 +42,11 @@
   --cb-string: #c8402f;
   --cb-paper: #f4ecd8;
   --cb-card-ink: #221a10;
+  --cb-card-ink-muted: #6f6252;
+  --cb-film: #f7f5f0;
+  --cb-lift-rest: 0 1px 1px rgb(0 0 0 / 0.3), 0 3px 6px -2px rgb(0 0 0 / 0.35), 0 10px 18px -8px rgb(0 0 0 / 0.55);
+  --cb-lift-raised: 0 2px 2px rgb(0 0 0 / 0.25), 0 8px 14px -4px rgb(0 0 0 / 0.4), 0 22px 32px -12px rgb(0 0 0 / 0.6);
+  --cb-lift-held: 0 4px 4px rgb(0 0 0 / 0.2), 0 16px 24px -6px rgb(0 0 0 / 0.4), 0 36px 48px -16px rgb(0 0 0 / 0.65);
 
   --cb-text-xs: 0.68rem;
   --cb-text-sm: 0.75rem;
@@ -77,6 +83,20 @@ body {
   --cb-control-text: var(--cb-text-md);
   --cb-control-pad-y: 0.35rem;
   --cb-control-pad-x: 0.7rem;
+  --cb-control-height: calc(var(--cb-control-text) * var(--app-control-line-height) + 2 * var(--cb-control-pad-y) + 2px);
+}
+
+/* Keyboard focus only (see platform/inputModality); a text field keeps its ring however it was focused. */
+:root:not([data-modality='keyboard']) :focus-visible:not(input:not([type='checkbox'], [type='radio'], [type='color']), textarea, select) {
+  outline: none;
+  box-shadow: none;
+}
+
+/* kit's trigger is plain; matched to the bordered buttons beside it (kit gap, reported). */
+.app-menu__trigger:not(:hover, [aria-expanded='true']) {
+  background: var(--app-surface);
+  border-color: var(--app-border-strong);
+  color: var(--app-text);
 }
 
 .app-btn,
@@ -105,6 +125,7 @@ body {
   font: inherit;
   font-size: var(--cb-control-text);
   min-height: 0;
+  max-width: none;
 }
 
 .app-search__input {
@@ -127,8 +148,7 @@ body {
   display: grid;
   place-items: center;
   height: 100vh;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
+  font-size: var(--cb-text-xl);
   color: var(--app-text-muted);
 }
 
@@ -194,7 +214,6 @@ body {
 
 .toolbar__title {
   font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
 .toolbar__actions {
@@ -250,9 +269,17 @@ body {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-lg);
-  padding: 0.65rem 0.8rem;
+  padding: var(--cb-space-3);
   min-width: 220px;
+  max-height: 100%;
+  overflow-y: auto;
   box-shadow: var(--app-shadow);
+}
+
+/* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
+.app-canvas-panel:has(> .cluster-panel) {
+  display: flex;
+  max-height: calc(100% - 12.375rem);
 }
 
 /* Collapses the panel to just this header pill; the chevron mirrors the timeline. */
@@ -268,11 +295,9 @@ body {
 }
 
 .panel-heading {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: var(--cb-text-sm);
+  font-weight: 600;
   color: var(--app-text-muted);
-  font-weight: 700;
 }
 
 .cluster-row {
@@ -288,7 +313,7 @@ body {
   height: 22px;
   padding: 0;
   border: 1px solid var(--app-border);
-  border-radius: 5px;
+  border-radius: var(--app-radius);
   background: none;
   cursor: pointer;
 }
@@ -296,6 +321,11 @@ body {
 .cluster-label {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.cluster-label:not(:hover, :focus) {
+  background-color: transparent;
+  border-color: transparent;
 }
 
 .cluster-delete:hover {
@@ -309,57 +339,67 @@ body {
 }
 
 /* ---- Evidence card node ---- */
+/* Tilted on the inner card, never the canvas node, so string anchors and hit-testing stay square. */
 .evidence-card {
   --accent: #888;
+  --edge: 0 0 transparent;
+  --lift: var(--cb-lift-rest);
   position: relative;
-  /* One width rule for every face: --card-scale is set only on actors (see
-     tieScale), so paper resolves the fallback and stays 210. */
+  /* --card-scale is set only on actors (see tieScale); paper stays 210. */
   width: calc(210px * var(--card-scale, 1));
   background: var(--cb-paper);
   color: var(--cb-card-ink);
-  border-radius: 4px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
-  font-family: 'Inter', system-ui, sans-serif;
-  transform: rotate(-0.6deg);
-  transition: box-shadow 0.12s ease, transform 0.12s ease;
+  border-radius: 3px;
+  box-shadow: var(--edge), var(--lift);
+  transform: rotate(var(--tilt, 0deg));
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .evidence-card:hover {
-  transform: rotate(0deg) scale(1.01);
+  --lift: var(--cb-lift-raised);
 }
 
 .evidence-card.is-selected {
-  box-shadow:
-    0 0 0 2px var(--accent),
-    0 10px 24px rgba(0, 0, 0, 0.55);
+  --edge: 0 0 0 2px var(--cb-string);
+  --lift: var(--cb-lift-raised);
 }
 
-/* The pin. */
+.app-canvas__node.is-dragging .evidence-card {
+  --lift: var(--cb-lift-held);
+  transform: rotate(var(--tilt, 0deg)) scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evidence-card {
+    transition: none;
+  }
+}
+
+/* The push-pin, in the primary cluster's colour. */
 .evidence-card::before {
   content: '';
   position: absolute;
-  top: 7px;
+  top: -5px;
   left: 50%;
-  transform: translateX(-50%);
-  width: 9px;
-  height: 9px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff, var(--accent) 60%, #000 140%);
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgb(255 255 255 / 0.85) 0 12%,
+    var(--accent) 40%,
+    color-mix(in srgb, var(--accent) 55%, #000)
+  );
+  box-shadow: 1px 3px 2px rgb(0 0 0 / 0.4);
   z-index: 2;
-}
-
-.evidence-card__accent {
-  height: 6px;
-  background: var(--accent);
-  border-radius: 4px 4px 0 0;
 }
 
 /* Membership beyond the primary: one dot per further cluster, top-right, so a
    card in several strands says so at a glance without fighting the accent. */
 .evidence-card__cluster-dots {
   position: absolute;
-  top: 10px;
+  top: 7px;
   right: 7px;
   display: flex;
   gap: 3px;
@@ -374,7 +414,7 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* The polaroid has no accent bar; sit the dots inside its film frame. */
+/* Inside the polaroid's film frame. */
 .evidence-card--polaroid .evidence-card__cluster-dots {
   top: 13px;
   right: 13px;
@@ -386,8 +426,9 @@ body {
 .evidence-card__image {
   display: block;
   position: relative;
-  width: 100%;
+  margin: 8px 8px 0;
   overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1);
 }
 .evidence-card__image img {
   display: block;
@@ -403,13 +444,15 @@ body {
 }
 
 .evidence-card__body {
-  padding: 0.6rem 0.7rem 0.75rem;
+  padding: var(--cb-space-3);
 }
 
 .evidence-card__title {
-  font-weight: 700;
-  font-size: 0.95rem;
-  margin-bottom: 0.25rem;
+  font-weight: 600;
+  font-size: var(--cb-text-lg);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  margin-bottom: var(--cb-space-1);
 }
 
 /* The record — email and document — had faces here: cooler paper, an airmail
@@ -429,7 +472,7 @@ body {
    loner, capped at 1.5). Width only, via the base rule above: the photo grows
    with its aspect ratio and the caption stays readable at one size. */
 .evidence-card--polaroid {
-  background: #f7f5f0;
+  background: var(--cb-film);
   padding: 11px 11px 0;
   border-radius: 2px;
 }
@@ -441,10 +484,9 @@ body {
   overflow: hidden;
   /* The clip box for a cropped image's absolute <img> (see cardImageStyle). */
   position: relative;
-  /* Dark, so a photo that doesn't fill it reads as the film and not a gap. */
-  background: #2b2620;
-  /* The cluster, carried where the accent bar would have been on paper. */
-  border-bottom: 3px solid var(--accent);
+  container-type: inline-size;
+  background: color-mix(in srgb, var(--accent) 22%, var(--cb-paper));
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
 .polaroid__photo img {
@@ -454,10 +496,10 @@ body {
   object-fit: cover;
 }
 
-.polaroid__blank {
-  font-size: 1.8rem;
-  opacity: 0.35;
-  filter: grayscale(1);
+.polaroid__initials {
+  font-size: 26cqi;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--accent) 55%, var(--cb-card-ink));
 }
 
 .polaroid__caption {
@@ -465,14 +507,13 @@ body {
 }
 
 .polaroid__name {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--cb-card-ink);
+  font-weight: 600;
+  font-size: var(--cb-text-lg);
 }
 
 .polaroid__detail {
-  font-size: 0.66rem;
-  color: #6f6252;
+  font-size: var(--cb-text-xs);
+  color: var(--cb-card-ink-muted);
   margin-top: 0.1rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -483,9 +524,8 @@ body {
    not the photograph. */
 .polaroid__note {
   margin-top: 0.35rem;
-  font-size: 0.72rem;
-  line-height: 1.3;
-  color: #574c3d;
+  font-size: var(--cb-text-sm);
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -493,17 +533,14 @@ body {
 }
 
 .evidence-card__date {
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #7b6b52;
-  margin-bottom: 0.3rem;
+  font-size: var(--cb-text-xs);
+  color: var(--cb-card-ink-muted);
+  margin-bottom: var(--cb-space-1);
 }
 
 .evidence-card__notes {
-  font-size: 0.78rem;
+  font-size: var(--cb-text-sm);
   line-height: 1.35;
-  color: #4a4034;
 }
 
 /* Source = a "hot corner" nub at the card's top-right; drag from here to link. */
@@ -532,7 +569,7 @@ body {
 .card-target {
   position: absolute;
   inset: 0;
-  border-radius: 5px;
+  border-radius: inherit;
   pointer-events: none;
 }
 
@@ -713,9 +750,7 @@ body {
 }
 
 .cluster-picker__primary {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
   padding: 0.2rem 0.3rem;
 }
@@ -936,9 +971,7 @@ body {
 }
 .media-meta dt {
   color: var(--app-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 0.68rem;
+  font-size: var(--cb-text-sm);
   align-self: baseline;
 }
 .media-meta dd {
@@ -963,15 +996,21 @@ body {
 /* Clear of the floating toolbar and cluster panel, which sit over both views. */
 .record__bar {
   display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  padding: 0.7rem 1rem;
-  margin: 3.6rem 1rem 0 1rem;
+  align-items: center;
+  gap: var(--cb-space-2);
+  box-sizing: content-box;
+  min-height: var(--cb-control-height);
+  padding: var(--cb-space-2) var(--cb-space-4);
+  margin: 3.6rem var(--cb-space-4) 0;
   border-bottom: 1px solid var(--app-border);
 }
 
+.record__bar > .app-menu__trigger {
+  margin-left: auto;
+}
+
 .record__count {
-  font-size: 0.72rem;
+  font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
 }
 
@@ -980,7 +1019,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   margin-left: auto;
-  font-size: 0.72rem;
+  font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
   cursor: pointer;
 }
@@ -1014,7 +1053,7 @@ body {
   gap: 0.7rem;
   padding: 0.5rem 0.6rem;
   border-left: 3px solid var(--accent);
-  border-radius: 0 5px 5px 0;
+  border-radius: 0 var(--app-radius) var(--app-radius) 0;
 }
 
 .record-row:hover {
@@ -1125,9 +1164,8 @@ body {
 
 .record-row__loose {
   flex: 0 0 auto;
-  font-size: 0.64rem;
-  letter-spacing: 0.02em;
-  color: #d99a2b;
+  font-size: var(--cb-text-xs);
+  color: var(--app-warn);
   border: 1px solid rgba(217, 154, 43, 0.45);
   border-radius: 3px;
   padding: 1px 6px 2px;
@@ -1149,7 +1187,7 @@ body {
   gap: 0.7rem;
   padding: 0.5rem 0.6rem;
   border-left: 3px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0 5px 5px 0;
+  border-radius: 0 var(--app-radius) var(--app-radius) 0;
 }
 
 .maintenance-row.is-missing {
@@ -1168,8 +1206,7 @@ body {
 
 .maintenance-row__status {
   flex: 0 0 auto;
-  font-size: 0.62rem;
-  letter-spacing: 0.02em;
+  font-size: var(--cb-text-xs);
   border: 1px solid var(--app-border);
   border-radius: 3px;
   padding: 1px 6px 2px;
@@ -1255,10 +1292,8 @@ body {
    so a colour can be tuned without anyone remembering to re-check the text. */
 .grade-chip {
   align-self: flex-start;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--cb-text-xs);
+  font-weight: 600;
   padding: 1px 6px 2px;
   border-radius: 3px;
   color: var(--grade-ink);
@@ -1306,9 +1341,7 @@ body {
 }
 
 .grade-key__label {
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font-weight: 600;
   color: var(--grade);
 }
 
@@ -1764,7 +1797,7 @@ body {
   padding: 0.5rem;
   background: var(--app-bg);
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius);
 }
 
 .object-picker__preview img {
@@ -1864,10 +1897,8 @@ body {
 .participants__direction {
   display: block;
   margin-top: 0.5rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--cb-text-sm);
+  font-weight: 600;
   color: var(--grade);
 }
 
@@ -2011,9 +2042,7 @@ body {
   padding: 0.05rem 0.3rem;
   border: 1px solid var(--app-border);
   border-radius: 3px;
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--cb-text-xs);
   color: var(--app-text-muted);
 }
 
@@ -2142,7 +2171,7 @@ body {
 }
 
 .timeline__count {
-  font-size: 0.75rem;
+  font-size: var(--cb-text-sm);
   color: var(--app-text-muted);
 }
 
@@ -2242,9 +2271,8 @@ body {
 }
 
 .timeline__day {
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--cb-text-sm);
+  font-weight: 600;
   color: var(--app-text-muted);
   border-bottom: 1px solid var(--app-border);
   padding-bottom: 0.25rem;
@@ -2300,10 +2328,8 @@ body {
 }
 
 .timeline-item__when {
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #7b6b52;
+  font-size: var(--cb-text-xs);
+  color: var(--cb-card-ink-muted);
 }
 
 .timeline-item__title {
@@ -2345,9 +2371,8 @@ body {
    the event accent and sits above the date. */
 .timeline-item__since {
   align-self: flex-start;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-size: var(--cb-text-xs);
+  font-weight: 600;
   color: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 999px;

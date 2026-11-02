@@ -21,6 +21,7 @@ import { fromStore } from '@wired-square/store/solid';
 import { startInbox } from './platform/inbox';
 import { startUndoShortcut } from './platform/undoShortcut';
 import { startDialogEscape } from './platform/dialogEscape';
+import { startInputModality } from './platform/inputModality';
 import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
@@ -43,6 +44,7 @@ export default function App() {
       startInbox,
       startUndoShortcut,
       startDialogEscape,
+      startInputModality,
       startBoardMenu,
       startImportProgress,
       startJobProgress,

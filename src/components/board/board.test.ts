@@ -73,6 +73,7 @@ test('draws the board kinds only, at the saved viewport, and publishes the camer
     'memo',
   ]);
   expect(node('ann')!.querySelector('.evidence-card--polaroid .polaroid__detail')!.textContent).toBe('ann@example.com');
+  expect(node('ann')!.querySelector('.polaroid__initials')!.textContent).toBe('A');
   expect(camera()!.getViewport()).toEqual({ x: 0, y: 0, zoom: 1 });
 });
 
