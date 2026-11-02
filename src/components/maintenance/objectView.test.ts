@@ -93,11 +93,12 @@ test('the Maintenance menu filters to issues', () => {
 test('Details opens the file dialog over the view, and Escape closes it', async () => {
   button(row('Scan'), 'Details').click();
   await settle();
-  const dialog = host.querySelector('[role="dialog"]')!;
-  expect(dialog.getAttribute('aria-label')).toBe('Scan');
+  const dialog = host.querySelector('dialog')!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.querySelector('.app-dialog__title')?.textContent).toBe('Scan');
   expect(dialog.textContent).toContain('Ledger');
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.querySelector('dialog')).toBeNull();
 });
 
 test('the toolbar search narrows the list and says when nothing matches', () => {

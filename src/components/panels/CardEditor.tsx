@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from 'solid-js';
-import { Button, Field, Select, TextArea, Tick } from '@wired-square/kit';
+import { Button, Dialog, Field, Select, TextArea, Tick } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import { openDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
@@ -26,7 +26,6 @@ import { createDraft } from '../createDraft';
 import { autofocus } from '../ui/autofocus';
 import { MarkdownView } from '../ui/MarkdownView';
 import { MetaList } from '../ui/MetaList';
-import { Modal } from '../ui/Modal';
 import { ConnectionsSection } from './ConnectionsSection';
 import { ParticipantsSection } from './ParticipantsSection';
 import { WhenField } from './WhenField';
@@ -38,19 +37,26 @@ import { GradeField, GradeLegend } from './GradeField';
 
 export function CardEditor() {
   const card = fromStore(boardStore, (s) => s.cards.find((c) => c.id === s.selectedCardId));
+  const close = () => boardStore.getState().selectCard(null);
 
   // No selection, no dialog: the editor is a modal now, not a persistent column,
   // so the canvas and timeline fill the whole window when nothing is selected.
   return (
     <Show when={card()}>
       {(card) => (
-        <Modal title="Edit card" onClose={() => boardStore.getState().selectCard(null)}>
+        <Dialog aria-label="Edit card" wide onClose={close}>
+          <header class="card-editor__head">
+            <h2 class="app-dialog__title">Edit card</h2>
+            <Button tone="plain" onClick={close}>
+              Close
+            </Button>
+          </header>
           {/* Keyed on the id, so the title/notes drafts commit to the card they
               were typed for when the selection moves. */}
           <Show when={card().id} keyed>
             <CardEditorForm card={card()} />
           </Show>
-        </Modal>
+        </Dialog>
       )}
     </Show>
   );

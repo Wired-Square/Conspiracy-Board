@@ -1,11 +1,10 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { Button, SearchInput } from '@wired-square/kit';
+import { Button, Dialog, DialogActions, SearchInput, TabButton } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import type { Card, CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META } from '../../lib/kinds';
 import { cardMatches, normaliseQuery } from '../../lib/search';
 import { formatOccurredAt, dayKey } from '../../lib/dates';
-import { Modal } from '../ui/Modal';
 import { autofocus } from '../ui/autofocus';
 
 /** One reusable picture and every card that uses it — pictures are content-addressed,
@@ -91,35 +90,17 @@ export function ObjectPickerDialog(props: Props) {
     props.onClose();
   };
 
-  const footer = (
-    <>
-      <Button tone="plain" onClick={() => props.onClose()}>
-        Cancel
-      </Button>
-      <Button tone="primary" onClick={() => current() && choose(current()!.file)} disabled={!current()}>
-        Use image
-      </Button>
-    </>
-  );
-
   return (
-    <Modal title="Choose an object" onClose={props.onClose} footer={footer}>
+    <Dialog title="Choose an object" wide onClose={props.onClose}>
       <div class="object-picker">
-        <div class="entity-picker__tabs" role="tablist">
+        <div class="app-tablist" role="group" aria-label="Kind">
           <For each={tabs()}>
             {(t) => (
-              <Button
-                role="tab"
-                aria-selected={t.key === active()}
-                class={cx('entity-picker__tab', t.key === active() && 'is-active')}
-                onClick={() => setActive(t.key)}
-              >
-                <Show when={t.icon}>
-                  <span class="entity-picker__tab-icon">{t.icon}</span>
-                </Show>
+              <TabButton selected={t.key === active()} onClick={() => setActive(t.key)}>
+                <Show when={t.icon}>{(icon) => <span aria-hidden="true">{icon()} </span>}</Show>
                 {t.label}
                 <span class="entity-picker__tab-count">{t.count}</span>
-              </Button>
+              </TabButton>
             )}
           </For>
         </div>
@@ -185,6 +166,14 @@ export function ObjectPickerDialog(props: Props) {
           }}
         </Show>
       </div>
-    </Modal>
+      <DialogActions
+        onCancel={props.onClose}
+        confirm={
+          <Button tone="primary" onClick={() => current() && choose(current()!.file)} disabled={!current()}>
+            Use image
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }

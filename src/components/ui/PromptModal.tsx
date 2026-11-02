@@ -1,12 +1,11 @@
 import { Show, createSignal, onMount } from 'solid-js';
-import { Button, Field } from '@wired-square/kit';
-import { Modal } from './Modal';
+import { Button, Dialog, DialogActions, Field } from '@wired-square/kit';
 import { promptStore, type PromptRequest } from '../../store/promptStore';
 import { fromStore } from '@wired-square/store/solid';
 
 /**
- * Renders the one active prompt/confirm request (see promptStore) on the shared
- * Modal and resolves its promise. Keyed on the request, so each one mounts a fresh
+ * Renders the one active prompt/confirm request (see promptStore) as a dialog and
+ * resolves its promise. Keyed on the request, so each one mounts a fresh
  * dialog with its own input state.
  */
 export function PromptHost() {
@@ -38,20 +37,7 @@ function PromptDialog(props: { request: PromptRequest }) {
   };
 
   return (
-    <Modal
-      title={request.title}
-      onClose={cancel}
-      footer={
-        <>
-          <Button tone="plain" onClick={cancel}>
-            {request.cancelLabel ?? 'Cancel'}
-          </Button>
-          <Button tone={request.danger ? 'danger' : 'primary'} onClick={submit} disabled={!submittable()}>
-            {request.confirmLabel ?? 'OK'}
-          </Button>
-        </>
-      }
-    >
+    <Dialog title={request.title} onClose={cancel}>
       <Show when={request.message}>
         <p>{request.message}</p>
       </Show>
@@ -73,6 +59,14 @@ function PromptDialog(props: { request: PromptRequest }) {
           }}
         />
       )}
-    </Modal>
+      <DialogActions
+        onCancel={cancel}
+        confirm={
+          <Button tone={request.danger ? 'danger' : 'primary'} onClick={submit} disabled={!submittable()}>
+            {request.confirmLabel ?? 'OK'}
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }

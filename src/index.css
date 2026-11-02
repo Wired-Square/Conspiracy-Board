@@ -637,10 +637,7 @@ body {
   filter: drop-shadow(0 0 4px rgba(200, 64, 47, 0.85));
 }
 
-/* ---- Card editor ----
-   The editor is a centred Modal now (see CardEditor / ui/Modal); its layout,
-   padding and scrolling come from .modal / .modal__body. Only the picture preview
-   and delete-confirm rules below remain card-editor-specific. */
+/* ---- Card editor ---- */
 .field {
   display: flex;
   flex-direction: column;
@@ -1385,36 +1382,9 @@ body {
   min-height: 0;
 }
 
-.entity-picker__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.entity-picker__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
-  color: var(--app-text-muted);
-  background: var(--app-surface-sunken);
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-}
-
-.entity-picker__tab:hover {
-  color: var(--app-text);
-}
-
-.entity-picker__tab.is-active {
-  color: var(--cb-card-ink);
-  background: var(--cb-paper);
-  border-color: var(--cb-paper);
-}
-
 .entity-picker__tab-count {
-  font-size: 0.68rem;
+  margin-inline-start: 0.3em;
+  font-size: var(--cb-text-xs);
   opacity: 0.7;
 }
 
@@ -1499,77 +1469,16 @@ body {
   max-width: 22rem;
 }
 
-/* ---- Menu ---- */
-/* The list positions against .menu, which is safe: the toolbar's panel is a
-   sibling of the canvas, not a child, so the pane never sees these events and
-   there is no overflow to escape. */
-.menu {
-  position: relative;
-}
-
-.menu__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.menu__caret {
-  font-size: 0.6rem;
-  opacity: 0.7;
-}
-
-.menu__list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 1;
-  min-width: 11rem;
-  display: flex;
-  flex-direction: column;
-  padding: 0.25rem;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow);
-}
-
-.menu__item {
-  display: flex;
-  align-items: center;
-  gap: var(--cb-space-2);
-  white-space: nowrap;
-}
-
-.menu__item:disabled {
-  color: var(--app-text-muted);
-  cursor: not-allowed;
-}
-
-/* A chooser item that is the current pick (see Menu selectedLabel) — a tick to
-   its right, so the open menu says which surface you're on. */
-.menu__item.is-selected::after {
-  content: '✓';
-  margin-left: auto;
-  opacity: 0.8;
-}
-
 /* ---- Busy overlay ---- */
-/* The scrim itself is shared with .modal__backdrop (below); this only lifts it
-   above the modals (z 20), since it can cover the first-run or import dialogs. */
-.busy-overlay {
-  z-index: 30;
+.app-dialog:has(> .busy-overlay) {
+  max-width: 20rem;
 }
 
-.busy-overlay__box {
+.busy-overlay {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.9rem;
-  padding: 1.4rem 1.8rem;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 
 .busy-overlay__text {
@@ -1631,79 +1540,56 @@ body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
-/* ---- Modal ---- */
-/* The full-screen scrim, shared by the modal backdrop and the busy overlay; each
-   sets its own stacking (the overlay sits above the modals). */
-.modal__backdrop,
-.busy-overlay {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(10, 8, 5, 0.72);
+/* ---- Dialogs ---- */
+.app-dialog::backdrop {
+  background: rgb(10 8 5 / 0.72);
+  opacity: 1;
 }
 
-.modal__backdrop {
-  z-index: 20;
-}
-
-.modal {
+.app-dialog[open] {
   display: flex;
   flex-direction: column;
-  width: min(640px, 92vw);
-  max-height: 86vh;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-}
-
-.modal__header,
-.modal__footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.7rem 0.9rem;
-}
-
-.modal__header {
-  justify-content: space-between;
-  border-bottom: 1px solid var(--app-border);
-}
-
-.modal__footer {
-  justify-content: flex-end;
-  border-top: 1px solid var(--app-border);
-}
-
-.modal__status {
-  margin-right: auto;
-  font-size: 0.72rem;
-  color: var(--app-text-muted);
-}
-
-.modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.9rem;
+  gap: var(--cb-space-3);
   font-size: var(--cb-text-md);
-  overflow-y: auto;
 }
 
-:where(.modal__body) > p {
+.app-dialog__title,
+.app-dialog > p,
+.app-tabpanel,
+.app-notice {
   margin: 0;
 }
 
-/* The first-run choice: a narrower dialog than the default, two big options. */
-.first-run {
-  width: min(460px, 92vw);
+.app-dialog__actions > :only-child {
+  margin-inline-start: auto;
 }
 
-/* Logo sits with the title, not pushed to the far end by the header's default
-   space-between. */
+.app-notice {
+  font-size: var(--cb-text-md);
+}
+
+.dialog-status {
+  font-size: var(--cb-text-sm);
+  color: var(--app-text-muted);
+}
+
+/* Sticky, so the editor's close stays in reach down a long card; the negative
+   margins reach over kit's 1.25rem dialog padding. */
+.card-editor__head {
+  position: sticky;
+  top: -1.25rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -1.25rem -1.25rem 0;
+  padding: 1.25rem 1.25rem var(--cb-space-2);
+  background: var(--app-surface);
+}
+
 .first-run__header {
-  justify-content: flex-start;
+  display: flex;
+  align-items: center;
   gap: 0.6rem;
 }
 
@@ -1751,41 +1637,23 @@ body {
   gap: 0.5rem;
 }
 
-.modal__tabs {
+/* The blank-card button sits at the tab strip's end: an escape hatch, not a third tab. */
+.email-import__tabs {
   display: flex;
-  gap: 0.3rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--cb-space-2);
 }
 
-.modal__tabs button:not(.app-btn--plain) {
-  background: none;
-  border: 1px solid var(--app-border);
+.email-import__tabs .app-tablist {
+  flex: 1;
 }
 
-.modal__tabs button.is-active {
-  background: var(--app-border);
-  color: var(--app-text);
-}
-
-/* Pushed away from the tabs: it's an escape hatch, not a third tab. */
-.modal__tabs-aside {
-  margin-left: auto;
-}
-
-.modal__errors {
+.email-import__errors {
   margin: 0;
   padding-left: 1.1rem;
   font-size: 0.72rem;
   color: var(--app-text-muted);
-}
-
-.modal__warn {
-  margin: 0;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--cb-string);
-  border-radius: var(--app-radius);
-  font-size: 0.75rem;
-  color: var(--app-text);
-  background: rgba(200, 64, 47, 0.12);
 }
 
 .library-mcp__warn {
@@ -2196,11 +2064,6 @@ body {
   gap: 0.25rem; /* between the Start/Prev/Next/End buttons */
 }
 
-/* The kind filter is a single trigger with a dropdown, so it anchors its popover. */
-.timeline__filter {
-  position: relative;
-}
-
 /* Lighter than the measure toggle's --cb-string fill: this is a persistent view
    filter, lit only while a kind is hidden, not a modal tool you're inside. */
 .timeline__filter > button.is-active {
@@ -2208,24 +2071,11 @@ body {
   color: var(--app-text);
 }
 
-/* The dropdown checklist. Mirrors .menu__list, but capped and scrollable: the
-   drawer is a short bottom bar with overflow:hidden, so a full list would clip —
-   the cap keeps the box inside the drawer and scrolls the rest. */
 .timeline__filter-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0.75rem;
-  z-index: 1;
-  min-width: 11rem;
-  max-height: 168px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  min-width: 11rem;
   padding: 0.25rem;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow);
 }
 
 .timeline__filter-option {

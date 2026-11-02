@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
-import { pushModal } from '../../lib/modalStack';
+import { Dialog } from '@wired-square/kit';
 import { Toolbar } from './Toolbar';
 
 vi.mock('../../storage', () => ({ storage: {} }));
@@ -24,42 +24,43 @@ afterEach(() => {
 });
 
 const trigger = (label: string) =>
-  [...host.querySelectorAll<HTMLButtonElement>('.menu__trigger')].find((b) => b.textContent?.startsWith(label))!;
-const items = () => [...host.querySelectorAll<HTMLButtonElement>('.menu__item')];
+  [...host.querySelectorAll<HTMLButtonElement>('.app-menu__trigger')].find((b) => b.textContent?.startsWith(label))!;
+const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 const key = (target: EventTarget, key: string) =>
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
 
-test('the view chooser ticks the current view and switches on a pick, closing first', () => {
+test('the view chooser marks the current view and switches on a pick, closing first', () => {
   trigger('Board').click();
   expect(trigger('Board').getAttribute('aria-expanded')).toBe('true');
-  expect(items().map((i) => i.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false']);
+  expect(items().map((i) => i.getAttribute('aria-current'))).toEqual(['page', null, null]);
   items()[1].click();
   expect(actions.setView).toHaveBeenCalledWith('record');
-  expect(host.querySelector('.menu__list')).toBeNull();
+  expect(items()).toHaveLength(0);
 });
 
 test('a menu moves focus with the arrow keys and closes on an outside pointerdown', () => {
-  key(trigger('+ Add'), 'ArrowDown');
+  trigger('+ Add').click();
   expect(document.activeElement).toBe(items()[0]);
   key(items()[0], 'ArrowDown');
   expect(document.activeElement?.textContent).toBe('Image');
   key(items()[1], 'End');
   expect(document.activeElement?.textContent).toBe('Cluster');
   document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-  expect(host.querySelector('.menu__list')).toBeNull();
+  expect(items()).toHaveLength(0);
 });
 
 test('Escape closes a menu over a dialog without closing the dialog', () => {
   const closeDialog = vi.fn();
-  const pop = pushModal(closeDialog);
+  const under = document.body.appendChild(document.createElement('div'));
+  const disposeDialog = render(() => createComponent(Dialog, { title: 'Under', onClose: closeDialog, children: '' }), under);
   trigger('+ Add').click();
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-  expect(host.querySelector('.menu__list')).toBeNull();
+  key(items()[0], 'Escape');
+  expect(items()).toHaveLength(0);
   expect(document.activeElement).toBe(trigger('+ Add'));
   expect(closeDialog).not.toHaveBeenCalled();
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   expect(closeDialog).toHaveBeenCalledOnce();
-  pop();
+  disposeDialog();
 });
 
 test('the search box writes the store once typing settles, and clears on a board switch', () => {

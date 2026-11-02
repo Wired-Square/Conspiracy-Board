@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
-import { Button } from '@wired-square/kit';
+import { Button, Menu, MenuItem, Notice } from '@wired-square/kit';
 import { size, count } from '@wired-square/kit/core';
 import { storage } from '../../storage';
 import type { DocStatus } from '../../storage/StorageAdapter';
@@ -13,7 +13,6 @@ import { jobsStore } from '../../store/jobsStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDocHits } from '../createDocHits';
-import { Menu, type MenuItem } from '../ui/Menu';
 import { MediaIcon } from '../ui/MediaIcon';
 import { MediaDetailsDialog } from './MediaDetailsDialog';
 import { CanvasPanel } from '../board/BoardCanvas';
@@ -125,40 +124,38 @@ export function ObjectView() {
     setStatus(null);
   };
 
-  // The bulk actions, as the top-right Maintenance dropdown. "Only issues" is a
-  // toggle here, shown only when there is something to filter down to.
-  const maintenanceItems = createMemo((): MenuItem[] => [
-    {
-      label: 'Reprocess all',
-      onSelect: () =>
-        void run('Reprocessing all…', async () => {
-          const { done } = await reprocessAll();
-          return `Reprocessed ${count(done, 'card')}.`;
-        }),
-      disabled: busy(),
-    },
-    {
-      label: indexing() > 0 ? `Indexing ${indexing()}…` : 'Rebuild search index',
-      onSelect: () => void storage.reindexAll(),
-      disabled: indexing() > 0,
-    },
-    { label: 'Verify all', onSelect: () => void verifyEverything(), disabled: busy() },
-    { label: 'Refresh', onSelect: () => void refresh(), disabled: loading() },
-    ...(issueCount() > 0
-      ? [{ label: onlyIssues() ? 'Show all files' : 'Only issues', onSelect: () => setOnlyIssues((v) => !v) }]
-      : []),
-    { label: 'Media folder', onSelect: () => void storage.openMediaDir() },
-  ]);
+  const reprocessEverything = () =>
+    run('Reprocessing all…', async () => {
+      const { done } = await reprocessAll();
+      return `Reprocessed ${count(done, 'card')}.`;
+    });
 
   return (
     <div class="record maintenance">
       <CanvasPanel position="top-right">
-        <Menu label="Maintenance" items={maintenanceItems()} />
+        <Menu aria-label="Maintenance" trigger="Maintenance" chevron>
+          <MenuItem disabled={busy()} onSelect={() => void reprocessEverything()}>
+            Reprocess all
+          </MenuItem>
+          <MenuItem disabled={indexing() > 0} onSelect={() => void storage.reindexAll()}>
+            {indexing() > 0 ? `Indexing ${indexing()}…` : 'Rebuild search index'}
+          </MenuItem>
+          <MenuItem disabled={busy()} onSelect={() => void verifyEverything()}>
+            Verify all
+          </MenuItem>
+          <MenuItem disabled={loading()} onSelect={() => void refresh()}>
+            Refresh
+          </MenuItem>
+          <Show when={issueCount() > 0}>
+            <MenuItem onSelect={() => setOnlyIssues((v) => !v)}>{onlyIssues() ? 'Show all files' : 'Only issues'}</MenuItem>
+          </Show>
+          <MenuItem onSelect={() => void storage.openMediaDir()}>Media folder</MenuItem>
+        </Menu>
       </CanvasPanel>
 
-      <Show when={error()}>
-        <p class="modal__warn maintenance__error">{error()}</p>
-      </Show>
+      <Notice tone="bad" class="maintenance__error">
+        {error()}
+      </Notice>
       <Show when={incomplete()}>
         <p class="hint maintenance__note">
           A board couldn’t be read, so files it might reference are shown as

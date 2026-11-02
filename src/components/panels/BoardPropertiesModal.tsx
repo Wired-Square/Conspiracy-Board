@@ -1,6 +1,5 @@
 import { For, Show, createResource } from 'solid-js';
-import { Button, Field } from '@wired-square/kit';
-import { Modal } from '../ui/Modal';
+import { Button, Dialog, Field } from '@wired-square/kit';
 import { autofocus } from '../ui/autofocus';
 import { formatOccurredAt } from '../../lib/dates';
 import { DEFAULT_BOARD_TITLE } from '../../data/emptyBoard';
@@ -20,7 +19,7 @@ export function BoardPropertiesModal(props: { onClose: () => void }) {
   );
 
   return (
-    <Modal title="Board properties" onClose={props.onClose}>
+    <Dialog title="Board properties" onClose={props.onClose}>
       {/* Saved as typed, like the cluster label, so there is no OK/Cancel
           semantic to invent. */}
       <Field
@@ -68,7 +67,10 @@ export function BoardPropertiesModal(props: { onClose: () => void }) {
           a claim, and a document exists whether or not you like it.
         </span>
       </div>
-    </Modal>
+      <div class="app-dialog__actions">
+        <Button onClick={props.onClose}>Close</Button>
+      </div>
+    </Dialog>
   );
 }
 

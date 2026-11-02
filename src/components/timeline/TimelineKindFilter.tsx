@@ -1,8 +1,7 @@
 import { For, Show, createSignal } from 'solid-js';
-import { Button } from '@wired-square/kit';
+import { Button, Popover } from '@wired-square/kit';
 import { KIND_META } from '../../lib/kinds';
 import type { CardKind } from '../../types/board';
-import { createDismissal } from '../ui/createDismissal';
 
 type Props = {
   /** The present timeline kinds, in CARD_KINDS order — one checklist row each. */
@@ -25,12 +24,10 @@ type Props = {
  */
 export function TimelineKindFilter(props: Props) {
   const [open, setOpen] = createSignal(false);
-  let wrapper!: HTMLDivElement;
   let trigger!: HTMLButtonElement;
-  createDismissal(open, () => setOpen(false), () => wrapper, () => trigger);
 
   return (
-    <div class="timeline__filter" ref={wrapper}>
+    <div class="timeline__filter">
       <Button
         ref={trigger}
         class={props.hidden.size ? 'is-active' : ''}
@@ -42,36 +39,43 @@ export function TimelineKindFilter(props: Props) {
         Filter
       </Button>
       <Show when={open()}>
-        <div class="timeline__filter-menu" role="menu" aria-label="Show on timeline">
-          <For each={props.kinds}>
-            {(k) => {
-              const shown = () => !props.hidden.has(k);
-              return (
-                <button
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={shown()}
-                  class="app-menu__item timeline__filter-option"
-                  onClick={() => props.onToggle(k)}
-                >
-                  <span class="timeline__filter-check" aria-hidden="true">
-                    {shown() ? '☑' : '☐'}
-                  </span>
-                  {KIND_META[k].label}
-                  <span class="timeline__filter-count">{props.counts.get(k) ?? 0}</span>
-                </button>
-              );
-            }}
-          </For>
-          <button
-            type="button"
-            class="app-menu__item timeline__filter-reset"
-            onClick={() => props.onReset()}
-            disabled={props.hidden.size === 0}
+        <Popover anchor={trigger} onClose={() => setOpen(false)}>
+          <div
+            class="timeline__filter-menu"
+            role="menu"
+            aria-label="Show on timeline"
+            onKeyDown={(e) => e.key === 'Tab' && setOpen(false)}
           >
-            Reset
-          </button>
-        </div>
+            <For each={props.kinds}>
+              {(k) => {
+                const shown = () => !props.hidden.has(k);
+                return (
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={shown()}
+                    class="app-menu__item timeline__filter-option"
+                    onClick={() => props.onToggle(k)}
+                  >
+                    <span class="timeline__filter-check" aria-hidden="true">
+                      {shown() ? '☑' : '☐'}
+                    </span>
+                    {KIND_META[k].label}
+                    <span class="timeline__filter-count">{props.counts.get(k) ?? 0}</span>
+                  </button>
+                );
+              }}
+            </For>
+            <button
+              type="button"
+              class="app-menu__item timeline__filter-reset"
+              onClick={() => props.onReset()}
+              disabled={props.hidden.size === 0}
+            >
+              Reset
+            </button>
+          </div>
+        </Popover>
       </Show>
     </div>
   );

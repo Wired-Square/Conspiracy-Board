@@ -1,6 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { Button } from '@wired-square/kit';
-import { Modal } from '../ui/Modal';
+import { Button, Dialog, Notice } from '@wired-square/kit';
 import { errorMessage } from '../../lib/errors';
 import { libraryMcp, type LibraryMcpStatus } from '../../platform/libraryMcp';
 import { closeDialog } from '../../store/dialogStore';
@@ -12,6 +11,7 @@ export function LibraryMcpModal() {
   const enabled = () => status()?.enabled ?? false;
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
+  const close = () => closeDialog('libraryMcp');
 
   // One command at a time: two in flight can land out of order.
   const run = async (command: () => Promise<LibraryMcpStatus>) => {
@@ -33,7 +33,7 @@ export function LibraryMcpModal() {
   };
 
   return (
-    <Modal title="Library MCP" onClose={() => closeDialog('libraryMcp')}>
+    <Dialog title="Library MCP" onClose={close}>
       <p class="hint">Read-only access to this library for an AI client on this Mac.</p>
       <label class="field field--check">
         <input
@@ -48,21 +48,15 @@ export function LibraryMcpModal() {
       </label>
       <Show when={status()?.error}>
         {(error) => (
-          <div class="modal__warn library-mcp__warn" role="alert">
+          <Notice tone="bad" class="library-mcp__warn">
             <span>{error()}</span>
             <Button disabled={busy()} onClick={() => void run(libraryMcp.enable)}>
               Retry
             </Button>
-          </div>
+          </Notice>
         )}
       </Show>
-      <Show when={failure()}>
-        {(message) => (
-          <div class="modal__warn" role="alert">
-            {message()}
-          </div>
-        )}
-      </Show>
+      <Notice tone="bad">{failure()}</Notice>
       <Show when={enabled() && status()}>
         {(s) => (
           <>
@@ -83,7 +77,10 @@ export function LibraryMcpModal() {
           </>
         )}
       </Show>
-    </Modal>
+      <div class="app-dialog__actions">
+        <Button onClick={close}>Close</Button>
+      </div>
+    </Dialog>
   );
 }
 

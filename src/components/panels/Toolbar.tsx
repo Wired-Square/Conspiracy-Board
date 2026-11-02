@@ -1,5 +1,5 @@
-import { Show, createEffect, createSignal, on } from 'solid-js';
-import { Button, SearchInput } from '@wired-square/kit';
+import { For, Show, createEffect, createSignal, on } from 'solid-js';
+import { Button, Menu, MenuItem, SearchInput } from '@wired-square/kit';
 import { count } from '@wired-square/kit/core';
 import { KIND_META, emptyPayloadFor } from '../../lib/kinds';
 import { countIssues } from '../../lib/maintenance';
@@ -17,7 +17,6 @@ import { emailImportStore } from '../../store/emailImportStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
-import { Menu } from '../ui/Menu';
 import { LibraryMcpIndicator } from '../LibraryMcpIndicator';
 import { BackgroundTaskIndicator } from '../BackgroundTaskIndicator';
 
@@ -85,14 +84,15 @@ export function Toolbar() {
             it is about), the record (what you argue from), and the objects (the
             files themselves). A chooser labelled with the current view, mirroring
             the native View menu — the same dropdown +Add uses. */}
-        <Menu
-          label={VIEW_META[view()].label}
-          selectedLabel={VIEW_META[view()].label}
-          items={VIEW_ORDER.map((v) => ({
-            label: VIEW_META[v].label,
-            onSelect: () => setView(v),
-          }))}
-        />
+        <Menu aria-label={`View: ${VIEW_META[view()].label}`} trigger={VIEW_META[view()].label} chevron>
+          <For each={VIEW_ORDER}>
+            {(v) => (
+              <MenuItem current={v === view()} onSelect={() => setView(v)}>
+                {VIEW_META[v].label}
+              </MenuItem>
+            )}
+          </For>
+        </Menu>
         {/* One search for whichever view is showing: it dims the board's
             non-matches and drops the record's, the objects view's and the
             timeline's. */}
@@ -111,21 +111,18 @@ export function Toolbar() {
                 then the record, then what you make of it. 'Card' stays first and
                 unqualified because it is the one you reach for without thinking —
                 it makes an evidence card, and the editor can change its kind. */}
-            <Menu
-              label="+ Add"
-              items={[
-                { label: 'Card', onSelect: () => addCard() },
-                { label: 'Image', onSelect: () => void pickAndImport(IMAGE_FILE_FILTER) },
-                { label: 'Person', onSelect: () => add('person') },
-                { label: 'Organisation', onSelect: () => add('organisation') },
-                { label: 'Document', onSelect: () => void pickAndImport(DOCUMENT_FILE_FILTER) },
-                { label: 'Email', onSelect: () => emailImportStore.getState().openWith() },
-                { label: 'Message', onSelect: () => add('message') },
-                { label: 'Call', onSelect: () => add('call') },
-                { label: 'Event', onSelect: () => add('event') },
-                { label: 'Cluster', onSelect: () => addCluster() },
-              ]}
-            />
+            <Menu aria-label="Add" trigger="+ Add" chevron>
+              <MenuItem onSelect={() => addCard()}>Card</MenuItem>
+              <MenuItem onSelect={() => void pickAndImport(IMAGE_FILE_FILTER)}>Image</MenuItem>
+              <MenuItem onSelect={() => add('person')}>Person</MenuItem>
+              <MenuItem onSelect={() => add('organisation')}>Organisation</MenuItem>
+              <MenuItem onSelect={() => void pickAndImport(DOCUMENT_FILE_FILTER)}>Document</MenuItem>
+              <MenuItem onSelect={() => emailImportStore.getState().openWith()}>Email</MenuItem>
+              <MenuItem onSelect={() => add('message')}>Message</MenuItem>
+              <MenuItem onSelect={() => add('call')}>Call</MenuItem>
+              <MenuItem onSelect={() => add('event')}>Event</MenuItem>
+              <MenuItem onSelect={() => addCluster()}>Cluster</MenuItem>
+            </Menu>
           </Show>
           {/* Only in board view — Tidy arranges what the board draws. It untangles
               the string and pulls the cards in; the record has no positions. */}

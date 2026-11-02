@@ -1,6 +1,5 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { Button } from '@wired-square/kit';
-import { Modal } from '../ui/Modal';
+import { Button, Dialog, DialogActions, Notice } from '@wired-square/kit';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { closeDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
@@ -215,22 +214,8 @@ export function ImageEditorModal(props: { cardId: string }) {
     }
   }
 
-  const footer = (
-    <>
-      <Show when={busy()}>
-        <span class="modal__status">{busy()}</span>
-      </Show>
-      <Button tone="plain" onClick={close}>
-        Cancel
-      </Button>
-      <Button tone="primary" onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
-        Save
-      </Button>
-    </>
-  );
-
   return (
-    <Modal title="Card image" onClose={close} footer={footer}>
+    <Dialog title="Card image" onClose={close}>
       <div class="field__row">
         <input
           ref={fileInput}
@@ -263,9 +248,7 @@ export function ImageEditorModal(props: { cardId: string }) {
           onClose={() => setPickerOpen(false)}
         />
       </Show>
-      <Show when={error()}>
-        <p class="modal__warn">{error()}</p>
-      </Show>
+      <Notice tone="bad">{error()}</Notice>
       <p class="field__hint">Drag to reposition, scroll or use the slider to zoom. The frame is how the card shows it.</p>
 
       <div class="image-cropper">
@@ -302,6 +285,17 @@ export function ImageEditorModal(props: { cardId: string }) {
           />
         </Show>
       </div>
-    </Modal>
+      <Show when={busy()}>
+        <p class="dialog-status">{busy()}</p>
+      </Show>
+      <DialogActions
+        onCancel={close}
+        confirm={
+          <Button tone="primary" onClick={() => void onSave()} disabled={!source() || !view() || busy() != null}>
+            Save
+          </Button>
+        }
+      />
+    </Dialog>
   );
 }
