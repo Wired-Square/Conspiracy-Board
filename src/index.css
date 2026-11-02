@@ -97,7 +97,7 @@ body {
 }
 
 .app-field__input {
-  background: var(--app-surface-sunken);
+  background-color: var(--app-surface-sunken);
 }
 
 .app-field__input--multiline {
