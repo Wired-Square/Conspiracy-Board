@@ -78,6 +78,18 @@ fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
   }
 }
 
+/// A newer build's file may hold what this one can't read, and opening it for writing
+/// would stamp its version back down.
+pub(crate) fn refuse_newer(conn: &Connection, known: i32, what: &str) -> Result<(), String> {
+  let found: i32 = conn
+    .pragma_query_value(None, "user_version", |r| r.get(0))
+    .map_err(|e| format!("Could not read the {what}'s version: {e}"))?;
+  if found > known {
+    return Err(format!("This {what} was saved by a newer version of Conspiracy."));
+  }
+  Ok(())
+}
+
 /// A connection that cannot write, for a reader beside the open session.
 pub(crate) fn open_read_only(path: &Path) -> Result<Connection, String> {
   let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
@@ -85,6 +97,21 @@ pub(crate) fn open_read_only(path: &Path) -> Result<Connection, String> {
   let conn = Connection::open_with_flags(path, flags).map_err(failed)?;
   conn.busy_timeout(Duration::from_secs(5)).map_err(failed)?;
   Ok(conn)
+}
+
+/// Keep a database and its WAL files to the user: SQLite creates them world-readable.
+pub(crate) fn restrict_to_owner(db: &Path) {
+  for suffix in ["", "-wal", "-shm"] {
+    let mut path = db.as_os_str().to_owned();
+    path.push(suffix);
+    let path = PathBuf::from(path);
+    match wslib_file_atomic::owner_only(&path) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+        log::warn!("Could not restrict {} to its owner: {e}", path.display())
+      }
+      _ => {}
+    }
+  }
 }
 
 /// How media files are written: staged beside the target as

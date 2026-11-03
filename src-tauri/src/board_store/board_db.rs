@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
 use super::session::OpenBoard;
-use super::{boards_dir, open_read_only, read_opt, remove_if_present, run_open};
+use super::{boards_dir, open_read_only, read_opt, refuse_newer, remove_if_present, restrict_to_owner, run_open};
 use crate::library_index::LibraryDb;
 use crate::quit;
 use crate::schema::{parse_board, parse_board_json, Board, Card, BOARD_VERSION};
@@ -62,6 +62,8 @@ fn remove_board_db(path: &Path) -> Result<(), String> {
   Ok(())
 }
 
+pub(super) const BOARD_SCHEMA: i32 = 1;
+
 /// Open (creating if absent) a board database with the tables and pragmas it needs.
 /// WAL so a reader never blocks the writer and a crash can't tear the file;
 /// `synchronous=NORMAL` paired with a checkpoint after a whole-board write (see
@@ -81,6 +83,7 @@ fn open_board_db(path: &Path) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Could not prepare the board database: {e}"))?;
   init_board_schema(&conn)?;
+  restrict_to_owner(path);
   Ok(conn)
 }
 
@@ -89,15 +92,16 @@ fn open_board_db(path: &Path) -> Result<Connection, String> {
 /// hook for a later in-place migration, distinct from the board's own `version`
 /// (which is a card-schema concern and lives in the `meta` table).
 fn init_board_schema(conn: &Connection) -> Result<(), String> {
+  refuse_newer(conn, BOARD_SCHEMA, "board")?;
   conn
-    .execute_batch(
+    .execute_batch(&format!(
       "CREATE TABLE IF NOT EXISTS meta        (key TEXT PRIMARY KEY, value TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS cards       (id TEXT PRIMARY KEY, json TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY, json TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS clusters    (id TEXT PRIMARY KEY, json TEXT NOT NULL);
        CREATE TABLE IF NOT EXISTS media_refs  (name TEXT PRIMARY KEY);
-       PRAGMA user_version=1;",
-    )
+       PRAGMA user_version={BOARD_SCHEMA};",
+    ))
     .map_err(|e| format!("Could not prepare the board schema: {e}"))
 }
 
@@ -410,6 +414,7 @@ fn read_board_db(path: &Path) -> Result<Board, String> {
 /// The rows put back together and validated as a board, migrated from whatever version
 /// they were saved at.
 pub(super) fn reassemble_board(conn: &Connection) -> Result<Board, String> {
+  refuse_newer(conn, BOARD_SCHEMA, "board")?;
   let meta = read_meta(conn)?;
   let version: u8 = meta.get("version").and_then(|v| v.parse().ok()).unwrap_or(3);
   let mut board = json!({
@@ -525,6 +530,11 @@ pub fn delete_board(app: AppHandle, library: State<LibraryDb>, open: State<OpenB
 }
 
 #[cfg(test)]
+pub(super) fn stamp_version(path: &Path, version: i32) {
+  Connection::open(path).unwrap().pragma_update(None, "user_version", version).unwrap();
+}
+
+#[cfg(test)]
 mod tests {
   use super::*;
   use crate::board_store::temp_dir_for;
@@ -619,6 +629,16 @@ mod tests {
     });
   }
 
+  #[cfg(unix)]
+  #[test]
+  fn a_board_database_is_readable_by_its_owner_alone() {
+    use std::os::unix::fs::PermissionsExt;
+    in_temp("owner-only", |path| {
+      create_board_db(path, &board("t", json!([]))).unwrap();
+      assert_eq!(std::fs::metadata(path).unwrap().permissions().mode() & 0o777, 0o600);
+    });
+  }
+
   #[test]
   fn a_legacy_board_becomes_a_database_and_its_json_goes() {
     let dir = temp_dir_for("legacy");
@@ -687,6 +707,34 @@ mod tests {
     assert!(!except.names.contains("c.eml"));
     assert!(library_media_refs(&dir.join("absent"), &[], None).is_err());
     let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_board_from_a_newer_build_is_refused_and_left_as_it_was() {
+    let dir = temp_dir_for("newer");
+    let path = dir.join("brd_new.sqlite");
+    create_board_db(&path, &board("t", json!([]))).unwrap();
+    stamp_version(&path, BOARD_SCHEMA + 1);
+    let newer = "This board was saved by a newer version of Conspiracy.";
+    assert_eq!(open_board_db(&path).unwrap_err(), newer);
+    assert_eq!(peek_board(&dir, "brd_new").unwrap_err(), newer);
+    assert_eq!(read_version(&path), BOARD_SCHEMA + 1);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_fresh_or_current_board_opens_at_the_current_version() {
+    in_temp("current", |path| {
+      Connection::open(path).unwrap();
+      assert_eq!(read_version(path), 0);
+      open_board_db(path).unwrap();
+      assert_eq!(read_version(path), BOARD_SCHEMA);
+      open_board_db(path).unwrap();
+    });
+  }
+
+  fn read_version(path: &Path) -> i32 {
+    Connection::open(path).unwrap().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap()
   }
 }
 
