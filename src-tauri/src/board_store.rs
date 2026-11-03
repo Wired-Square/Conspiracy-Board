@@ -99,6 +99,21 @@ pub(crate) fn open_read_only(path: &Path) -> Result<Connection, String> {
   Ok(conn)
 }
 
+/// Keep a database and its WAL files to the user: SQLite creates them world-readable.
+pub(crate) fn restrict_to_owner(db: &Path) {
+  for suffix in ["", "-wal", "-shm"] {
+    let mut path = db.as_os_str().to_owned();
+    path.push(suffix);
+    let path = PathBuf::from(path);
+    match wslib_file_atomic::owner_only(&path) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+        log::warn!("Could not restrict {} to its owner: {e}", path.display())
+      }
+      _ => {}
+    }
+  }
+}
+
 /// How media files are written: staged beside the target as
 /// `<name>.new`, synced, then renamed over it, so a crash leaves the old file or the
 /// new one. (Boards are SQLite databases with their own transactional write.)

@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::board_store::{library_dir, refuse_newer};
+use crate::board_store::{library_dir, refuse_newer, restrict_to_owner};
 use crate::board_store::media::{media_ext, media_file, media_names};
 use crate::extract::{extract_text, ExtractOutcome};
 use crate::jobs::Jobs;
@@ -68,6 +68,7 @@ pub(crate) fn open_at(dir: &Path) -> Result<LibraryDb, String> {
     .map_err(|e| format!("Could not prepare the search index: {e}"))?;
   init_schema(&conn)?;
   crate::board_store::board_index::init(&conn, dir)?;
+  restrict_to_owner(&dir.join("library.sqlite"));
   Ok(LibraryDb(Mutex::new(conn)))
 }
 
@@ -410,6 +411,16 @@ mod tests {
     statuses.sort_by(|a, b| a.name.cmp(&b.name));
     let seen: Vec<_> = statuses.iter().map(|s| (s.status.as_str(), s.error.as_deref(), s.attempts)).collect();
     assert_eq!(seen, [("failed", Some("still broken"), 2), ("indexed", None, 0)]);
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn the_library_is_readable_by_its_owner_alone() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = crate::board_store::temp_dir_for("library-owner-only");
+    drop(open_at(&dir).unwrap());
+    assert_eq!(std::fs::metadata(dir.join("library.sqlite")).unwrap().permissions().mode() & 0o777, 0o600);
+    let _ = std::fs::remove_dir_all(&dir);
   }
 
   #[test]

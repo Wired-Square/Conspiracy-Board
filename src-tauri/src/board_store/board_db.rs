@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use super::board_index::{listed_ids, remove_summary, upsert_summary};
 use super::session::OpenBoard;
-use super::{boards_dir, open_read_only, read_opt, refuse_newer, remove_if_present, run_open};
+use super::{boards_dir, open_read_only, read_opt, refuse_newer, remove_if_present, restrict_to_owner, run_open};
 use crate::library_index::LibraryDb;
 use crate::quit;
 use crate::schema::{parse_board, parse_board_json, Board, Card, BOARD_VERSION};
@@ -83,6 +83,7 @@ fn open_board_db(path: &Path) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Could not prepare the board database: {e}"))?;
   init_board_schema(&conn)?;
+  restrict_to_owner(path);
   Ok(conn)
 }
 
@@ -625,6 +626,16 @@ mod tests {
       let mut refs = recorded_refs(&Connection::open(path).unwrap()).unwrap().unwrap();
       refs.sort();
       assert_eq!(refs, ["a.png", "b.pdf"]);
+    });
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_board_database_is_readable_by_its_owner_alone() {
+    use std::os::unix::fs::PermissionsExt;
+    in_temp("owner-only", |path| {
+      create_board_db(path, &board("t", json!([]))).unwrap();
+      assert_eq!(std::fs::metadata(path).unwrap().permissions().mode() & 0o777, 0o600);
     });
   }
 
