@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::menu::{
-  CheckMenuItem, Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu, SubmenuBuilder,
+  AboutMetadata, CheckMenuItem, Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{AppHandle, Emitter, Wry};
 #[cfg(target_os = "macos")]
@@ -123,8 +123,29 @@ fn build_menu(
   menu.insert(&file_submenu(app, boards, current)?, 1)?;
   menu.insert(&view_submenu(app, view)?, 3)?;
   #[cfg(target_os = "macos")]
-  replace_quit(app, &menu)?;
+  {
+    replace_about(app, &menu)?;
+    replace_quit(app, &menu)?;
+  }
   Ok(menu)
+}
+
+/// The stock About shows only the release; ours adds the commit it was built from.
+#[cfg(target_os = "macos")]
+fn replace_about(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
+  let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else {
+    return Ok(());
+  };
+  if let Some(MenuItemKind::Predefined(about)) = app_menu.items()?.into_iter().next() {
+    app_menu.remove(&about)?;
+    let metadata = AboutMetadata {
+      version: Some(app.package_info().version.to_string()),
+      short_version: Some(env!("WSLIB_BUILD_ID").into()),
+      ..Default::default()
+    };
+    app_menu.prepend(&PredefinedMenuItem::about(app, None, Some(metadata))?)?;
+  }
+  Ok(())
 }
 
 /// The predefined Quit terminates without an exit the quit guard can hold, so the

@@ -1,3 +1,4 @@
 fn main() {
-  tauri_build::build()
+    wslib_build_id::emit();
+    tauri_build::build()
 }

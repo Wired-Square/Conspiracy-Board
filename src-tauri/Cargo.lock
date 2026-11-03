@@ -522,7 +522,6 @@ name = "conspiracy"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
- "getrandom 0.3.4",
  "imagesize",
  "kamadak-exif",
  "log",
@@ -545,6 +544,7 @@ dependencies = [
  "tauri-plugin-log",
  "ts-rs",
  "ureq",
+ "wslib-build-id",
  "wslib-file-atomic",
  "wslib-mcp",
  "wslib-secret",
@@ -863,7 +863,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2240,7 +2240,7 @@ dependencies = [
  "png",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3575,7 +3575,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4481,7 +4481,7 @@ dependencies = [
  "png",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4918,7 +4918,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4939,7 +4939,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "raw-window-handle",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "windows-version",
 ]
 
@@ -5377,6 +5377,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "wslib-build-id"
+version = "0.1.0"
+source = "sparse+https://forge.wiredsquare.com/api/packages/wired-square/cargo/"
+checksum = "6ddb0861a3c9415212e73a9f74447ad23463284e6820c29ca49136d9cffdc0e1"
+
+[[package]]
 name = "wslib-file-atomic"
 version = "0.1.8"
 source = "sparse+https://forge.wiredsquare.com/api/packages/wired-square/cargo/"
@@ -5406,11 +5412,13 @@ dependencies = [
 
 [[package]]
 name = "wslib-secret"
-version = "0.1.4"
+version = "0.1.5"
 source = "sparse+https://forge.wiredsquare.com/api/packages/wired-square/cargo/"
-checksum = "b5971c4551a6b811e53ced5e7df0bd8c0300add92af08959f33b1ce25e56da78"
+checksum = "bd23976e6554d11308774e880dd881f7dcb8318f6509ba1123752e512467aeac"
 dependencies = [
+ "getrandom 0.3.4",
  "security-framework",
+ "sha2 0.10.9",
  "subtle",
  "zeroize",
 ]
