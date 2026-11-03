@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Conspiracy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.wiredsquare.conspiracy",
   "build": {
     "frontendDist": "../dist",
@@ -27,13 +27,18 @@
       "devCsp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' asset: http://asset.localhost ws://localhost:1420 http://localhost:1420",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/media/**"]
+        "scope": [
+          "$APPDATA/media/**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
