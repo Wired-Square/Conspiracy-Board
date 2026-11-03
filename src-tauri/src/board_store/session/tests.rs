@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use super::*;
-use crate::board_store::board_db::create_board_db;
+use crate::board_store::board_db::{create_board_db, stamp_version, BOARD_SCHEMA};
 use crate::board_store::temp_dir_for;
 use crate::schema::parse_board;
 
@@ -112,6 +112,17 @@ fn opening_a_session_writes_nothing() {
   assert_eq!(std::fs::read(&path).unwrap(), before);
   assert_eq!(session.board, fixture());
   drop(session);
+  let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn opening_a_board_from_a_newer_build_is_refused() {
+  let dir = temp_dir_for("session-newer");
+  let path = dir.join("brd_test.sqlite");
+  create_board_db(&path, &fixture()).unwrap();
+  stamp_version(&path, BOARD_SCHEMA + 1);
+  let refused = Session::open(&path, "brd_test".into()).err().unwrap();
+  assert_eq!(refused, "This board was saved by a newer version of Conspiracy.");
   let _ = std::fs::remove_dir_all(&dir);
 }
 

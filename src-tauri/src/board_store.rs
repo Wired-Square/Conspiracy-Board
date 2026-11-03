@@ -78,6 +78,18 @@ fn read_opt(path: PathBuf) -> Result<Option<String>, String> {
   }
 }
 
+/// A newer build's file may hold what this one can't read, and opening it for writing
+/// would stamp its version back down.
+pub(crate) fn refuse_newer(conn: &Connection, known: i32, what: &str) -> Result<(), String> {
+  let found: i32 = conn
+    .pragma_query_value(None, "user_version", |r| r.get(0))
+    .map_err(|e| format!("Could not read the {what}'s version: {e}"))?;
+  if found > known {
+    return Err(format!("This {what} was saved by a newer version of Conspiracy."));
+  }
+  Ok(())
+}
+
 /// A connection that cannot write, for a reader beside the open session.
 pub(crate) fn open_read_only(path: &Path) -> Result<Connection, String> {
   let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;

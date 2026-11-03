@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::board_store::library_dir;
+use crate::board_store::{library_dir, refuse_newer};
 use crate::board_store::media::{media_ext, media_file, media_names};
 use crate::extract::{extract_text, ExtractOutcome};
 use crate::jobs::Jobs;
@@ -32,6 +32,8 @@ const ENGINE: &str = "pdf:lopdf-0.46+vision-ocr;ooxml;ocr:vision-1;plain;v1";
 /// How many times a file that keeps failing is retried automatically before it is left
 /// alone. A manual reindex (force) always tries again regardless.
 const MAX_ATTEMPTS: i64 = 3;
+
+const LIBRARY_SCHEMA: i32 = 1;
 
 /// How many files are read at once. Small: extraction is CPU-bound, and the point is
 /// to stay out of the way, not to saturate the machine.
@@ -70,8 +72,9 @@ pub(crate) fn open_at(dir: &Path) -> Result<LibraryDb, String> {
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {
+  refuse_newer(conn, LIBRARY_SCHEMA, "library")?;
   conn
-    .execute_batch(
+    .execute_batch(&format!(
       "CREATE TABLE IF NOT EXISTS documents (
          name         TEXT PRIMARY KEY,
          mime         TEXT,
@@ -86,8 +89,8 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
        CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
          name UNINDEXED, body, tokenize='unicode61 remove_diacritics 2'
        );
-       PRAGMA user_version=1;",
-    )
+       PRAGMA user_version={LIBRARY_SCHEMA};",
+    ))
     .map_err(|e| format!("Could not prepare the search schema: {e}"))
 }
 
@@ -427,5 +430,22 @@ mod tests {
     assert_eq!(fts_query("   "), "");
     let conn = mem();
     assert!(run_search(&conn, "  ", 10).unwrap().is_empty());
+  }
+
+  #[test]
+  fn the_library_opens_fresh_and_current_but_refuses_a_newer_build() {
+    let dir = crate::board_store::temp_dir_for("library-version");
+    let path = dir.join("library.sqlite");
+    let version = || -> i32 {
+      Connection::open(&path).unwrap().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap()
+    };
+    drop(open_at(&dir).unwrap());
+    assert_eq!(version(), LIBRARY_SCHEMA);
+    drop(open_at(&dir).unwrap());
+    Connection::open(&path).unwrap().pragma_update(None, "user_version", LIBRARY_SCHEMA + 1).unwrap();
+    let refused = open_at(&dir).err().unwrap();
+    assert_eq!(refused, "This library was saved by a newer version of Conspiracy.");
+    assert_eq!(version(), LIBRARY_SCHEMA + 1);
+    let _ = std::fs::remove_dir_all(&dir);
   }
 }
