@@ -31,7 +31,7 @@ pub fn start(app: &AppHandle) {
 fn try_start(app: &AppHandle) -> Result<(), String> {
   let token = match std::env::var("CONSPIRACY_MCP_TOKEN") {
     Ok(token) if !token.is_empty() => token,
-    _ => random_token()?,
+    _ => random_token()?.expose().to_owned(),
   };
   let tools = Tools { page: TauriBridge::new(app), jobs: app.state::<Arc<Jobs>>().inner().clone() };
   let router = Arc::new(Tools::router());
@@ -63,7 +63,7 @@ impl Tools {
   }
 
   fn identity() -> ServerIdentity {
-    ServerIdentity::new("conspiracy", env!("CARGO_PKG_VERSION"))
+    ServerIdentity::new("conspiracy", wslib_build_id::build_version!())
       .with_title("Conspiracy (dev)")
       .with_instructions(
         "Development harness for the Conspiracy board app. App tools only read state; every \

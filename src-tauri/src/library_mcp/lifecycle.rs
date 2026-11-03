@@ -87,7 +87,7 @@ impl LibraryMcp {
   }
 
   fn keep_new_token(&self) -> Result<Secret, String> {
-    let token = Secret::new(random_token()?);
+    let token = random_token()?;
     let saved = self.store.save(TOKEN_SERVICE, TOKEN_ACCOUNT, &token);
     saved.map_err(|e| format!("The token could not be saved to the Keychain: {e}"))?;
     Ok(token)

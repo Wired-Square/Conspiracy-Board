@@ -21,6 +21,7 @@ use wslib_mcp::rmcp;
 use wslib_mcp::router::mark_read_only;
 use wslib_mcp::server::{ServerIdentity, ToolServer};
 use wslib_mcp::CancellationToken;
+use wslib_secret::{Encoding, Secret};
 
 use crate::board_store::board_db::peek_board;
 use crate::board_store::board_index::{summaries, BoardSummary};
@@ -81,10 +82,8 @@ impl Listening {
   }
 }
 
-pub(crate) fn random_token() -> Result<String, String> {
-  let mut bytes = [0u8; 24];
-  getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
-  Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+pub(crate) fn random_token() -> Result<Secret, String> {
+  Secret::random::<24>(Encoding::Base64Url).map_err(|e| e.to_string())
 }
 
 #[derive(Clone)]
@@ -100,7 +99,7 @@ impl LibraryTools {
   }
 
   fn identity() -> ServerIdentity {
-    ServerIdentity::new("conspiracy-library", env!("CARGO_PKG_VERSION"))
+    ServerIdentity::new("conspiracy-library", wslib_build_id::build_version!())
       .with_title("Conspiracy library")
       .with_instructions(
         "Read-only access to the Conspiracy library: its boards, their cards, connections and \
@@ -435,11 +434,11 @@ mod tests {
   }
 
   #[test]
-  fn a_token_is_48_hex_digits_and_fresh_each_time() {
+  fn a_token_is_32_base64url_characters_and_fresh_each_time() {
     let token = random_token().unwrap();
-    assert_eq!(token.len(), 48);
-    assert!(token.bytes().all(|b| b.is_ascii_hexdigit()));
-    assert_ne!(token, random_token().unwrap());
+    assert_eq!(token.expose().len(), 32);
+    assert!(token.expose().bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+    assert_ne!(token.expose(), random_token().unwrap().expose());
   }
 
   #[test]
