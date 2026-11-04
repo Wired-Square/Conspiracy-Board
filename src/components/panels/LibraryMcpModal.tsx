@@ -79,7 +79,9 @@ export function LibraryMcpModal() {
                 </Button>
               </div>
               <span class="field__hint">
-                The token is kept in your Keychain, so it stays the same across relaunches until you rotate it.
+                {import.meta.env.DEV
+                  ? 'A dev build keeps the token in memory, so it changes on every launch.'
+                  : 'The token is kept in your Keychain, so it stays the same across relaunches until you rotate it.'}
               </span>
             </div>
           </>
