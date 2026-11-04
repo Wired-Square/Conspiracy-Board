@@ -50,6 +50,7 @@ function ClusterRow(props: { cluster: Cluster }) {
       <input
         class="app-field__input cluster-label"
         value={label()}
+        title={label()}
         onInput={(e) => setLabel(e.currentTarget.value)}
         onBlur={flushLabel}
       />

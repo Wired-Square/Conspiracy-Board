@@ -205,8 +205,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
 .mcp-indicator.is-writable:not(.is-error) .mcp-indicator__dot { background: var(--app-warn); }
-.app__canvas { --cluster-panel-width: 16rem; }
-.cluster-panel { padding: var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; overflow-y: auto; }
+.app__canvas { --cluster-panel-width: 17rem; }
+.cluster-panel { padding: var(--cb-space-2) var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
 .app-canvas-panel:has(> .cluster-panel) { display: flex; max-height: calc(100% - 12.375rem); }
@@ -220,11 +220,10 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 
 .cluster-panel__toggle:hover { background: none; }
 .panel-heading { font-size: var(--cb-text-sm); font-weight: 600; color: var(--app-text-muted); }
-.cluster-row { margin-top: var(--cb-space-2); font-size: var(--cb-text-md); }
+.cluster-row { --app-control-pad-y: 0.2rem; margin-top: var(--cb-space-1); gap: 0.375rem; }
+.cluster-row input[type='checkbox'], .cluster-color { flex: none; width: 16px; height: 16px; margin: 0; }
 
 .cluster-color {
-  width: 22px;
-  height: 22px;
   padding: 0;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
@@ -232,7 +231,10 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   cursor: pointer;
 }
 
-.cluster-label { flex: 1 1 auto; min-width: 0; }
+.cluster-color::-webkit-color-swatch-wrapper { padding: 0; }
+.cluster-color::-webkit-color-swatch { border: none; border-radius: calc(var(--app-radius) - 1px); }
+
+.cluster-label { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
 .cluster-label:not(:hover, :focus) { background-color: transparent; border-color: transparent; }
 .cluster-delete:hover { color: var(--app-alert); }
 .cluster-add { margin-top: var(--cb-space-3); width: 100%; justify-content: center; }
