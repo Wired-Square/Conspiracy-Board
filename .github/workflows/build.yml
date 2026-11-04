@@ -109,21 +109,27 @@ jobs:
           echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: pnpm build --target ${{ matrix.target }} --bundles dmg
+
+      - name: Name the dmg
+        id: dmg
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG="$RUNNER_TEMP/Conspiracy_${VERSION}_macOS_arm64.dmg"
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg "$DMG"
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+
+      - name: Attach the dmg to the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        with:
-          args: --target ${{ matrix.target }}
-          # Release is pre-created by create-release job; tauri-action finds it and uploads assets
-          tagName: ${{ github.ref_name }}
-          releaseDraft: true
-          prerelease: false
+        run: gh release upload "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.path }}" --clobber
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
           name: conspiracy-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/
+          path: ${{ steps.dmg.outputs.path }}
           if-no-files-found: error
