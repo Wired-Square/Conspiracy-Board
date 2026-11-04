@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
 
@@ -557,4 +558,56 @@ fn an_unlogged_edit_to_a_logged_row_clears_both_stacks() {
   assert_eq!(f.session.redo().unwrap(), None);
   let a = &f.on_disk().cards[0];
   assert_eq!((a.title.as_str(), a.notes.as_str()), ("One", "OCR text"));
+}
+
+/// The real board's shape (plan D6): 10,953 emails with ~3 KB of notes, and the
+/// board's own cards.
+fn big_board() -> Board {
+  let notes = "word ".repeat(600);
+  let cards: Vec<Value> = (0..11_026)
+    .map(|i| {
+      json!({
+        "id": format!("card_{i:05}"), "title": format!("Subject {}", i % 300), "notes": notes, "clusterIds": [],
+        "position": { "x": 0, "y": 0 }, "kind": "email", "occurredAt": "2020-01-01T00:00:00.000Z",
+        "email": { "from": { "address": format!("p{}@x.example", i % 120) }, "to": [], "cc": [], "attachments": [] },
+      })
+    })
+    .collect();
+  let connections: Vec<Value> =
+    (0..35).map(|i| json!({ "id": format!("e{i}"), "source": format!("card_{i:05}"), "target": format!("card_{:05}", i + 1) })).collect();
+  parse_board(json!({
+    "version": 4, "meta": { "title": "Big", "updatedAt": STAMPED_BEFORE }, "clusters": [], "cards": cards, "connections": connections,
+  }))
+  .unwrap()
+}
+
+/// Budgets about ten times the debug build's time on an M-series Mac (open 0.37 s,
+/// delete 21 ms, undo 29 ms), so a slow CI box passes and a whole-board read or write
+/// per edit fails. The delete writes its card, its two strings and the board's meta.
+#[test]
+fn an_11000_card_board_opens_and_deletes_a_card_within_budget() {
+  let dir = temp_dir_for("session-big");
+  let path = dir.join("brd_big.sqlite");
+  create_board_db(&path, &big_board()).unwrap();
+
+  let started = Instant::now();
+  let mut session = Session::open(&path, "brd_big".into()).unwrap();
+  let opened = started.elapsed();
+  assert_eq!(session.board.cards.len(), 11_026);
+
+  let started = Instant::now();
+  let change = session.delete_cards(&["card_00001".into()]).unwrap().unwrap();
+  let deleted = started.elapsed();
+  let writes = session.conn.total_changes();
+  let started = Instant::now();
+  session.undo().unwrap().unwrap();
+  let undone = started.elapsed();
+
+  assert!(writes <= 10, "a one-card delete wrote {writes} rows");
+  assert!(serde_json::to_string(&change).unwrap().len() < 1024);
+  assert!(opened < Duration::from_secs(4), "open took {opened:?}");
+  assert!(deleted < Duration::from_secs(1), "delete took {deleted:?}");
+  assert!(undone < Duration::from_secs(1), "undo took {undone:?}");
+  drop(session);
+  let _ = std::fs::remove_dir_all(&dir);
 }
