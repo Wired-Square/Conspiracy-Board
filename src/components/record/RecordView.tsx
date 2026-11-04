@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { cx } from '@wired-square/kit/core';
 import type { Card } from '../../types/board';
 import { rosterOf } from '../../lib/roster';
@@ -80,6 +80,39 @@ export function RecordView() {
   });
   onCleanup(() => list && scrolledTo.set(boardId, list.scrollTop));
 
+  // Tab walks every row in order, not just the drawn ones: the next row is drawn and
+  // focused here, and the focused row stays drawn wherever the list scrolls.
+  const rowButton = (id: string) => list?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"] .record-row`);
+  const rowOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('[data-card-id]')?.dataset.cardId ?? null;
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
+    const id = rowOf(e);
+    const from = id === null ? -1 : shown().findIndex((c) => c.id === id);
+    const to = from + (e.shiftKey ? -1 : 1);
+    if (from < 0 || to < 0 || to >= shown().length) return;
+    e.preventDefault();
+    rows.reveal(to);
+    rowButton(shown()[to].id)?.focus();
+  };
+  // Moving a focused row in the DOM drops its focus, so the row that had it gets it
+  // back; focus that left for somewhere else is let go.
+  let rowHasFocus = false;
+  const onFocusIn = (e: FocusEvent) => {
+    const id = rowOf(e);
+    rowHasFocus = id !== null;
+    rows.pin(id);
+  };
+  const onFocusOut = (e: FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to ? !list?.contains(to) : (e.target as Node).isConnected) rowHasFocus = false;
+  };
+  createEffect(
+    on(rows.drawn, () => {
+      const id = rows.pinned();
+      if (rowHasFocus && id !== null && !list?.contains(document.activeElement)) rowButton(id)?.focus({ preventScroll: true });
+    }),
+  );
+
   return (
     <div class="record">
       <div class="record__bar">
@@ -110,15 +143,22 @@ export function RecordView() {
       >
         <ul
           class="record__list"
+          onKeyDown={onKeyDown}
+          onFocusIn={onFocusIn}
+          onFocusOut={onFocusOut}
           ref={(el) => {
             list = el;
             rows.container(el);
           }}
         >
           <li class="record__spacer" aria-hidden="true" style={{ height: `${rows.before()}px` }} />
-          <For each={shown().slice(rows.range().start, rows.range().end)}>
+          <For each={rows.drawn().map((i) => shown()[i])}>
             {(card) => (
-              <li ref={(el) => rows.measure(el, card.id)}>
+              <li
+                data-card-id={card.id}
+                style={{ 'margin-top': `${rows.skipped(card.id)}px` }}
+                ref={(el) => rows.measure(el, card.id)}
+              >
                 <RecordRow
                   card={card}
                   loose={loose().get(card.id) ?? null}

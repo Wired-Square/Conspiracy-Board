@@ -70,19 +70,25 @@ export function TimelineDrawer() {
   // restore effect below). Candidates rather than one id, so narrowing by kind
   // anchors on the closest chip that survives; an empty strip keeps the
   // previous anchor, so even a fruitless search returns you to where you were.
+  // A chip the strip put in view itself leads until the user scrolls: at either
+  // end of the strip it can't sit at the centre, and the chip that does is not
+  // the one being looked at.
   let anchor: string[] = [];
+  let placed: string | null = null;
+  const letGo = () => (placed = null);
   const captureAnchor = () => {
     if (!strip) return;
     const centre = strip.getBoundingClientRect().left + strip.clientWidth / 2;
     const chips = [...strip.querySelectorAll<HTMLElement>('[data-card-id]')];
     if (!chips.length) return;
-    anchor = chips
+    const byDistance = chips
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { id: el.dataset.cardId!, d: Math.abs((r.left + r.right) / 2 - centre) };
       })
       .sort((a, b) => a.d - b.d)
       .map((c) => c.id);
+    anchor = placed && byDistance.includes(placed) ? [placed, ...byDistance.filter((id) => id !== placed)] : byDistance;
   };
 
   // Which kinds the strip hides. The search has already narrowed the raw sets to
@@ -215,13 +221,14 @@ export function TimelineDrawer() {
     axis: 'x',
     overscan: 1500,
   });
-  const shownDays = () => dayKeys().slice(days.range().start, days.range().end);
+  const shownDays = () => days.drawn().map((i) => dayKeys()[i]);
 
   const chipEl = (id: string) => strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
   /** Scroll a dated chip to the strip's centre, drawing its day first if it is out of view. */
   const revealChip = (id: string, behavior: ScrollBehavior) => {
     const day = dayOf().get(id);
     if (day === undefined) return false;
+    placed = id;
     const reveal = () => chipEl(id)?.scrollIntoView({ behavior, inline: 'center', block: 'nearest' });
     if (chipEl(id)) {
       reveal();
@@ -365,6 +372,9 @@ export function TimelineDrawer() {
 
             <div
               class="timeline__strip"
+              onWheel={letGo}
+              onPointerDown={letGo}
+              onKeyDown={letGo}
               ref={(el) => {
                 strip = el;
                 days.container(el);

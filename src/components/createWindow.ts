@@ -16,9 +16,11 @@ type Options = {
 const UNMEASURED_VIEWPORT = 2000;
 
 /**
- * Only the items in a scrolling container's viewport, plus overscan: draw `range()`,
- * with spacers of `before()` and `after()` holding the run's length. `measure` each
- * drawn item whose size can differ from its estimate.
+ * Only the items in a scrolling container's viewport, plus overscan: draw `drawn()`,
+ * with spacers of `before()` and `after()` holding the run's length, and `skipped(key)`
+ * as a margin before an item that follows a run left out. `measure` each drawn item
+ * whose size can differ from its estimate; `pin` an item (the focused one) to keep it
+ * drawn wherever the view goes.
  */
 export function createWindow(o: Options) {
   const horizontal = o.axis === 'x';
@@ -40,6 +42,20 @@ export function createWindow(o: Options) {
     { start: 0, end: 0 },
     { equals: (a, b) => a.start === b.start && a.end === b.end },
   );
+  const [pinned, pin] = createSignal<string | null>(null);
+  const pinnedIndex = createMemo(() => {
+    const key = pinned();
+    if (key === null) return -1;
+    for (let i = 0; i < o.count(); i++) if (o.key(i) === key) return i;
+    return -1;
+  });
+  const drawn = createMemo(() => {
+    const { start, end } = range();
+    const indices = Array.from({ length: end - start }, (_, k) => start + k);
+    const p = pinnedIndex();
+    if (p < 0 || (p >= start && p < end)) return indices;
+    return p < start ? [p, ...indices] : [...indices, p];
+  });
 
   let container: HTMLElement | undefined;
   const sync = () => {
@@ -47,6 +63,20 @@ export function createWindow(o: Options) {
     setView({
       scroll: horizontal ? container.scrollLeft : container.scrollTop,
       size: horizontal ? container.clientWidth : container.clientHeight,
+    });
+  };
+
+  // Drawing what a measurement changes inside the observer's callback starts new
+  // observations it can't deliver that frame, which WebKit reports as a loop error.
+  let frame = 0;
+  const pending = { remeasure: false, sync: false };
+  const nextFrame = (what: keyof typeof pending) => {
+    pending[what] = true;
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      if (pending.sync) sync();
+      if (pending.remeasure) remeasured();
+      pending.sync = pending.remeasure = false;
     });
   };
 
@@ -64,18 +94,32 @@ export function createWindow(o: Options) {
             sizes.set(key, size);
             changed = true;
           }
-          if (changed) remeasured();
+          if (changed) nextFrame('remeasure');
         });
-  const viewport = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
+  const viewport = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => nextFrame('sync'));
   onCleanup(() => {
     items?.disconnect();
     viewport?.disconnect();
+    cancelAnimationFrame(frame);
   });
 
+  const jump = createMemo(() => {
+    const at = drawn().findIndex((i, k) => k > 0 && i !== drawn()[k - 1] + 1);
+    if (at < 0) return null;
+    const i = drawn()[at];
+    return { key: o.key(i), px: offsets()[i] - offsets()[drawn()[at - 1] + 1] };
+  });
+  const first = () => drawn()[0] ?? range().start;
+  const last = () => drawn().at(-1) ?? range().end - 1;
+
   return {
-    range,
-    before: () => offsets()[range().start],
-    after: () => offsets()[offsets().length - 1] - offsets()[range().end],
+    drawn,
+    before: () => offsets()[first()],
+    after: () => offsets()[offsets().length - 1] - offsets()[last() + 1],
+    /** The run left out just before the drawn item with this key, in px, or 0. */
+    skipped: (key: string) => (jump()?.key === key ? jump()!.px : 0),
+    pin,
+    pinned,
     /** The scrolling element's ref. */
     container(el: HTMLElement) {
       container = el;
@@ -89,6 +133,17 @@ export function createWindow(o: Options) {
       keyOf.set(el, key);
       items?.observe(el);
       onCleanup(() => items?.unobserve(el));
+    },
+    /** Scroll just far enough to show item `i` whole, and draw it now. */
+    reveal(i: number) {
+      if (!container) return;
+      const at = offsets();
+      const size = horizontal ? container.clientWidth : container.clientHeight;
+      const scroll = horizontal ? container.scrollLeft : container.scrollTop;
+      const to = Math.min(Math.max(scroll, at[i + 1] - size), at[i]);
+      if (horizontal) container.scrollLeft = to;
+      else container.scrollTop = to;
+      sync();
     },
     /** Centre item `i` in the viewport and draw it now, before the scroll event lands. */
     centre(i: number) {
