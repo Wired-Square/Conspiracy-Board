@@ -1,6 +1,6 @@
 import { For, Show, createMemo } from 'solid-js';
 import type { Card } from '../../types/board';
-import { buildRoster, relationsOf } from '../../lib/roster';
+import { rosterOf, relationsOf } from '../../lib/roster';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
@@ -25,7 +25,7 @@ import { fromStore } from '@wired-square/store/solid';
 export function ParticipantsSection(props: { cardId: string }) {
   const cards = fromStore(boardStore, (s) => s.cards);
   const { selectCard } = boardStore.getState();
-  const relations = createMemo(() => relationsOf(buildRoster(cards()), props.cardId, cards()));
+  const relations = createMemo(() => relationsOf(rosterOf(cards()), props.cardId, cards()));
 
   return (
     <Show when={relations().actors.length || relations().sent.length || relations().received.length}>

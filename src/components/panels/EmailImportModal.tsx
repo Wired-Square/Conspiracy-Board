@@ -8,7 +8,7 @@ import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta } from '../../lib/email/meta';
 import { MAX_MESSAGES, addLabel, batchStatus, cap, hidden, matchBatch } from '../../lib/email/importSummary';
 import { shortAddress } from '../../lib/email/addresses';
-import { buildRoster, unseenDomains, unseenParticipants } from '../../lib/roster';
+import { rosterOf, unseenDomains, unseenParticipants } from '../../lib/roster';
 import { entitiesOfKind } from '../../lib/kinds';
 import { NEW_CARD, choiceFor, planOffer, type Choice } from '../../lib/importOffer';
 import { formatOccurredAt } from '../../lib/dates';
@@ -34,7 +34,7 @@ export function EmailImportModal() {
 
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const cards = fromStore(boardStore, (s) => s.cards);
-  const roster = createMemo(() => buildRoster(cards()));
+  const roster = () => rosterOf(cards());
 
   const [paste, setPaste] = createSignal('');
   const [choices, setChoices] = createSignal<Map<string, Choice>>(new Map());

@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cx } from '@wired-square/kit/core';
 import type { Card } from '../../types/board';
-import { buildRoster } from '../../lib/roster';
+import { rosterOf } from '../../lib/roster';
 import { visibleCards } from '../../lib/visibility';
 import { clusterColor, NO_CLUSTER_ACCENT, primaryClusterId } from '../../lib/clusters';
 import { mediaIconForKind } from '../../lib/mediaIcon';
@@ -35,7 +35,7 @@ export function RecordView() {
   const searchQuery = fromStore(boardStore, (s) => s.searchQuery);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const { selectCard } = boardStore.getState();
-  const roster = createMemo(() => buildRoster(allCards()));
+  const roster = () => rosterOf(allCards());
   const cards = createMemo(() =>
     measure(
       'record filter',

@@ -5,6 +5,7 @@ import { drafts } from '../lib/drafts';
 import { storage } from '../storage';
 import { emptyBoard } from '../data/emptyBoard';
 import type { Card, Connection } from '../types/board';
+import { rosterOf } from '../lib/roster';
 
 vi.mock('../platform/document', () => ({
   doc: {
@@ -90,6 +91,38 @@ describe('a change from the shell', () => {
     boardStore.setState({ selectedCardId: 'a' });
     state().applyDocChanged(change({ removedCards: ['a'] }));
     expect(state().selectedCardId).toBeNull();
+  });
+});
+
+describe('a one-card change on a 10,000-card board', () => {
+  const big = Array.from({ length: 10_000 }, (_, i) => card(`c${i}`, i));
+  const ids = big.map((c) => c.id);
+  const originals = new Set(big);
+  const kept = (cards: Card[]) => cards.filter((c) => originals.has(c)).length;
+  beforeEach(() => boardStore.setState({ cards: big }));
+
+  it('replaces only the card it names, and equals a rebuild', () => {
+    const renamed = { ...big[5000], title: 'Renamed' };
+    state().applyDocChanged(change({ cards: [renamed] }));
+    expect(state().cards).toEqual(big.map((c) => (c.id === renamed.id ? renamed : c)));
+    expect(kept(state().cards)).toBe(9_999);
+  });
+
+  it('drops only the card it removes, and an undo puts it back in its place', () => {
+    state().applyDocChanged(change({ removedCards: ['c5000'] }));
+    expect(state().cards).toEqual(big.filter((c) => c.id !== 'c5000'));
+    expect(kept(state().cards)).toBe(9_999);
+    state().applyDocChanged(change({ cards: [big[5000]], cardOrder: ids }));
+    expect(state().cards.map((c) => c.id)).toEqual(ids);
+    expect(state().cards.every((c, i) => c === big[i])).toBe(true);
+  });
+
+  it('keeps the cards array through a change that names no card, so derived data is reused', () => {
+    const roster = rosterOf(state().cards);
+    boardStore.setState({ selectedCardId: 'c1' });
+    state().applyDocChanged(change({ viewport: { x: 1, y: 1, zoom: 1 } }));
+    expect(state().cards).toBe(big);
+    expect(rosterOf(state().cards)).toBe(roster);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { Card } from '../types/board';
+import { oncePerArray } from './cardIndex';
 
 // The "mark as event" relation, in one place. An event card spawned from another
 // carries a back-reference to it (EventMeta.sourceCardId). The checkbox that sets it,
@@ -8,8 +9,17 @@ import type { Card } from '../types/board';
 
 /** The event card spawned from `sourceId`, if that card is marked as an event. */
 export function eventFor(cards: readonly Card[], sourceId: string): Card | undefined {
-  return cards.find((c) => c.kind === 'event' && c.event?.sourceCardId === sourceId);
+  return eventsBySource(cards).get(sourceId);
 }
+
+const eventsBySource = oncePerArray((cards) => {
+  const events = new Map<string, Card>();
+  for (const c of cards) {
+    const source = c.kind === 'event' ? c.event?.sourceCardId : undefined;
+    if (source && !events.has(source)) events.set(source, c);
+  }
+  return events;
+});
 
 /** Every source card id folded under an event's milestone on the timeline. */
 export function markedEventSourceIds(cards: readonly Card[]): Set<string> {
