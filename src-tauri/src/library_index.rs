@@ -13,6 +13,7 @@
 //! cross-board search a later no-op. A pool of workers (`start_worker`) reads
 //! each file as it is stored, and at startup whatever `pending_media` says is unread.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -33,7 +34,7 @@ pub(crate) const ENGINE: &str = "pdf:lopdf-0.46+vision-ocr;ooxml;ocr:vision-1;pl
 /// alone. A manual reindex (force) always tries again regardless.
 const MAX_ATTEMPTS: i64 = 3;
 
-const LIBRARY_SCHEMA: i32 = 1;
+const LIBRARY_SCHEMA: i32 = 2;
 
 /// How many files are read at once. Small: extraction is CPU-bound, and the point is
 /// to stay out of the way, not to saturate the machine.
@@ -57,7 +58,7 @@ pub fn open(app: &AppHandle) -> Result<LibraryDb, String> {
 
 pub(crate) fn open_at(dir: &Path) -> Result<LibraryDb, String> {
   std::fs::create_dir_all(dir).map_err(|e| format!("Could not make the library: {e}"))?;
-  let conn = Connection::open(dir.join("library.sqlite"))
+  let mut conn = Connection::open(dir.join("library.sqlite"))
     .map_err(|e| format!("Could not open the search index: {e}"))?;
   conn
     .execute_batch(
@@ -66,33 +67,71 @@ pub(crate) fn open_at(dir: &Path) -> Result<LibraryDb, String> {
        PRAGMA busy_timeout=5000;",
     )
     .map_err(|e| format!("Could not prepare the search index: {e}"))?;
-  init_schema(&conn)?;
+  init_schema(&mut conn)?;
   crate::board_store::board_index::init(&conn, dir)?;
   restrict_to_owner(&dir.join("library.sqlite"));
   Ok(LibraryDb(Mutex::new(conn)))
 }
 
-fn init_schema(conn: &Connection) -> Result<(), String> {
+/// A document's text is the `doc_fts` row whose rowid is its `id`: FTS5 can find a
+/// row by rowid, while a match on the unindexed `name` reads the whole table.
+const DOCUMENTS: &str = "(
+  id           INTEGER PRIMARY KEY,
+  name         TEXT NOT NULL UNIQUE,
+  mime         TEXT,
+  size         INTEGER NOT NULL,
+  status       TEXT NOT NULL,       -- 'indexed' | 'failed' | 'unsupported'
+  engine       TEXT,
+  extracted_at TEXT,
+  error        TEXT,
+  attempts     INTEGER NOT NULL DEFAULT 0
+)";
+
+fn init_schema(conn: &mut Connection) -> Result<(), String> {
   refuse_newer(conn, LIBRARY_SCHEMA, "library")?;
-  conn
-    .execute_batch(&format!(
-      "CREATE TABLE IF NOT EXISTS documents (
-         name         TEXT PRIMARY KEY,
-         mime         TEXT,
-         size         INTEGER NOT NULL,
-         status       TEXT NOT NULL,       -- 'indexed' | 'failed' | 'unsupported'
-         engine       TEXT,
-         extracted_at TEXT,
-         error        TEXT,
-         attempts     INTEGER NOT NULL DEFAULT 0
-       );
-       CREATE INDEX IF NOT EXISTS documents_status ON documents(status);
-       CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
-         name UNINDEXED, body, tokenize='unicode61 remove_diacritics 2'
-       );
-       PRAGMA user_version={LIBRARY_SCHEMA};",
-    ))
-    .map_err(|e| format!("Could not prepare the search schema: {e}"))
+  let failed = |e: rusqlite::Error| format!("Could not prepare the search schema: {e}");
+  let tx = conn.transaction().map_err(failed)?;
+  if text_keyed_by_name(&tx).map_err(failed)? {
+    key_text_by_document_id(&tx).map_err(failed)?;
+  }
+  tx.execute_batch(&format!(
+    "CREATE TABLE IF NOT EXISTS documents {DOCUMENTS};
+     CREATE INDEX IF NOT EXISTS documents_status ON documents(status);
+     CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
+       name UNINDEXED, body, tokenize='unicode61 remove_diacritics 2'
+     );
+     PRAGMA user_version={LIBRARY_SCHEMA};",
+  ))
+  .map_err(failed)?;
+  tx.commit().map_err(failed)
+}
+
+/// A version 1 index: `documents` has no `id`, and text is found by name.
+fn text_keyed_by_name(conn: &Connection) -> rusqlite::Result<bool> {
+  let columns: Vec<String> =
+    conn.prepare("SELECT name FROM pragma_table_info('documents')")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+  Ok(!columns.is_empty() && !columns.iter().any(|c| c == "id"))
+}
+
+/// Gives each document the rowid of its text, newest if a name has several, and drops
+/// text no document owns. Documents without text are numbered after every kept rowid,
+/// so none of them claims a stray row.
+fn key_text_by_document_id(tx: &Transaction) -> rusqlite::Result<()> {
+  tx.execute_batch(&format!(
+    "CREATE TEMP TABLE text_ids AS
+       SELECT name, max(rowid) AS id FROM doc_fts WHERE name IN (SELECT name FROM documents) GROUP BY name;
+     DELETE FROM doc_fts WHERE rowid NOT IN (SELECT id FROM temp.text_ids);
+     CREATE TABLE documents_keyed {DOCUMENTS};
+     INSERT INTO documents_keyed(id, name, mime, size, status, engine, extracted_at, error, attempts)
+       SELECT t.id, d.name, d.mime, d.size, d.status, d.engine, d.extracted_at, d.error, d.attempts
+         FROM documents d JOIN temp.text_ids t ON t.name = d.name;
+     INSERT INTO documents_keyed(name, mime, size, status, engine, extracted_at, error, attempts)
+       SELECT name, mime, size, status, engine, extracted_at, error, attempts
+         FROM documents WHERE name NOT IN (SELECT name FROM temp.text_ids);
+     DROP TABLE temp.text_ids;
+     DROP TABLE documents;
+     ALTER TABLE documents_keyed RENAME TO documents;",
+  ))
 }
 
 /// One file's place in the index, for the Objects view's badge.
@@ -210,22 +249,25 @@ pub(crate) fn write_outcome(tx: &Transaction, name: &str, size: u64, outcome: &E
   // The `mime` column is left for a later use (a search UI grouping by type); nothing
   // reads it today, so it isn't written — the extractors dispatch on magic bytes, not
   // a stored mime.
-  tx.execute(
-    "INSERT INTO documents(name, size, status, engine, extracted_at, error, attempts)
-       VALUES(?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?5,
-              CASE WHEN ?3='failed' THEN 1 ELSE 0 END)
-     ON CONFLICT(name) DO UPDATE SET
-       size=excluded.size, status=excluded.status, engine=excluded.engine,
-       extracted_at=excluded.extracted_at, error=excluded.error,
-       attempts=CASE WHEN excluded.status='failed' THEN documents.attempts + 1 ELSE 0 END",
-    params![name, size as i64, status, ENGINE, error],
-  )
-  .map_err(|e| format!("Could not record the document: {e}"))?;
+  let id: i64 = tx
+    .query_row(
+      "INSERT INTO documents(name, size, status, engine, extracted_at, error, attempts)
+         VALUES(?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?5,
+                CASE WHEN ?3='failed' THEN 1 ELSE 0 END)
+       ON CONFLICT(name) DO UPDATE SET
+         size=excluded.size, status=excluded.status, engine=excluded.engine,
+         extracted_at=excluded.extracted_at, error=excluded.error,
+         attempts=CASE WHEN excluded.status='failed' THEN documents.attempts + 1 ELSE 0 END
+       RETURNING id",
+      params![name, size as i64, status, ENGINE, error],
+      |r| r.get(0),
+    )
+    .map_err(|e| format!("Could not record the document: {e}"))?;
 
-  tx.execute("DELETE FROM doc_fts WHERE name=?1", [name])
+  tx.execute("DELETE FROM doc_fts WHERE rowid=?1", [id])
     .map_err(|e| format!("Could not clear old index text: {e}"))?;
   if let ExtractOutcome::Text(body) = outcome {
-    tx.execute("INSERT INTO doc_fts(name, body) VALUES(?1, ?2)", params![name, body])
+    tx.execute("INSERT INTO doc_fts(rowid, name, body) VALUES(?1, ?2, ?3)", params![id, name, body])
       .map_err(|e| format!("Could not index the text: {e}"))?;
   }
   Ok(status.to_string())
@@ -311,25 +353,28 @@ fn pending_media(app: &AppHandle, db: &LibraryDb) -> Result<Vec<String>, String>
 /// sweeps blobs. Reconciles against what's on disk, not against boards, so it stays
 /// board-agnostic like the rest of the index.
 pub(crate) fn prune_documents(app: &AppHandle, db: &LibraryDb) -> Result<u32, String> {
-  let keep: std::collections::HashSet<String> = media_names(app)?.into_iter().collect();
-  let mut guard = db.lock_db()?;
-  let tx = guard.transaction().map_err(|e| format!("Could not prune the index: {e}"))?;
-  let names: Vec<String> = {
-    let mut stmt = tx.prepare("SELECT name FROM documents").map_err(|e| format!("Could not read the index: {e}"))?;
-    let names = stmt
-      .query_map([], |r| r.get::<_, String>(0))
+  let keep: HashSet<String> = media_names(app)?.into_iter().collect();
+  prune_absent(&mut *db.lock_db()?, &keep)
+}
+
+fn prune_absent(conn: &mut Connection, keep: &HashSet<String>) -> Result<u32, String> {
+  let tx = conn.transaction().map_err(|e| format!("Could not prune the index: {e}"))?;
+  let documents: Vec<(i64, String)> = {
+    let mut stmt = tx.prepare("SELECT id, name FROM documents").map_err(|e| format!("Could not read the index: {e}"))?;
+    let documents = stmt
+      .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
       .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
       .map_err(|e| format!("Could not read the index: {e}"))?;
-    names
+    documents
   };
   let mut removed = 0u32;
   {
-    let mut del_doc = tx.prepare("DELETE FROM documents WHERE name=?1").map_err(|e| format!("Could not prune: {e}"))?;
-    let mut del_fts = tx.prepare("DELETE FROM doc_fts WHERE name=?1").map_err(|e| format!("Could not prune: {e}"))?;
-    for name in &names {
+    let mut del_doc = tx.prepare("DELETE FROM documents WHERE id=?1").map_err(|e| format!("Could not prune: {e}"))?;
+    let mut del_fts = tx.prepare("DELETE FROM doc_fts WHERE rowid=?1").map_err(|e| format!("Could not prune: {e}"))?;
+    for (id, name) in &documents {
       if !keep.contains(name) {
-        del_doc.execute([name]).map_err(|e| format!("Could not prune a document: {e}"))?;
-        del_fts.execute([name]).map_err(|e| format!("Could not prune index text: {e}"))?;
+        del_doc.execute([id]).map_err(|e| format!("Could not prune a document: {e}"))?;
+        del_fts.execute([id]).map_err(|e| format!("Could not prune index text: {e}"))?;
         removed += 1;
       }
     }
@@ -362,8 +407,8 @@ mod tests {
   use super::*;
 
   fn mem() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    init_schema(&conn).unwrap();
+    let mut conn = Connection::open_in_memory().unwrap();
+    init_schema(&mut conn).unwrap();
     conn
   }
 
@@ -446,6 +491,88 @@ mod tests {
     assert_eq!(fts_query("   "), "");
     let conn = mem();
     assert!(run_search(&conn, "  ", 10).unwrap().is_empty());
+  }
+
+  /// Version 1 as it shipped: text found by name, not by a key.
+  fn version_1(path: &Path) {
+    Connection::open(path)
+      .unwrap()
+      .execute_batch(
+        "CREATE TABLE documents (
+           name TEXT PRIMARY KEY, mime TEXT, size INTEGER NOT NULL, status TEXT NOT NULL,
+           engine TEXT, extracted_at TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE INDEX documents_status ON documents(status);
+         CREATE VIRTUAL TABLE doc_fts USING fts5(name UNINDEXED, body, tokenize='unicode61 remove_diacritics 2');
+         INSERT INTO doc_fts(rowid, name, body) VALUES (1, 'gone.pdf', 'stray words'), (2, 'aa.pdf', 'alpha words'),
+           (3, 'cc.pdf', 'stale words'), (4, 'cc.pdf', 'fresh words'), (5, 'zz.pdf', 'orphan words');
+         INSERT INTO documents(name, size, status, attempts) VALUES ('bb.png', 3, 'unsupported', 0),
+           ('aa.pdf', 1, 'indexed', 0), ('cc.pdf', 2, 'indexed', 0), ('dd.pdf', 4, 'failed', 2);
+         PRAGMA user_version=1;",
+      )
+      .unwrap();
+  }
+
+  fn text_of(conn: &Connection, name: &str) -> Option<String> {
+    conn
+      .query_row("SELECT f.body FROM documents d LEFT JOIN doc_fts f ON f.rowid = d.id WHERE d.name = ?1", [name], |r| r.get(0))
+      .unwrap()
+  }
+
+  #[test]
+  fn a_version_1_index_keys_each_text_by_its_document() {
+    let dir = crate::board_store::temp_dir_for("library-v1");
+    version_1(&dir.join("library.sqlite"));
+    let mut conn = open_at(&dir).unwrap().0.into_inner().unwrap();
+
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+    assert_eq!(version, LIBRARY_SCHEMA);
+    let texts: Vec<_> = ["aa.pdf", "bb.png", "cc.pdf", "dd.pdf"].map(|n| text_of(&conn, n)).into();
+    assert_eq!(texts, [Some("alpha words".into()), None, Some("fresh words".into()), None]);
+    let rows: i64 = conn.query_row("SELECT count(*) FROM doc_fts", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 2, "the stray, stale and orphan rows are gone");
+    let attempts: i64 = conn.query_row("SELECT attempts FROM documents WHERE name='dd.pdf'", [], |r| r.get(0)).unwrap();
+    assert_eq!(attempts, 2);
+    assert!(run_search(&conn, "stray", 10).unwrap().is_empty());
+
+    index(&mut conn, "bb.png", ExtractOutcome::Text("now readable".into()));
+    index(&mut conn, "cc.pdf", ExtractOutcome::Text("rewritten".into()));
+    assert_eq!(text_of(&conn, "bb.png").as_deref(), Some("now readable"));
+    assert_eq!(run_search(&conn, "rewritten", 10).unwrap()[0].name, "cc.pdf");
+    assert!(run_search(&conn, "fresh", 10).unwrap().is_empty());
+    assert_eq!(text_of(&conn, "aa.pdf").as_deref(), Some("alpha words"));
+    drop(conn);
+    drop(open_at(&dir).unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_migration_that_fails_leaves_version_1_as_it_was() {
+    let dir = crate::board_store::temp_dir_for("library-v1-failed");
+    let path = dir.join("library.sqlite");
+    version_1(&path);
+    Connection::open(&path).unwrap().execute_batch("CREATE TABLE documents_keyed (x);").unwrap();
+    assert!(open_at(&dir).is_err());
+    let conn = Connection::open(&path).unwrap();
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+    let rows: i64 = conn.query_row("SELECT count(*) FROM doc_fts", [], |r| r.get(0)).unwrap();
+    assert!(text_keyed_by_name(&conn).unwrap());
+    assert_eq!((version, rows), (1, 5));
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_prune_drops_the_document_and_its_text_by_key() {
+    let mut conn = mem();
+    index(&mut conn, "aa.pdf", ExtractOutcome::Text("kept words".into()));
+    index(&mut conn, "bb.pdf", ExtractOutcome::Text("swept words".into()));
+    index(&mut conn, "cc.png", ExtractOutcome::Unsupported);
+    assert_eq!(prune_absent(&mut conn, &HashSet::from(["aa.pdf".to_string()])).unwrap(), 2);
+    let rows: i64 = conn.query_row("SELECT count(*) FROM doc_fts", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 1);
+    assert_eq!(read_statuses(&conn).unwrap().len(), 1);
+    assert!(run_search(&conn, "swept", 10).unwrap().is_empty());
+    assert_eq!(run_search(&conn, "kept", 10).unwrap().len(), 1);
   }
 
   #[test]

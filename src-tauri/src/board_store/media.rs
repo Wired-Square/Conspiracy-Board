@@ -566,6 +566,21 @@ mod tests {
     let _ = std::fs::remove_dir_all(&dir);
   }
 
+  #[test]
+  fn a_board_that_fails_to_read_or_is_missing_stops_the_sweep_and_is_left_alone() {
+    let (dir, boards, media) = library("gc-unreadable", &["kept.png", "orphan.pdf"], &[]);
+    save_board_file(&boards.join("brd_a.sqlite"), Some(&["kept.png"]));
+    std::fs::write(boards.join("brd_bad.sqlite"), b"not a database").unwrap();
+
+    let listed = ["brd_a".into(), "brd_bad".into(), "brd_away".into()];
+    let mut outcome = gc(&boards, &listed, &media, GC_MIN_AGE).unwrap();
+    outcome.unknown.sort();
+    assert_eq!(outcome, GcOutcome { removed: 0, unknown: vec!["brd_away".into(), "brd_bad".into()] });
+    assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
+    assert_eq!(std::fs::read(boards.join("brd_bad.sqlite")).unwrap(), b"not a database");
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
   fn set_old(path: &Path) {
     let old = std::time::SystemTime::now() - Duration::from_secs(3600);
     std::fs::OpenOptions::new().write(true).open(path).unwrap().set_modified(old).unwrap();

@@ -5,12 +5,12 @@
 
 use std::path::Path;
 
-use rusqlite::params;
 use serde_json::{json, Value};
 
 use crate::board_store::board_db::{create_listed_board, read_board_db};
 use crate::board_store::media::{media_ext, media_name};
-use crate::library_index::{open_at, ENGINE};
+use crate::extract::ExtractOutcome;
+use crate::library_index::{open_at, write_outcome};
 use crate::schema::parse_board;
 
 pub(crate) struct Shape {
@@ -244,18 +244,12 @@ pub(crate) fn seed_library(dir: &Path, shape: &Shape, seed: u64) -> Result<(), S
 
   let mut conn = library.lock_db()?;
   let tx = conn.transaction().map_err(|e| e.to_string())?;
-  {
-    // Not `write_outcome`: its delete scans the whole full-text table, once per file.
-    let mut document = tx
-      .prepare("INSERT INTO documents(name, size, status, engine, attempts) VALUES(?1, ?2, 'indexed', ?3, 0)")
-      .map_err(|e| e.to_string())?;
-    let mut text = tx.prepare("INSERT INTO doc_fts(name, body) VALUES(?1, ?2)").map_err(|e| e.to_string())?;
-    for (name, bytes) in &kept {
-      document.execute(params![name, bytes.len() as i64, ENGINE]).map_err(|e| e.to_string())?;
-      if media_ext(name) != "bmp" {
-        text.execute(params![name, String::from_utf8_lossy(bytes)]).map_err(|e| e.to_string())?;
-      }
-    }
+  for (name, bytes) in &kept {
+    let outcome = match media_ext(name) {
+      "bmp" => ExtractOutcome::Unsupported,
+      _ => ExtractOutcome::Text(String::from_utf8_lossy(bytes).into_owned()),
+    };
+    write_outcome(&tx, name, bytes.len() as u64, &outcome)?;
   }
   tx.commit().map_err(|e| e.to_string())
 }

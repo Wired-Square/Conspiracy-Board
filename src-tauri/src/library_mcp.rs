@@ -362,7 +362,7 @@ fn search(library: &Path, query: &str, limit: u32) -> Result<Value, String> {
 fn media_text(library: &Path, name: &str) -> Result<Value, String> {
   let (status, text): (String, Option<String>) = index(library)?
     .query_row(
-      "SELECT d.status, f.body FROM documents d LEFT JOIN doc_fts f ON f.name = d.name WHERE d.name = ?1",
+      "SELECT d.status, f.body FROM documents d LEFT JOIN doc_fts f ON f.rowid = d.id WHERE d.name = ?1",
       [name],
       |r| Ok((r.get(0)?, r.get(1)?)),
     )
