@@ -6,6 +6,7 @@ import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
 import { autofocus } from '../ui/autofocus';
 import { fromStore } from '@wired-square/store/solid';
+import { KindIcon } from '../ui/KindIcon';
 
 /** A "New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */
@@ -78,7 +79,7 @@ export function EntityPickerDialog(props: Props) {
                   id: k,
                   label: () => (
                     <>
-                      <Show when={KIND_META[k].icon}>{(icon) => <span aria-hidden="true">{icon()} </span>}</Show>
+                      <KindIcon kind={k} class="inline-glyph--lead" />
                       {KIND_META[k].label}
                       <span class="entity-picker__tab-count">{counts().get(k) ?? 0}</span>
                     </>
@@ -120,9 +121,7 @@ export function EntityPickerDialog(props: Props) {
                   {(c) => (
                     <li>
                       <button type="button" class="app-menu__item entity-picker__row" onClick={() => pick(c.id)}>
-                        <Show when={KIND_META[c.kind].icon}>
-                          <span class="entity-picker__row-icon">{KIND_META[c.kind].icon}</span>
-                        </Show>
+                        <KindIcon kind={c.kind} class="entity-picker__row-icon" />
                         <span class="entity-picker__row-title">{c.title || 'Untitled'}</span>
                       </button>
                     </li>

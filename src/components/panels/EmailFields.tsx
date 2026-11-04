@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import { Button, Field } from '@wired-square/kit';
+import { envelope, paperclip } from '@wired-square/icons/solid';
 import type { Card, EmailAddress, EmailMeta } from '../../types/board';
 import {
   addressDomain,
@@ -117,11 +118,17 @@ function EmailExtras(props: { meta: EmailMeta }) {
                       bytes we never got (an older import). */}
                   <Show
                     when={a.file}
-                    fallback={<span class="attach-list__item attach-list__item--dead">📎 {a.name}</span>}
+                    fallback={
+                      <span class="attach-list__item attach-list__item--dead">
+                        {paperclip({ class: 'inline-glyph inline-glyph--lead' })}
+                        {a.name}
+                      </span>
+                    }
                   >
                     {(file) => (
                       <Button tone="plain" class="attach-list__item" onClick={() => void storage.openMedia(file())}>
-                        📎 {a.name}
+                        {paperclip({ class: 'inline-glyph' })}
+                        {a.name}
                       </Button>
                     )}
                   </Show>
@@ -139,7 +146,8 @@ function EmailExtras(props: { meta: EmailMeta }) {
           <Show when={props.meta.emlFile}>
             {(eml) => (
               <Button tone="plain" onClick={() => void storage.openMedia(eml())}>
-                ✉ Open email
+                {envelope({ class: 'inline-glyph' })}
+                Open email
               </Button>
             )}
           </Show>

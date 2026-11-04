@@ -4,6 +4,7 @@ import { emptyCallMeta, emptyMessageMeta } from './comms';
 import { emptyOrgMeta, emptyPersonMeta } from './entities';
 import type { View } from '../types/view';
 import type { MediaIconType } from './mediaIcon';
+import type { IconName } from '@wired-square/icons';
 
 // Everything the app needs to know about a kind, in one table.
 //
@@ -27,20 +28,21 @@ import type { MediaIconType } from './mediaIcon';
  */
 export type Register = 'actor' | 'record' | 'argument';
 
+export type KindGlyph = Extract<IconName, 'bust' | 'portico' | 'page' | 'envelope' | 'speech-bubble' | 'handset' | 'calendar'>;
+
 type KindMeta = {
   label: string;
   register: Register;
   /** Shown under the kind select. Carries the event-vs-evidence rule. */
   hint: string;
-  /** Prefix for the card's kind line. Absent means the card says nothing. */
-  icon?: string;
+  /** The glyph beside the kind's name in the editors and pickers (see ui/KindIcon). */
+  icon: KindGlyph | null;
   /**
    * The list/timeline glyph (an SVG, see ui/MediaIcon), for the surfaces that draw
    * one from a card's kind — the record and the timeline. `null` where the kind
    * shows none there (the actors don't appear; an event has its own milestone
    * marker; evidence carries none). Required, not optional, so a new kind can't be
-   * added without deciding. Distinct from `icon`, the emoji still used on board
-   * cards and in the editors.
+   * added without deciding.
    */
   mediaIcon: MediaIconType | null;
   /** The payload this kind needs to be editable. Absent means it needs none. */
@@ -51,7 +53,7 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   person: {
     label: 'Person',
     register: 'actor',
-    icon: '👤',
+    icon: 'bust',
     mediaIcon: null,
     hint: 'Someone. Their emails find them by address.',
     emptyPayload: () => ({ person: emptyPersonMeta() }),
@@ -59,7 +61,7 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   organisation: {
     label: 'Organisation',
     register: 'actor',
-    icon: '🏛',
+    icon: 'portico',
     mediaIcon: null,
     hint: 'A company or body. Its emails find it by domain.',
     emptyPayload: () => ({ organisation: emptyOrgMeta() }),
@@ -67,7 +69,7 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   document: {
     label: 'Document',
     register: 'record',
-    icon: '📄',
+    icon: 'page',
     mediaIcon: 'document',
     hint: 'Part of the record — a warrant, a filing, an invoice. It exists.',
     emptyPayload: () => ({ document: {} }),
@@ -75,7 +77,7 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   email: {
     label: 'Email',
     register: 'record',
-    icon: '✉',
+    icon: 'envelope',
     mediaIcon: 'email',
     hint: 'A document that arrived by mail.',
     emptyPayload: () => ({ email: emptyEmailMeta() }),
@@ -83,7 +85,7 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   message: {
     label: 'Message',
     register: 'record',
-    icon: '💬',
+    icon: 'speech-bubble',
     mediaIcon: 'message',
     hint: 'A text message. Its from/to find people by number; a screenshot justifies it.',
     emptyPayload: () => ({ message: emptyMessageMeta() }),
@@ -91,22 +93,24 @@ export const KIND_META: Record<CardKind, KindMeta> = {
   call: {
     label: 'Call',
     register: 'record',
-    icon: '📞',
+    icon: 'handset',
     mediaIcon: 'call',
     hint: 'A phone call. Its from/to find people by number; a screenshot justifies it.',
     emptyPayload: () => ({ call: emptyCallMeta() }),
   },
-  // No icon: the argument is what a board is mostly made of, and a badge on the
-  // common case would leave the badge nothing to mean.
   event: {
     label: 'Event',
     register: 'argument',
+    icon: 'calendar',
     mediaIcon: null,
     hint: 'Something happened, at a time. Graded: did it happen?',
   },
+  // No icon: the argument is what a board is mostly made of, and a badge on the
+  // common case would leave the badge nothing to mean.
   evidence: {
     label: 'Evidence',
     register: 'argument',
+    icon: null,
     mediaIcon: null,
     hint: 'Something is so, with no moment. Graded: is it so?',
   },

@@ -6,6 +6,7 @@ import { CARD_KINDS, KIND_META } from '../../lib/kinds';
 import { cardMatches, normaliseQuery } from '../../lib/search';
 import { formatOccurredAt, dayKey } from '../../lib/dates';
 import { autofocus } from '../ui/autofocus';
+import { KindIcon } from '../ui/KindIcon';
 
 /** One reusable picture and every card that uses it — pictures are content-addressed,
  *  so a shared image (a group photo) lists all its objects. `cards[0]` is the
@@ -61,13 +62,11 @@ export function ObjectPickerDialog(props: Props) {
   // "All" first, then only the kinds that actually have a picture — an empty tab is
   // a dead end here (unlike the link picker, nothing is created from this one). Each
   // tab is a ready-to-render descriptor, so the JSX below has no per-kind branching.
-  const tab = (id: CardKind | 'all', label: string, count: number, icon?: string) => ({
+  const tab = (id: CardKind | 'all', label: string, count: number) => ({
     id,
     label: () => (
       <>
-        <Show when={icon}>
-          <span aria-hidden="true">{icon} </span>
-        </Show>
+        {id !== 'all' && <KindIcon kind={id} class="inline-glyph--lead" />}
         {label}
         <span class="entity-picker__tab-count">{count}</span>
       </>
@@ -76,7 +75,7 @@ export function ObjectPickerDialog(props: Props) {
   const tabs = createMemo(() => [
     tab('all', 'All', props.objects.length),
     ...CARD_KINDS.filter((k) => (counts().get(k) ?? 0) > 0).map((k) =>
-      tab(k, KIND_META[k].label, counts().get(k) ?? 0, KIND_META[k].icon),
+      tab(k, KIND_META[k].label, counts().get(k) ?? 0),
     ),
   ]);
 
@@ -146,9 +145,7 @@ export function ObjectPickerDialog(props: Props) {
                 <div class="object-picker__preview">
                   <img src={shown().src} alt={rep().title} />
                   <span class="object-picker__caption">
-                    <Show when={KIND_META[rep().kind].icon}>
-                      <span aria-hidden="true">{KIND_META[rep().kind].icon} </span>
-                    </Show>
+                    <KindIcon kind={rep().kind} class="inline-glyph--lead" />
                     {rep().title || 'Untitled'}
                     <Show when={shared() > 0}>
                       <span class="object-picker__more"> +{shared()}</span>

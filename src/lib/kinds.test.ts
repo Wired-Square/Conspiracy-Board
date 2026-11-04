@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ICON_NAMES } from '@wired-square/icons';
 import type { Card, CardKind } from '../types/board';
 import {
   CARD_KINDS,
@@ -37,6 +38,23 @@ describe('CARD_KINDS', () => {
     for (const kind of ALL) {
       expect(KIND_META[kind].label).toBeTruthy();
       expect(KIND_META[kind].hint).toBeTruthy();
+    }
+  });
+
+  it('gives every kind but evidence a glyph from the icon library', () => {
+    expect(Object.fromEntries(ALL.map((k) => [k, KIND_META[k].icon]))).toEqual({
+      person: 'bust',
+      organisation: 'portico',
+      document: 'page',
+      email: 'envelope',
+      message: 'speech-bubble',
+      call: 'handset',
+      event: 'calendar',
+      evidence: null,
+    });
+    for (const kind of ALL) {
+      const icon = KIND_META[kind].icon;
+      if (icon) expect(ICON_NAMES).toContain(icon);
     }
   });
 
