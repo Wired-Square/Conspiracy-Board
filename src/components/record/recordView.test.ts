@@ -69,3 +69,51 @@ test('a hidden cluster hides its rows', () => {
   }));
   expect(titles()).toEqual(['linked']);
 });
+
+const many = (n: number) => ({
+  cards: [card('p', { kind: 'person' }), ...Array.from({ length: n }, (_, i) => card(`d${i}`))],
+  connections: Array.from({ length: n / 2 }, (_, i) => ({ id: `k${i}`, source: `d${i * 2}`, target: 'p' }) as never),
+});
+
+test('a long record draws only the rows in view, and the loose filter and selection still apply', () => {
+  boardStore.setState(many(500));
+  const drawn = host.querySelectorAll('.record-row').length;
+  expect(drawn).toBeGreaterThan(0);
+  expect(drawn).toBeLessThan(100);
+  expect(host.querySelector('.record__count')?.textContent).toBe('500 items · 250 not linked up');
+  const [, after] = [...host.querySelectorAll<HTMLElement>('.record__spacer')].map((s) => parseFloat(s.style.height));
+  expect(after).toBeGreaterThan(400 * 50);
+
+  host.querySelector<HTMLInputElement>('.record__filter input')!.click();
+  expect([...host.querySelectorAll('.record-row')].every((r) => r.classList.contains('is-loose'))).toBe(true);
+  const first = host.querySelector<HTMLButtonElement>('.record-row')!;
+  first.click();
+  expect(selectCard).toHaveBeenCalledWith(first.title);
+  expect(host.querySelector('.record-row')!.classList.contains('is-selected')).toBe(true);
+});
+
+test('leaving the record and coming back keeps its scroll position', () => {
+  const scrolled = new WeakMap<Element, number>();
+  const real = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
+  Object.defineProperty(Element.prototype, 'scrollTop', {
+    configurable: true,
+    get() {
+      return scrolled.get(this) ?? 0;
+    },
+    set(v: number) {
+      scrolled.set(this, v);
+    },
+  });
+  try {
+    boardStore.setState({ ...many(500), currentBoardId: 'b1' });
+    dispose();
+    dispose = render(() => RecordView(), host);
+    host.querySelector('.record__list')!.scrollTop = 6000;
+    dispose();
+    dispose = render(() => RecordView(), host);
+    expect(host.querySelector('.record__list')!.scrollTop).toBe(6000);
+    expect(host.querySelector<HTMLButtonElement>('.record-row')!.title).not.toBe('d0');
+  } finally {
+    Object.defineProperty(Element.prototype, 'scrollTop', real);
+  }
+});

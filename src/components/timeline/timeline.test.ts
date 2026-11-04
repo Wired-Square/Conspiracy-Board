@@ -111,3 +111,31 @@ test('a selection elsewhere lights its chip', () => {
   expect(chip('later')!.classList.contains('is-selected')).toBe(true);
   expect(chip('drawn')!.classList.contains('is-selected')).toBe(false);
 });
+
+const daily = (n: number) =>
+  Array.from({ length: n }, (_, i) =>
+    card(`mail-${i}`, { kind: 'email', occurredAt: new Date(Date.UTC(2020, 0, 1 + i)).toISOString() }),
+  );
+
+test('a long strip draws only the days in view, holding the rest as spacers', () => {
+  boardStore.setState({ cards: daily(400) });
+  const drawn = host.querySelectorAll('.timeline-item').length;
+  expect(drawn).toBeGreaterThan(0);
+  expect(drawn).toBeLessThan(40);
+  const [before, after] = [...host.querySelectorAll<HTMLElement>('.timeline__spacer')].map((s) => parseFloat(s.style.width));
+  expect(before).toBe(0);
+  expect(after).toBeGreaterThan(300 * 150);
+});
+
+test('the event controls draw and centre a chip that was out of view', async () => {
+  boardStore.setState({ cards: [...daily(400), card('finale', { kind: 'event', occurredAt: '2021-06-01T00:00:00.000Z' })] });
+  expect(chip('finale')).toBeNull();
+  const strip = host.querySelector<HTMLElement>('.timeline__strip')!;
+  let scrolled = 0;
+  Object.defineProperty(strip, 'scrollLeft', { get: () => scrolled, set: (v: number) => (scrolled = v) });
+  button('End').click();
+  await new Promise((r) => setTimeout(r, 100));
+  expect(scrolled).toBeGreaterThan(300 * 150);
+  expect(chip('finale')).not.toBeNull();
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+});
