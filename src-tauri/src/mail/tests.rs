@@ -7,6 +7,8 @@ const ATTACHMENTS: &[u8] = include_bytes!("../../tests/fixtures/mail/attachments
 const APPLE_INLINE: &[u8] = include_bytes!("../../tests/fixtures/mail/apple-inline.eml");
 const HTML_ONLY: &[u8] = include_bytes!("../../tests/fixtures/mail/html-only.eml");
 const MIXED_CHARSETS: &[u8] = include_bytes!("../../tests/fixtures/mail/mixed-charsets.mbox");
+const EMLX: &[u8] = include_bytes!("../../tests/fixtures/mail/sample.emlx");
+const PARTIAL_EMLX: &[u8] = include_bytes!("../../tests/fixtures/mail/sample.partial.emlx");
 
 /// A media store in memory: what was kept, by the name it was kept under.
 #[derive(Default)]
@@ -95,6 +97,37 @@ mod eml {
       notes,
       "# Top story\n\nRead [the piece](https://x.example/a?b=1&c=2) now.\n\n- One\n\n- Two & three\n\nWrite to the editor or see https://x.example."
     );
+  }
+}
+
+mod emlx_files {
+  use super::*;
+
+  #[test]
+  fn reads_the_message_and_keeps_it_as_an_eml_without_the_plist() {
+    let (out, kept) = parse_named("12345.emlx", EMLX);
+    assert!(out.errors.is_empty());
+    let d = &out.drafts[0];
+    assert_eq!((d.title.as_str(), d.email.message_id.as_deref()), ("The ledger", Some("<emlx-1@bluecanary.example>")));
+    assert_eq!(d.occurred_at, UtcInstant::new("2024-11-15T01:32:11.000Z".into()));
+    assert_eq!(d.email.attachments[0].name, "ledger.pdf");
+    let eml = kept.bytes(d.email.eml_file.as_deref().unwrap());
+    assert!(eml.starts_with(b"From: ") && eml.ends_with(b"--b1--\n"));
+  }
+
+  #[test]
+  fn a_partial_emlx_imports_what_it_holds() {
+    let (out, _) = parse_named("12346.partial.emlx", PARTIAL_EMLX);
+    assert!(out.errors.is_empty());
+    let d = &out.drafts[0];
+    assert_eq!(d.title, "The ledger, again");
+    assert!(d.notes.starts_with("Sent the ledger again."));
+  }
+
+  #[test]
+  fn a_file_without_the_length_line_is_an_error_not_a_card() {
+    let (out, _) = parse_named("broken.emlx", EML);
+    assert_eq!((out.drafts.len(), out.errors.len()), (0, 1));
   }
 }
 

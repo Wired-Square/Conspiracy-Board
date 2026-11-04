@@ -4,6 +4,7 @@
 //! Each message is parsed from its own bytes, so its declared charset is honoured;
 //! an mbox is split on bytes too (`mbox`), never decoded whole.
 
+mod emlx;
 mod html;
 mod mbox;
 
@@ -16,6 +17,7 @@ use crate::board_store::media::{media_store, read_media, Store};
 use crate::file_types::{ext_of, file_name};
 use crate::schema::{CardKind, DatePrecision, EmailAddress, EmailAttachment, EmailMeta, UtcInstant};
 
+use emlx::is_emlx;
 use mbox::looks_like_mbox;
 
 /// A card's notes are a note on a corkboard, not an archive of the message, which is
@@ -211,7 +213,12 @@ fn parse_all(raws: &[Vec<u8>], error: impl Fn(usize, String) -> String, store: &
 /// A picked or dropped file, sniffed rather than trusted by its extension: a dragged
 /// mbox may be named .txt.
 pub fn parse_file(name: &str, bytes: &[u8], store: &mut impl Store, progress: &mut impl FnMut(usize, usize)) -> EmailParse {
-  if looks_like_mbox(bytes) || name.to_ascii_lowercase().ends_with(".mbox") {
+  if is_emlx(name) {
+    let Some(message) = emlx::message(bytes) else {
+      return EmailParse { drafts: vec![], errors: vec![format!("{name} — Not an Apple Mail message")] };
+    };
+    parse_all(&[message.to_vec()], |_, e| format!("{name} — {e}"), store, progress)
+  } else if looks_like_mbox(bytes) || name.to_ascii_lowercase().ends_with(".mbox") {
     parse_all(&mbox::split_mbox(bytes), |i, e| format!("{name}: message {} — {e}", i + 1), store, progress)
   } else {
     parse_all(&[bytes.to_vec()], |_, e| format!("{name} — {e}"), store, progress)

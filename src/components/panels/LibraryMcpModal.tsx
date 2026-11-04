@@ -26,26 +26,34 @@ export function LibraryMcpModal() {
     }
   };
 
-  const toggle = (box: HTMLInputElement) => {
-    const on = box.checked;
-    box.checked = enabled();
-    void run(on ? libraryMcp.enable : libraryMcp.disable);
-  };
-
   return (
     <Dialog title="Library MCP" onClose={close}>
-      <p class="hint">Read-only access to this library for an AI client on this Mac.</p>
-      <label class="field field--check">
-        <input
-          class="app-switch library-mcp__toggle"
-          type="checkbox"
-          role="switch"
-          checked={enabled()}
-          disabled={busy()}
-          onChange={(e) => toggle(e.currentTarget)}
-        />
-        <span>Serve this library over MCP</span>
-      </label>
+      <p class="hint">
+        Access to this library for an AI client on this Mac. It can always read; it adds and edits only if you
+        allow it, and it can never delete.
+      </p>
+      <SwitchField
+        class="library-mcp__toggle"
+        label="Serve this library over MCP"
+        checked={enabled()}
+        disabled={busy()}
+        onFlip={(on) => void run(on ? libraryMcp.enable : libraryMcp.disable)}
+      />
+      <SwitchField
+        class="library-mcp__add"
+        label="Allow adding: import files, and create cards, connections, clusters and boards"
+        checked={status()?.allowAdd ?? false}
+        disabled={busy()}
+        onFlip={(on) => void run(() => libraryMcp.allowAdd(on))}
+      />
+      <SwitchField
+        class="library-mcp__edit"
+        label="Allow editing: change cards, connections, clusters and board titles"
+        checked={status()?.allowEdit ?? false}
+        disabled={busy()}
+        onFlip={(on) => void run(() => libraryMcp.allowEdit(on))}
+      />
+      <p class="hint">An edit to the open board can be undone like your own.</p>
       <Show when={status()?.error}>
         {(error) => (
           <Notice tone="bad" class="library-mcp__warn">
@@ -79,6 +87,28 @@ export function LibraryMcpModal() {
       </Show>
       <DialogActions onCancel={close} />
     </Dialog>
+  );
+}
+
+/** Shows the shell's answer, never the click: the box springs back until the status lands. */
+function SwitchField(props: { class: string; label: string; checked: boolean; disabled: boolean; onFlip: (on: boolean) => void }) {
+  const flip = (box: HTMLInputElement) => {
+    const on = box.checked;
+    box.checked = props.checked;
+    props.onFlip(on);
+  };
+  return (
+    <label class="field field--check">
+      <input
+        class={`app-switch ${props.class}`}
+        type="checkbox"
+        role="switch"
+        checked={props.checked}
+        disabled={props.disabled}
+        onChange={(e) => flip(e.currentTarget)}
+      />
+      <span>{props.label}</span>
+    </label>
   );
 }
 

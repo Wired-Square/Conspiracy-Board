@@ -85,6 +85,8 @@ pub fn run() {
       library_mcp::lifecycle::enable_library_mcp,
       library_mcp::lifecycle::disable_library_mcp,
       library_mcp::lifecycle::rotate_library_mcp_token,
+      library_mcp::lifecycle::allow_library_mcp_add,
+      library_mcp::lifecycle::allow_library_mcp_edit,
       menu::set_board_menu,
     ])
     .on_menu_event(menu::on_event)

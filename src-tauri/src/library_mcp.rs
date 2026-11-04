@@ -1,6 +1,6 @@
 //! The library MCP: a loopback server whose tools read the library straight from its
-//! files, never through the webview, and write nothing. Also the bring-up the dev
-//! harness (`mcp`) shares.
+//! files, never through the webview, and write only through the board session when a
+//! switch allows it (`writes`). Also the bring-up the dev harness (`mcp`) shares.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use wslib_mcp::http::{self, ClientPolicy, HostPolicy, HttpConfig};
 use wslib_mcp::result::{internal_error, ok_json, tool_error};
 use wslib_mcp::rmcp;
-use wslib_mcp::router::mark_read_only;
+use wslib_mcp::router::{compose, mark_read_only};
 use wslib_mcp::server::{ServerIdentity, ToolServer};
 use wslib_mcp::CancellationToken;
 use wslib_secret::{Encoding, Secret};
@@ -30,13 +30,29 @@ use crate::library_index::{run_search, DocHit};
 use crate::schema::{Board, Card, CardKind};
 
 pub(crate) mod lifecycle;
+mod writes;
+
+pub(crate) use writes::Host;
 
 pub(crate) const PORT: u16 = 8793;
 
-pub(crate) fn start(library: PathBuf, port: u16, token: String) -> Result<Listening, String> {
-  let tools = LibraryTools { library };
-  let router = Arc::new(LibraryTools::router());
-  let identity = LibraryTools::identity();
+/// Which of the write switches are on.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Allowed {
+  pub(crate) add: bool,
+  pub(crate) edit: bool,
+}
+
+pub(crate) fn start(
+  library: PathBuf,
+  host: Arc<dyn Host>,
+  allowed: Allowed,
+  port: u16,
+  token: String,
+) -> Result<Listening, String> {
+  let tools = LibraryTools { library, host };
+  let router = Arc::new(LibraryTools::router(allowed));
+  let identity = LibraryTools::identity(allowed);
   serve_loopback(port, token, move || ToolServer::new(tools.clone(), router.clone(), identity.clone()))
 }
 
@@ -89,22 +105,41 @@ pub(crate) fn random_token() -> Result<Secret, String> {
 #[derive(Clone)]
 struct LibraryTools {
   library: PathBuf,
+  host: Arc<dyn Host>,
 }
 
 impl LibraryTools {
-  fn router() -> ToolRouter<Self> {
-    let mut router = Self::read_router();
-    mark_read_only(&mut router);
-    router
+  fn router(allowed: Allowed) -> ToolRouter<Self> {
+    let mut read = Self::read_router();
+    mark_read_only(&mut read);
+    let add = allowed.add.then(|| writes::not_destructive(Self::add_router()));
+    let edit = allowed.edit.then(|| writes::not_destructive(Self::edit_router()));
+    compose(read, [add, edit])
   }
 
-  fn identity() -> ServerIdentity {
+  fn identity(allowed: Allowed) -> ServerIdentity {
+    let reads = "the Conspiracy library: its boards, their cards, connections and clusters, and the text \
+                 extracted from imported files.";
+    let instructions = match allowed {
+      Allowed { add: false, edit: false } => format!("Read-only access to {reads} Nothing here changes the library."),
+      Allowed { add, edit } => {
+        let may: Vec<_> = [
+          add.then_some("add to it: import files from disk, and create cards, connections, clusters and boards"),
+          edit.then_some("edit it: change cards, their positions and clusters, connections, clusters and board titles"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        format!(
+          "Access to {reads} You may also {}. Nothing here deletes anything. An edit to the board open in \
+           the app can be undone there.",
+          may.join(", and ")
+        )
+      }
+    };
     ServerIdentity::new("conspiracy-library", wslib_build_id::build_version!())
       .with_title("Conspiracy library")
-      .with_instructions(
-        "Read-only access to the Conspiracy library: its boards, their cards, connections and \
-         clusters, and the text extracted from imported files. Nothing here changes the library.",
-      )
+      .with_instructions(instructions)
   }
 
   async fn answer<T: Serialize + Send + 'static>(
@@ -112,11 +147,23 @@ impl LibraryTools {
     read: impl FnOnce(&Path) -> Result<T, String> + Send + 'static,
   ) -> Result<CallToolResult, ErrorData> {
     let library = self.library.clone();
-    match tauri::async_runtime::spawn_blocking(move || read(&library)).await {
-      Ok(Ok(value)) => ok_json(value),
-      Ok(Err(e)) => Ok(tool_error(e)),
-      Err(e) => Err(internal_error(e.to_string())),
-    }
+    respond(tauri::async_runtime::spawn_blocking(move || read(&library)).await)
+  }
+
+  async fn write<T: Serialize + Send + 'static>(
+    &self,
+    write: impl FnOnce(&dyn Host) -> Result<T, String> + Send + 'static,
+  ) -> Result<CallToolResult, ErrorData> {
+    let host = self.host.clone();
+    respond(tauri::async_runtime::spawn_blocking(move || write(&*host)).await)
+  }
+}
+
+fn respond<T: Serialize, E: std::fmt::Display>(done: Result<Result<T, String>, E>) -> Result<CallToolResult, ErrorData> {
+  match done {
+    Ok(Ok(value)) => ok_json(value),
+    Ok(Err(e)) => Ok(tool_error(e)),
+    Err(e) => Err(internal_error(e.to_string())),
   }
 }
 
@@ -310,7 +357,7 @@ mod tests {
     card
   }
 
-  fn library(name: &str) -> PathBuf {
+  pub(super) fn library(name: &str) -> PathBuf {
     let dir = temp_dir_for(name);
     let db = open_at(&dir).unwrap();
     let mut conn = db.lock_db().unwrap();
@@ -345,13 +392,8 @@ mod tests {
   }
 
   #[test]
-  fn every_library_tool_is_read_only() {
-    let tools: Vec<_> = LibraryTools::router()
-      .list_all()
-      .into_iter()
-      .map(|t| (t.name.to_string(), t.annotations.and_then(|a| a.read_only_hint)))
-      .collect();
-    let expected = [
+  fn the_tools_listed_are_the_reads_and_what_the_switches_allow_and_none_deletes() {
+    const READ: [&str; 8] = [
       "board_summary",
       "get_card",
       "list_boards",
@@ -360,9 +402,28 @@ mod tests {
       "list_connections",
       "media_text",
       "search_library",
-    ]
-    .map(|name| (name.to_string(), Some(true)));
-    assert_eq!(tools, expected);
+    ];
+    const ADD: [&str; 5] = ["create_board", "create_card", "create_cluster", "create_connection", "import_file"];
+    const EDIT: [&str; 5] = ["move_cards", "rename_board", "update_card", "update_cluster", "update_connection"];
+    for (add, edit) in [(false, false), (true, false), (false, true), (true, true)] {
+      let listed: Vec<_> = LibraryTools::router(Allowed { add, edit })
+        .list_all()
+        .into_iter()
+        .map(|t| {
+          let hints = t.annotations.map(|a| (a.read_only_hint, a.destructive_hint));
+          (t.name.to_string(), hints)
+        })
+        .collect();
+      let reads = READ.map(|name| (name, Some((Some(true), None))));
+      let writes = [(add, ADD), (edit, EDIT)].into_iter().filter(|(on, _)| *on).flat_map(|(_, names)| names);
+      let mut expected: Vec<_> = reads
+        .into_iter()
+        .chain(writes.map(|name| (name, Some((Some(false), Some(false))))))
+        .map(|(name, hints)| (name.to_string(), hints))
+        .collect();
+      expected.sort();
+      assert_eq!(listed, expected, "add {add}, edit {edit}");
+    }
   }
 
   #[test]
@@ -445,6 +506,9 @@ mod tests {
   fn a_taken_port_is_an_error_not_another_port() {
     let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = taken.local_addr().unwrap().port();
-    assert!(start(PathBuf::new(), port, "t".into()).is_err());
+    let dir = temp_dir_for("mcp-taken-port");
+    let host = Arc::new(writes::Detached::new(&dir));
+    assert!(start(dir.clone(), host, Allowed::default(), port, "t".into()).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
   }
 }

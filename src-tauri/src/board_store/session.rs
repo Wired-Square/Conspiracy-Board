@@ -157,7 +157,7 @@ enum Logged {
   Unlogged,
 }
 
-type Outcome = Result<Option<DocChanged>, String>;
+pub(crate) type Outcome = Result<Option<DocChanged>, String>;
 
 impl Session {
   /// Reads only: the database must already exist, and opening it writes nothing.
@@ -520,14 +520,14 @@ fn media_refs(board: &Board) -> HashSet<&str> {
   board.cards.iter().flat_map(Card::media_files).collect()
 }
 
-fn now_utc() -> String {
+pub(crate) fn now_utc() -> String {
   let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
   crate::mail::iso_utc_millis(since.as_secs() as i64, since.subsec_millis())
 }
 
-/// Runs `edit` on the open board if it is `board_id`, then lists a content change in
-/// the board list and broadcasts it. The lock is held throughout, so events go out in
-/// commit order, and a quit waits while any edit is queued or running.
+/// Runs `edit` on the open board if it is `board_id`, then publishes the change. The
+/// lock is held throughout, so events go out in commit order, and a quit waits while
+/// any edit is queued or running.
 fn edit(
   app: &AppHandle,
   open: &OpenBoard,
@@ -539,19 +539,31 @@ fn edit(
   let mut guard = open.lock()?;
   let session = guard.as_mut().filter(|s| s.board_id == board_id).ok_or("That board isn't open.")?;
   let Some(change) = edit(session)? else { return Ok(()) };
+  publish(library, &change, |change| emit_doc_changed(app, change))
+}
+
+pub(crate) fn emit_doc_changed(app: &AppHandle, change: &DocChanged) {
+  let _ = app.emit(DOC_CHANGED, change);
+}
+
+/// Lists a content change in the board list, then broadcasts it.
+fn publish(library: &LibraryDb, change: &DocChanged, emit: impl FnOnce(&DocChanged)) -> Result<(), String> {
   if let Some(meta) = &change.meta {
-    upsert_summary(&*library.lock_db()?, board_id, &meta.title, &meta.updated_at)?;
+    upsert_summary(&*library.lock_db()?, &change.board_id, &meta.title, &meta.updated_at)?;
   }
-  let _ = app.emit(DOC_CHANGED, &change);
+  emit(change);
   Ok(())
 }
 
+/// Opens under the lock, so a library MCP write to this board lands before the read
+/// or after the session is in place, never between.
 #[tauri::command(async)]
 pub fn open_board_session(app: AppHandle, open: State<OpenBoard>, board_id: String) -> Result<Board, String> {
   let path = board_db(&app, &board_id)?.ok_or("That board has no file.")?;
+  let mut guard = open.lock()?;
   let session = Session::open(&path, board_id)?;
   let board = session.board.clone();
-  *open.lock()? = Some(session);
+  *guard = Some(session);
   Ok(board)
 }
 
@@ -695,6 +707,8 @@ pub fn set_viewport(
 ) -> Result<(), String> {
   edit(&app, &open, &library, &board_id, |s| s.set_viewport(viewport))
 }
+
+pub(crate) mod writes;
 
 #[cfg(test)]
 mod tests;

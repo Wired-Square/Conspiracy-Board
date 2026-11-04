@@ -37,18 +37,19 @@ pub(super) fn valid_board_id(id: &str) -> bool {
   !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-fn board_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+fn board_path(boards: &Path, id: &str, ext: &str) -> Result<PathBuf, String> {
   if !valid_board_id(id) {
     return Err(format!("Not a usable board id: {id:?}"));
   }
-  Ok(boards_dir(app)?.join(format!("{id}.json")))
+  Ok(boards.join(format!("{id}.{ext}")))
+}
+
+fn board_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+  board_path(&boards_dir(app)?, id, "json")
 }
 
 pub(super) fn board_db_file(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
-  if !valid_board_id(id) {
-    return Err(format!("Not a usable board id: {id:?}"));
-  }
-  Ok(boards_dir(app)?.join(format!("{id}.sqlite")))
+  board_path(&boards_dir(app)?, id, "sqlite")
 }
 
 /// The database and its `-wal`/`-shm` sidecars, which live in `boards/` where the
@@ -108,9 +109,13 @@ fn init_board_schema(conn: &Connection) -> Result<(), String> {
 /// The board's database, or None if it has none and no legacy `boards/<id>.json` to
 /// make one from.
 pub(super) fn board_db(app: &AppHandle, id: &str) -> Result<Option<PathBuf>, String> {
-  let db = board_db_file(app, id)?;
   let _held = quit::hold(app);
-  Ok(ensure_from_legacy(&db, &board_file(app, id)?)?.then_some(db))
+  board_db_in(&boards_dir(app)?, id)
+}
+
+pub(super) fn board_db_in(boards: &Path, id: &str) -> Result<Option<PathBuf>, String> {
+  let db = board_path(boards, id, "sqlite")?;
+  Ok(ensure_from_legacy(&db, &board_path(boards, id, "json")?)?.then_some(db))
 }
 
 /// Whether `db` exists, made from `legacy` if it didn't. The JSON is removed only once
@@ -128,14 +133,11 @@ fn ensure_from_legacy(db: &Path, legacy: &Path) -> Result<bool, String> {
 
 /// A board read without writing anything, not even a legacy board's migration.
 pub(crate) fn peek_board(boards: &Path, id: &str) -> Result<Option<Board>, String> {
-  if !valid_board_id(id) {
-    return Err(format!("Not a usable board id: {id:?}"));
-  }
-  let db = boards.join(format!("{id}.sqlite"));
+  let db = board_path(boards, id, "sqlite")?;
   if db.exists() {
     return reassemble_board(&open_read_only(&db)?).map(Some);
   }
-  read_opt(boards.join(format!("{id}.json")))?.map(|json| parse_board_json(&json)).transpose()
+  read_opt(board_path(boards, id, "json")?)?.map(|json| parse_board_json(&json)).transpose()
 }
 
 #[tauri::command(async)]
@@ -167,6 +169,12 @@ pub fn create_boards(app: AppHandle, library: State<LibraryDb>, boards: Vec<NewB
   create_board_dbs(boards.iter().map(|(path, _, board)| (path.as_path(), board)))?;
   let library = library.lock_db()?;
   boards.iter().try_for_each(|(_, id, board)| upsert_summary(&library, id, &board.meta.title, &board.meta.updated_at))
+}
+
+/// One new board in `boards`, written whole and then listed, as `create_boards` does.
+pub(crate) fn create_listed_board(boards: &Path, library: &LibraryDb, id: &str, board: &Board) -> Result<(), String> {
+  create_board_db(&board_path(boards, id, "sqlite")?, board)?;
+  upsert_summary(&*library.lock_db()?, id, &board.meta.title, &board.meta.updated_at)
 }
 
 /// Every board or none: a failed write removes the ones already made.

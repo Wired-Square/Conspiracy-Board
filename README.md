@@ -537,7 +537,7 @@ Four ways in, none of which touch the network:
 
 | Path | Gets you |
 |---|---|
-| `.eml` / `.mbox` files via the picker (`+ Add ▸ Email`) | everything |
+| `.eml` / `.emlx` / `.mbox` files via the picker (`+ Add ▸ Email`) | everything |
 | Paste a raw message (Gmail: ⋮ → Show original) | everything |
 | `+ Add ▸ Email` → *Or add a blank email card* | an empty card to type into |
 | Drop email files in the **Inbox folder** (File ▸ Show Inbox Folder) | everything — a whole thread at once |
@@ -683,17 +683,19 @@ it finds that image by any of them and shows how many share it.
 
 ## Library MCP
 
-The app can serve this library, read-only, to an AI client on the same Mac. It is
-off by default. When on, it listens on loopback only, at
-`http://127.0.0.1:8793/mcp` (Streamable HTTP), and every request needs a bearer
-token. It reads the board files and the search index directly, so it does not get
-in the way of an open board.
+The app can serve this library to an AI client on the same Mac: read-only, or
+with permission to add and edit. It is off by default. When on, it listens on
+loopback only, at `http://127.0.0.1:8793/mcp` (Streamable HTTP), and every
+request needs a bearer token. Reads go straight to the board files and the search
+index, so they do not get in the way of an open board; writes go through the
+same commands the app's own edits do.
 
 Turn it on under **File ▸ Library MCP…** (*Serve this library over MCP*). The
 setting sticks, so it starts again at launch. The same dialog shows the URL and
 the token, each with **Copy**, and **Rotate token**, which turns the old token away
 at once. While it is on, the toolbar shows **MCP on**, and clicking that opens the
-dialog.
+dialog. Two more switches there, both off by default, let a client write:
+**Add** and **Edit**. While either is on, the toolbar reads **MCP on · writes**.
 
 To connect a client, give it the URL and an `Authorization` header. Most clients
 take something of this shape; check yours for the exact format:
@@ -716,7 +718,18 @@ in full), `list_connections` (the strings), `list_clusters`, `search_library`
 (full-text over extracted file text) and `media_text` (one file's extracted
 text).
 
-- **It cannot write.** No tool changes a board, a card or the index.
+With **Add** on: `import_file` (a file on this Mac, by absolute path: a picture,
+a document, or email as `.eml`, `.emlx` or `.mbox`; a message already on the
+board is skipped), `create_card`, `create_connection`, `create_cluster` and
+`create_board`. With **Edit** on: `update_card` (title, notes, date, kind fields
+and clusters), `move_cards`, `update_connection`, `update_cluster` and
+`rename_board`. A client sees only the tools its switches allow; turning one on
+or off restarts the server with the same token.
+
+- **Nothing deletes.** No tool removes a board, card, string or cluster, and an
+  edit cannot change the files a card holds.
+- **An edit to the open board can be undone** with Cmd+Z, like your own. A write
+  to a board that is not open has no undo.
 - **The token is kept in your Keychain**, so a client's config survives a relaunch.
   It changes only on Rotate, and a client needs the new one then.
 - **A taken port is not worked around.** If something else holds 8793 the toolbar
@@ -742,8 +755,9 @@ what a webview cannot do for itself, and nothing else:
   for switching surface — the webview lists the boards for it and turns its clicks
   into store calls. *Show Inbox Folder* is the exception: a fixed path the shell
   reveals itself, no round-trip.
-- **`library_mcp.rs`** serves the [Library MCP](#library-mcp): read-only tools
-  over loopback that read the board files and the search index directly.
+- **`library_mcp.rs`** serves the [Library MCP](#library-mcp) over loopback: read
+  tools that read the board files and the search index directly, and write tools
+  (`library_mcp/writes.rs`) that go through the open board's session.
 
 Everything reaching them goes through `src/platform/` and `src/storage/`. Nothing
 else in `src/` knows the shell is there. The payload types are generated from the

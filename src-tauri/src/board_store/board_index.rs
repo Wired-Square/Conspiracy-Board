@@ -157,14 +157,16 @@ fn set_state(conn: &Connection, key: &str, value: Option<&str>) -> Result<(), St
   done.map(|_| ()).map_err(|e| format!("Could not write the library state: {e}"))
 }
 
-const LIBRARY_MCP: &str = "library_mcp";
+pub(crate) const LIBRARY_MCP: &str = "library_mcp";
+pub(crate) const LIBRARY_MCP_ADD: &str = "library_mcp_allow_add";
+pub(crate) const LIBRARY_MCP_EDIT: &str = "library_mcp_allow_edit";
 
-pub(crate) fn library_mcp_enabled(conn: &Connection) -> Result<bool, String> {
-  Ok(state(conn, LIBRARY_MCP)?.as_deref() == Some("on"))
+pub(crate) fn is_on(conn: &Connection, key: &str) -> Result<bool, String> {
+  Ok(state(conn, key)?.as_deref() == Some("on"))
 }
 
-pub(crate) fn set_library_mcp_enabled(conn: &Connection, on: bool) -> Result<(), String> {
-  set_state(conn, LIBRARY_MCP, on.then_some("on"))
+pub(crate) fn set_on(conn: &Connection, key: &str, on: bool) -> Result<(), String> {
+  set_state(conn, key, on.then_some("on"))
 }
 
 #[tauri::command(async)]
@@ -255,16 +257,19 @@ mod tests {
   }
 
   #[test]
-  fn the_library_mcp_is_off_until_turned_on_and_stays_as_set() {
+  fn the_library_mcp_and_its_writes_are_off_until_turned_on_and_stay_as_set() {
     let dir = temp_dir_for("index-library-mcp");
+    for key in [LIBRARY_MCP, LIBRARY_MCP_ADD, LIBRARY_MCP_EDIT] {
+      let conn = open(&dir);
+      assert!(!is_on(&conn, key).unwrap(), "{key}");
+      set_on(&conn, key, true).unwrap();
+      drop(conn);
+      let conn = open(&dir);
+      assert!(is_on(&conn, key).unwrap(), "{key}");
+    }
     let conn = open(&dir);
-    assert!(!library_mcp_enabled(&conn).unwrap());
-    set_library_mcp_enabled(&conn, true).unwrap();
-    drop(conn);
-    let conn = open(&dir);
-    assert!(library_mcp_enabled(&conn).unwrap());
-    set_library_mcp_enabled(&conn, false).unwrap();
-    assert!(!library_mcp_enabled(&conn).unwrap());
+    set_on(&conn, LIBRARY_MCP_ADD, false).unwrap();
+    assert_eq!([LIBRARY_MCP, LIBRARY_MCP_ADD, LIBRARY_MCP_EDIT].map(|key| is_on(&conn, key).unwrap()), [true, false, true]);
     let _ = std::fs::remove_dir_all(&dir);
   }
 }

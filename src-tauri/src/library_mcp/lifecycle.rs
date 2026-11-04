@@ -1,5 +1,6 @@
 //! Whether the library MCP is on, and the listener that follows it: started at launch
-//! when the setting is on, and on enable; stopped on disable; restarted on a new token.
+//! when the setting is on, and on enable; stopped on disable; restarted on a new token
+//! or a write switch, so a client sees the tools it may now call.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -8,8 +9,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use wslib_secret::{Secret, SecretStore};
 
-use super::{random_token, start, Listening, PORT};
-use crate::board_store::board_index::{library_mcp_enabled, set_library_mcp_enabled};
+use super::{random_token, start, Allowed, Host, Listening, PORT};
+use crate::board_store::board_index::{is_on, set_on, LIBRARY_MCP, LIBRARY_MCP_ADD, LIBRARY_MCP_EDIT};
 use crate::board_store::library_dir;
 use crate::library_index::LibraryDb;
 
@@ -28,12 +29,15 @@ pub struct LibraryMcpStatus {
   token: Option<String>,
   /// Why the listener is not running although enabled, e.g. the port is taken.
   error: Option<String>,
+  allow_add: bool,
+  allow_edit: bool,
 }
 
 type Reply = Result<LibraryMcpStatus, String>;
 
 pub(crate) struct LibraryMcp {
   library: PathBuf,
+  host: Arc<dyn Host>,
   port: u16,
   store: Arc<dyn SecretStore>,
   /// Serialises the changes and is held across the store, which can wait on a Keychain
@@ -67,8 +71,8 @@ fn locked<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
 }
 
 impl LibraryMcp {
-  fn new(library: PathBuf, port: u16, store: Arc<dyn SecretStore>) -> Self {
-    Self { library, port, store, changing: Mutex::default(), listener: Mutex::default() }
+  fn new(library: PathBuf, host: Arc<dyn Host>, port: u16, store: Arc<dyn SecretStore>) -> Self {
+    Self { library, host, port, store, changing: Mutex::default(), listener: Mutex::default() }
   }
 
   fn lock(&self) -> Result<MutexGuard<'_, Listener>, String> {
@@ -94,19 +98,23 @@ impl LibraryMcp {
   }
 
   fn report(&self, listener: &Listener, db: &LibraryDb) -> Reply {
+    let Allowed { add, edit } = allowed(db)?;
     Ok(LibraryMcpStatus {
-      enabled: library_mcp_enabled(&*db.lock_db()?)?,
+      enabled: is_on(&*db.lock_db()?, LIBRARY_MCP)?,
       running: listener.running.is_some(),
       url: format!("http://127.0.0.1:{}/mcp", self.port),
       token: listener.token.as_ref().map(|token| token.expose().to_owned()),
       error: listener.error.clone(),
+      allow_add: add,
+      allow_edit: edit,
     })
   }
 
-  fn restart(&self, listener: &mut Listener, token: Secret) {
+  fn restart(&self, listener: &mut Listener, token: Secret, db: &LibraryDb) {
     listener.stop();
     let token = listener.token.insert(token).expose().to_owned();
-    match start(self.library.clone(), self.port, token) {
+    let started = allowed(db).and_then(|allowed| start(self.library.clone(), self.host.clone(), allowed, self.port, token));
+    match started {
       Ok(listening) => (listener.running, listener.error) = (Some(listening), None),
       Err(e) => listener.fail(format!("Not started on port {}: {e}", self.port)),
     }
@@ -118,13 +126,13 @@ impl LibraryMcp {
 
   fn resume(&self, db: &LibraryDb) -> Reply {
     let _changing = locked(&self.changing)?;
-    let enabled = library_mcp_enabled(&*db.lock_db()?)?;
+    let enabled = is_on(&*db.lock_db()?, LIBRARY_MCP)?;
     if enabled { self.serve(db) } else { self.status(db) }
   }
 
   fn enable(&self, db: &LibraryDb) -> Reply {
     let _changing = locked(&self.changing)?;
-    set_library_mcp_enabled(&*db.lock_db()?, true)?;
+    set_on(&*db.lock_db()?, LIBRARY_MCP, true)?;
     self.serve(db)
   }
 
@@ -134,7 +142,7 @@ impl LibraryMcp {
     let mut listener = self.lock()?;
     match token {
       _ if listener.running.is_some() => listener.error = None,
-      Ok(token) => self.restart(&mut listener, token),
+      Ok(token) => self.restart(&mut listener, token, db),
       Err(e) => listener.fail(e),
     }
     self.report(&listener, db)
@@ -143,7 +151,7 @@ impl LibraryMcp {
   fn disable(&self, db: &LibraryDb) -> Reply {
     let _changing = locked(&self.changing)?;
     let mut listener = self.lock()?;
-    set_library_mcp_enabled(&*db.lock_db()?, false)?;
+    set_on(&*db.lock_db()?, LIBRARY_MCP, false)?;
     listener.stop();
     listener.error = None;
     self.report(&listener, db)
@@ -154,12 +162,28 @@ impl LibraryMcp {
     let token = self.keep_new_token();
     let mut listener = self.lock()?;
     match token {
-      Ok(token) if listener.running.is_some() => self.restart(&mut listener, token),
+      Ok(token) if listener.running.is_some() => self.restart(&mut listener, token, db),
       Ok(token) => listener.token = Some(token),
       Err(e) => listener.fail(e),
     }
     self.report(&listener, db)
   }
+
+  /// A running listener restarts with the token it has, now serving the tools allowed.
+  fn allow(&self, db: &LibraryDb, switch: &str, on: bool) -> Reply {
+    let _changing = locked(&self.changing)?;
+    let mut listener = self.lock()?;
+    set_on(&*db.lock_db()?, switch, on)?;
+    if let (Some(_), Some(token)) = (&listener.running, listener.token.clone()) {
+      self.restart(&mut listener, token, db);
+    }
+    self.report(&listener, db)
+  }
+}
+
+fn allowed(db: &LibraryDb) -> Result<Allowed, String> {
+  let conn = db.lock_db()?;
+  Ok(Allowed { add: is_on(&conn, LIBRARY_MCP_ADD)?, edit: is_on(&conn, LIBRARY_MCP_EDIT)? })
 }
 
 fn announce(app: &AppHandle, status: Reply) -> Reply {
@@ -171,7 +195,7 @@ fn announce(app: &AppHandle, status: Reply) -> Reply {
 
 /// Off the setup thread: a taken port holds `start` for its bind retry.
 pub(crate) fn manage_and_resume(app: &AppHandle) -> Result<(), String> {
-  app.manage(LibraryMcp::new(library_dir(app)?, PORT, Arc::new(wslib_secret::Keychain)));
+  app.manage(LibraryMcp::new(library_dir(app)?, Arc::new(app.clone()), PORT, Arc::new(wslib_secret::Keychain)));
   let app = app.clone();
   tauri::async_runtime::spawn_blocking(move || {
     if let Err(e) = announce(&app, app.state::<LibraryMcp>().resume(&app.state::<LibraryDb>())) {
@@ -191,7 +215,7 @@ async fn on_blocking_pool(work: impl FnOnce() -> Reply + Send + 'static) -> Repl
   tauri::async_runtime::spawn_blocking(work).await.map_err(|e| e.to_string())?
 }
 
-async fn change(app: AppHandle, act: fn(&LibraryMcp, &LibraryDb) -> Reply) -> Reply {
+async fn change(app: AppHandle, act: impl FnOnce(&LibraryMcp, &LibraryDb) -> Reply + Send + 'static) -> Reply {
   let worker = app.clone();
   let status = on_blocking_pool(move || act(&worker.state::<LibraryMcp>(), &worker.state::<LibraryDb>())).await;
   announce(&app, status)
@@ -212,6 +236,16 @@ pub async fn rotate_library_mcp_token(app: AppHandle) -> Reply {
   change(app, LibraryMcp::rotate_token).await
 }
 
+#[tauri::command]
+pub async fn allow_library_mcp_add(app: AppHandle, on: bool) -> Reply {
+  change(app, move |mcp, db| mcp.allow(db, LIBRARY_MCP_ADD, on)).await
+}
+
+#[tauri::command]
+pub async fn allow_library_mcp_edit(app: AppHandle, on: bool) -> Reply {
+  change(app, move |mcp, db| mcp.allow(db, LIBRARY_MCP_EDIT, on)).await
+}
+
 #[cfg(test)]
 mod tests {
   use std::io::{Read, Write};
@@ -224,6 +258,7 @@ mod tests {
 
   use super::*;
   use crate::board_store::temp_dir_for;
+  use crate::library_mcp::writes::Detached;
   use crate::library_index::open_at;
 
   fn free_port() -> u16 {
@@ -258,17 +293,43 @@ mod tests {
     (stream, head)
   }
 
-  /// A client's session with its event stream held open, as an MCP client keeps one.
-  fn held_event_stream(port: u16, token: &str) -> TcpStream {
+  fn initialize(port: u16, token: &str) -> String {
     let initialize = format!(
       "Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\n\
        Content-Length: {}\r\n\r\n{INITIALIZE}",
       INITIALIZE.len()
     );
     let (_, head) = send(port, token, "POST", &initialize);
-    let session = head.lines().find_map(|l| l.strip_prefix("mcp-session-id: ")).unwrap().trim();
+    head.lines().find_map(|l| l.strip_prefix("mcp-session-id: ")).unwrap().trim().to_string()
+  }
+
+  /// A client's session with its event stream held open, as an MCP client keeps one.
+  fn held_event_stream(port: u16, token: &str) -> TcpStream {
+    let session = initialize(port, token);
     let events = format!("Accept: text/event-stream\r\nMcp-Session-Id: {session}\r\n\r\n");
     send(port, token, "GET", &events).0
+  }
+
+  fn post(port: u16, token: &str, session: &str, body: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    write!(
+      stream,
+      "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n\
+       Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\n\
+       Mcp-Session-Id: {session}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+      body.len()
+    )
+    .unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut reply = String::new();
+    let _ = stream.read_to_string(&mut reply);
+    reply
+  }
+
+  fn listed_tools(port: u16, token: &str) -> String {
+    let session = initialize(port, token);
+    post(port, token, &session, r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#);
+    post(port, token, &session, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
   }
 
   fn closed(mut stream: TcpStream) -> bool {
@@ -289,8 +350,12 @@ mod tests {
     tauri::async_runtime::block_on(command).unwrap().unwrap()
   }
 
+  fn detached(dir: &std::path::Path, port: u16, store: Arc<dyn SecretStore>) -> LibraryMcp {
+    LibraryMcp::new(dir.to_path_buf(), Arc::new(Detached::new(dir)), port, store)
+  }
+
   fn in_memory(dir: &std::path::Path, port: u16) -> LibraryMcp {
-    LibraryMcp::new(dir.to_path_buf(), port, Arc::new(MemoryStore::default()))
+    detached(dir, port, Arc::new(MemoryStore::default()))
   }
 
   fn kept(store: &dyn SecretStore) -> Option<String> {
@@ -374,7 +439,7 @@ mod tests {
 
     let off = mcp.disable(&db).unwrap();
     assert_eq!((off.enabled, off.running, off.token.as_deref()), (false, false, Some(token(&on))));
-    assert!(!library_mcp_enabled(&*db.lock_db().unwrap()).unwrap());
+    assert!(!is_on(&*db.lock_db().unwrap(), LIBRARY_MCP).unwrap());
 
     let again = mcp.enable(&db).unwrap();
     assert_eq!((again.running, token(&again)), (true, token(&on)));
@@ -388,13 +453,13 @@ mod tests {
     let dir = temp_dir_for("library-mcp-relaunch");
     let (db, port) = (open_at(&dir).unwrap(), free_port());
     let store = Arc::new(MemoryStore::default());
-    let launched = LibraryMcp::new(dir.clone(), port, store.clone());
+    let launched = detached(&dir, port, store.clone());
     let first = launched.enable(&db).unwrap();
     assert_eq!(kept(&*store).as_deref(), Some(token(&first)));
     launched.disable(&db).unwrap();
-    set_library_mcp_enabled(&*db.lock_db().unwrap(), true).unwrap();
+    set_on(&*db.lock_db().unwrap(), LIBRARY_MCP, true).unwrap();
 
-    let relaunched = LibraryMcp::new(dir.clone(), port, store);
+    let relaunched = detached(&dir, port, store);
     let resumed = relaunched.resume(&db).unwrap();
     assert_eq!((resumed.running, token(&resumed)), (true, token(&first)));
     assert_ne!(http_status(port, token(&first)), 401);
@@ -407,7 +472,7 @@ mod tests {
     let dir = temp_dir_for("library-mcp-rotate-kept");
     let (db, port) = (open_at(&dir).unwrap(), free_port());
     let store = Arc::new(MemoryStore::default());
-    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    let mcp = detached(&dir, port, store.clone());
     let before = mcp.enable(&db).unwrap();
     let after = mcp.rotate_token(&db).unwrap();
     assert_ne!(token(&after), token(&before));
@@ -422,7 +487,7 @@ mod tests {
     let dir = temp_dir_for("library-mcp-store-fails");
     let (db, port) = (open_at(&dir).unwrap(), free_port());
     let store = Arc::new(Failing::default());
-    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    let mcp = detached(&dir, port, store.clone());
     store.failing.store(true, Ordering::SeqCst);
     let refused = mcp.enable(&db).unwrap();
     assert_eq!((refused.enabled, refused.running, refused.token), (true, false, None));
@@ -445,7 +510,7 @@ mod tests {
     let dir = temp_dir_for("library-mcp-retry-rotate");
     let (db, port) = (open_at(&dir).unwrap(), free_port());
     let store = Arc::new(Failing::default());
-    let mcp = LibraryMcp::new(dir.clone(), port, store.clone());
+    let mcp = detached(&dir, port, store.clone());
     let on = mcp.enable(&db).unwrap();
     store.failing.store(true, Ordering::SeqCst);
     assert!(mcp.rotate_token(&db).unwrap().error.is_some());
@@ -463,11 +528,11 @@ mod tests {
   fn a_keychain_prompt_at_launch_does_not_hold_up_the_status() {
     let dir = temp_dir_for("library-mcp-prompt");
     let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
-    set_library_mcp_enabled(&*db.lock_db().unwrap(), true).unwrap();
+    set_on(&*db.lock_db().unwrap(), LIBRARY_MCP, true).unwrap();
     let (asked, prompted) = mpsc::channel();
     let (answer, answered) = mpsc::channel();
     let store = Prompting { asked: Mutex::new(asked), answered: Mutex::new(answered), kept: MemoryStore::default() };
-    let mcp = Arc::new(LibraryMcp::new(dir.clone(), port, Arc::new(store)));
+    let mcp = Arc::new(detached(&dir, port, Arc::new(store)));
     let launch = thread::spawn({
       let (mcp, db) = (mcp.clone(), db.clone());
       move || mcp.resume(&db).unwrap()
@@ -532,6 +597,32 @@ mod tests {
     assert!(closed(session));
     assert_eq!(http_status(port, token(&before)), 401);
     assert_ne!(http_status(port, token(&after)), 401);
+    as_a_command(&mcp, &db, LibraryMcp::disable);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_write_switch_restarts_the_listener_with_its_token_and_the_tools_it_allows() {
+    let dir = temp_dir_for("library-mcp-switches");
+    let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
+    let mcp = Arc::new(in_memory(&dir, port));
+    let on = as_a_command(&mcp, &db, LibraryMcp::enable);
+    assert_eq!((on.allow_add, on.allow_edit), (false, false));
+    assert!(listed_tools(port, token(&on)).contains("list_boards"));
+    assert!(!listed_tools(port, token(&on)).contains("import_file"));
+
+    let session = held_event_stream(port, token(&on));
+    let add = as_a_command(&mcp, &db, |mcp, db| mcp.allow(db, LIBRARY_MCP_ADD, true));
+    assert_eq!((add.running, add.allow_add, add.allow_edit, token(&add)), (true, true, false, token(&on)));
+    assert!(closed(session));
+    let tools = listed_tools(port, token(&add));
+    assert!(tools.contains("import_file") && !tools.contains("update_card"), "{tools}");
+
+    as_a_command(&mcp, &db, LibraryMcp::disable);
+    let edit = as_a_command(&mcp, &db, |mcp, db| mcp.allow(db, LIBRARY_MCP_EDIT, true));
+    assert_eq!((edit.running, edit.allow_add, edit.allow_edit), (false, true, true));
+    let back = as_a_command(&mcp, &db, LibraryMcp::enable);
+    assert!(listed_tools(port, token(&back)).contains("update_card"));
     as_a_command(&mcp, &db, LibraryMcp::disable);
     let _ = std::fs::remove_dir_all(&dir);
   }

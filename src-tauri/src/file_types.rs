@@ -5,7 +5,7 @@
 //! exported or renamed as one, and the parser sniffs the bytes. Extensions route a
 //! file; the parsers and extractors read what it really is.
 
-pub const EMAIL_EXTENSIONS: &[&str] = &["eml", "mbox", "txt"];
+pub const EMAIL_EXTENSIONS: &[&str] = &["eml", "emlx", "mbox", "txt"];
 pub const IMAGE_EXTENSIONS: &[&str] =
   &["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tiff", "tif", "bmp", "avif", "svg"];
 pub const DOCUMENT_EXTENSIONS: &[&str] = &["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx"];
@@ -113,7 +113,7 @@ mod tests {
 
   #[test]
   fn txt_is_email_everywhere_the_inbox_included() {
-    for n in ["thread.eml", "Archive.mbox", "export.TXT"] {
+    for n in ["thread.eml", "12345.emlx", "12345.partial.emlx", "Archive.mbox", "export.TXT"] {
       assert_eq!(kind_of(n), Some(FileKind::Email), "{n}");
       assert!(is_importable(n), "{n}");
     }
