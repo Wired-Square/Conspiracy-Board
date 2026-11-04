@@ -11,6 +11,7 @@ type Dialogs = {
   properties: boolean;
   bundleExport: boolean;
   libraryMcp: boolean;
+  performance: boolean;
   imageEditorCardId: string | null;
   bundleImportBoards: Board[] | null;
 };
@@ -20,6 +21,7 @@ const CLOSED: Dialogs = {
   properties: false,
   bundleExport: false,
   libraryMcp: false,
+  performance: false,
   imageEditorCardId: null,
   bundleImportBoards: null,
 };

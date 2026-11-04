@@ -9,6 +9,7 @@ import { BundleImportModal } from './components/panels/BundleImportModal';
 import { EmailImportModal } from './components/panels/EmailImportModal';
 import { ImageEditorModal } from './components/panels/ImageEditorModal';
 import { LibraryMcpModal } from './components/panels/LibraryMcpModal';
+import { PerformanceModal } from './components/panels/PerformanceModal';
 import { CardEditor } from './components/panels/CardEditor';
 import { Toolbar } from './components/panels/Toolbar';
 import { ClusterPanel } from './components/panels/ClusterPanel';
@@ -24,6 +25,7 @@ import { startBoardMenu } from './platform/boardMenu';
 import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
 import { startLibraryMcpStatus } from './platform/libraryMcpStatus';
+import { startPerfMeter } from './platform/perf';
 import { boardStore } from './store/boardStore';
 import { closeDialog, dialogStore } from './store/dialogStore';
 import { emailImportStore } from './store/emailImportStore';
@@ -45,6 +47,7 @@ export default function App() {
       startImportProgress,
       startJobProgress,
       startLibraryMcpStatus,
+      startPerfMeter,
     ]) {
       onCleanup(start());
     }
@@ -128,6 +131,9 @@ export default function App() {
           </Show>
           <Show when={dialogs().libraryMcp}>
             <LibraryMcpModal />
+          </Show>
+          <Show when={dialogs().performance}>
+            <PerformanceModal />
           </Show>
           <BusyOverlay />
           <UndoToast />

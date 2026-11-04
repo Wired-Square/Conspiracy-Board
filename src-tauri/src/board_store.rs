@@ -144,6 +144,7 @@ fn remove_if_present(path: &Path) -> Result<(), String> {
 /// first save.
 #[tauri::command(async)]
 pub fn init_storage(app: AppHandle) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   for dir in [boards_dir(&app)?, media_dir(&app)?, inbox_dir(&app)?] {
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
   }

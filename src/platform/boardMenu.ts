@@ -58,6 +58,9 @@ async function handle(event: BoardMenuEvent) {
     case 'libraryMcp':
       openDialog({ libraryMcp: true });
       break;
+    case 'performance':
+      openDialog({ performance: true });
+      break;
   }
 }
 

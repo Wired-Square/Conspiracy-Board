@@ -128,6 +128,7 @@ pub fn write_bundle(
   media: Vec<String>,
   manifest: String,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   use zip::write::SimpleFileOptions;
   use zip::CompressionMethod;
 
@@ -198,6 +199,7 @@ pub fn write_bundle(
 /// that one board.
 #[tauri::command(async)]
 pub fn read_bundle(app: AppHandle, path: String) -> Result<Vec<Board>, String> {
+  let _span = crate::perf::metered!();
   read_bundle_contents(&app, &path).map(boards_in_order)
 }
 

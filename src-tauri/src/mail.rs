@@ -269,6 +269,7 @@ fn progress(app: &AppHandle) -> impl FnMut(usize, usize) + '_ {
 /// The files the user picked, parsed and their media kept.
 #[tauri::command(async)]
 pub fn parse_email_files(app: AppHandle, paths: Vec<String>) -> EmailParse {
+  let mut span = crate::perf::metered!();
   let mut out = EmailParse::default();
   for path in paths.iter().map(Path::new) {
     let name = file_name(path);
@@ -281,11 +282,13 @@ pub fn parse_email_files(app: AppHandle, paths: Vec<String>) -> EmailParse {
       Err(e) => out.errors.push(format!("{name} — {e}")),
     }
   }
+  span.rows(paths.len(), out.drafts.len());
   out
 }
 
 #[tauri::command(async)]
 pub fn parse_email_text(app: AppHandle, text: String) -> EmailParse {
+  let _span = crate::perf::metered!();
   parse_text(&text, &mut media_store(&app), &mut progress(&app))
 }
 
@@ -294,6 +297,7 @@ pub fn parse_email_text(app: AppHandle, text: String) -> EmailParse {
 /// content-addressed, and the .eml itself is already stored.
 #[tauri::command(async)]
 pub fn recover_email_attachments(app: AppHandle, eml: String, keep_picture: bool) -> Result<Option<RecoveredEmail>, String> {
+  let _span = crate::perf::metered!();
   Ok(recover(&read_media(&app, &eml)?, keep_picture, &mut media_store(&app)))
 }
 

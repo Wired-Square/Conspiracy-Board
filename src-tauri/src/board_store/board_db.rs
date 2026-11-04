@@ -142,12 +142,16 @@ pub(crate) fn peek_board(boards: &Path, id: &str) -> Result<Option<Board>, Strin
 
 #[tauri::command(async)]
 pub fn load_board(app: AppHandle, id: String) -> Result<Option<Board>, String> {
-  board_db(&app, &id)?.map(|db| read_board_db(&db)).transpose()
+  let mut span = crate::perf::metered!();
+  let board = board_db(&app, &id)?.map(|db| read_board_db(&db)).transpose()?;
+  span.rows(0, board.as_ref().map_or(0, |b| b.cards.len()));
+  Ok(board)
 }
 
 /// The bundled seed board, for a library with nothing in it yet.
 #[tauri::command(async)]
 pub fn seed_board() -> Result<Board, String> {
+  let _span = crate::perf::metered!();
   parse_board_json(include_str!("../../../data/board.json"))
 }
 
@@ -161,6 +165,7 @@ pub struct NewBoard {
 /// be opened.
 #[tauri::command(async)]
 pub fn create_boards(app: AppHandle, library: State<LibraryDb>, boards: Vec<NewBoard>) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let _held = quit::hold(&app);
   let boards = boards
     .into_iter()
@@ -278,6 +283,7 @@ pub(super) fn change_media_refs<'a>(
 /// Only while they are still unrecorded: a save in the meantime wrote fresher ones.
 #[tauri::command(async)]
 pub fn record_media_refs(app: AppHandle, id: String, refs: Vec<String>) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let path = board_db_file(&app, &id)?;
   if !path.exists() {
     return Err("The board's database is missing.".into());
@@ -372,6 +378,7 @@ fn read_refs(path: &Path) -> Option<Vec<String>> {
 /// caller already has), for the maintenance audit.
 #[tauri::command(async)]
 pub fn media_refs(app: AppHandle, db: State<LibraryDb>, except: Option<String>) -> Result<LibraryRefs, String> {
+  let _span = crate::perf::metered!();
   let listed = listed_ids(&*db.lock_db()?)?;
   library_media_refs(&boards_dir(&app)?, &listed, except.as_deref())
 }
@@ -487,6 +494,7 @@ fn fragment(s: &str) -> Result<Value, String> {
 /// Application Support" is not an answer you can back up.
 #[tauri::command(async)]
 pub fn board_location(app: AppHandle, id: String) -> Result<String, String> {
+  let _span = crate::perf::metered!();
   Ok(board_db_file(&app, &id)?.to_string_lossy().into_owned())
 }
 
@@ -499,6 +507,7 @@ pub fn board_location(app: AppHandle, id: String) -> Result<String, String> {
 /// rejects an id that is not one.
 #[tauri::command(async)]
 pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let db = board_db_file(&app, &id)?;
   // The database if it exists, else a not-yet-migrated legacy JSON, else nothing:
   // before a board is first written there is nothing to show, and saying so beats Finder
@@ -531,6 +540,7 @@ pub fn reveal_board(app: AppHandle, id: String) -> Result<(), String> {
 /// as null, where an unlisted file is merely invisible.
 #[tauri::command(async)]
 pub fn delete_board(app: AppHandle, library: State<LibraryDb>, open: State<OpenBoard>, id: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   open.close(&id)?;
   remove_board_db(&board_db_file(&app, &id)?)?;
   remove_if_present(&board_file(&app, &id)?)?;

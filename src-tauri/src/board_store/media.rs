@@ -114,6 +114,7 @@ pub(crate) fn keep_media_in(media: &Path, bytes: &[u8], ext: &str) -> Result<Str
 /// `asset:` URLs for stored files without a round-trip per render.
 #[tauri::command(async)]
 pub fn media_dir_path(app: AppHandle) -> Result<String, String> {
+  let _span = crate::perf::metered!();
   Ok(media_dir(&app)?.to_string_lossy().into_owned())
 }
 
@@ -139,6 +140,7 @@ pub(crate) fn media_store(app: &AppHandle) -> impl Store + '_ {
 /// directory.
 #[tauri::command(async)]
 pub fn save_media(app: AppHandle, b64: String, name: Option<String>, mime: Option<String>) -> Result<String, String> {
+  let _span = crate::perf::metered!();
   let bytes = STANDARD.decode(b64.as_bytes()).map_err(|e| format!("Media was not valid base64: {e}"))?;
   store_media_bytes(&app, &bytes, &ext_of(name.as_deref(), mime.as_deref()))
 }
@@ -154,6 +156,7 @@ const MAX_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
 /// and a cross-origin image drawn to a canvas to crop would taint it.
 #[tauri::command(async)]
 pub fn download_image(app: AppHandle, url: String) -> Result<String, String> {
+  let _span = crate::perf::metered!();
   let (bytes, ext) = match url.strip_prefix("data:") {
     Some(data) => decode_data_url(data)?,
     None => {
@@ -273,6 +276,7 @@ fn percent_decode(s: &str) -> Vec<u8> {
 /// place in a UI bundle.
 #[tauri::command(async)]
 pub fn extract_media_meta(app: AppHandle, name: String) -> Result<MediaMeta, String> {
+  let _span = crate::perf::metered!();
   Ok(read_meta(&read_media(&app, &name)?))
 }
 
@@ -301,6 +305,7 @@ pub(crate) fn read_media(app: &AppHandle, name: &str) -> Result<Vec<u8>, String>
 /// drops the rows of whatever went.
 #[tauri::command(async)]
 pub fn gc_media(app: AppHandle, db: State<LibraryDb>) -> Result<GcOutcome, String> {
+  let _span = crate::perf::metered!();
   let listed = listed_ids(&*db.lock_db()?)?;
   let outcome = gc(&boards_dir(&app)?, &listed, &media_dir(&app)?, GC_MIN_AGE)?;
   if outcome.unknown.is_empty() {
@@ -377,6 +382,7 @@ pub struct MediaEntry {
 /// `gc_media`, which also reads the directory, this deletes nothing.
 #[tauri::command(async)]
 pub fn list_media(app: AppHandle) -> Result<Vec<MediaEntry>, String> {
+  let _span = crate::perf::metered!();
   Ok(
     media_entries(&media_dir(&app)?)?
       .into_iter()
@@ -398,6 +404,7 @@ pub(crate) fn media_names(app: &AppHandle) -> Result<Vec<String>, String> {
 /// far too costly for a library of large messages.
 #[tauri::command(async)]
 pub fn verify_media(app: AppHandle, name: String) -> Result<bool, String> {
+  let _span = crate::perf::metered!();
   let path = media_file(&app, &name)?;
   let bytes = std::fs::read(&path).map_err(|e| format!("Could not read the file: {e}"))?;
   // The extension is not part of the hash, so re-derive the name from the bytes
@@ -409,6 +416,7 @@ pub fn verify_media(app: AppHandle, name: String) -> Result<bool, String> {
 /// for the maintenance view. Mirrors `open_inbox`.
 #[tauri::command(async)]
 pub fn open_media_dir(app: AppHandle) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let dir = media_dir(&app)?;
   std::fs::create_dir_all(&dir).map_err(|e| format!("Could not find the media folder: {e}"))?;
   run_open(&[dir.as_os_str()], "Could not open the media folder", "The media folder wouldn't open.")
@@ -420,6 +428,7 @@ pub fn open_media_dir(app: AppHandle) -> Result<(), String> {
 /// rejects a name that is not one.
 #[tauri::command(async)]
 pub fn open_media(app: AppHandle, name: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let path = media_file(&app, &name)?;
   if !path.exists() {
     return Err("That file isn't in the library.".into());

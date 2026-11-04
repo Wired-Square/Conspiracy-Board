@@ -207,6 +207,7 @@ pub(crate) fn manage_and_resume(app: &AppHandle) -> Result<(), String> {
 
 #[tauri::command(async)]
 pub fn library_mcp_status(mcp: State<LibraryMcp>, db: State<LibraryDb>) -> Reply {
+  let _span = crate::perf::metered!();
   mcp.status(&db)
 }
 
@@ -223,26 +224,31 @@ async fn change(app: AppHandle, act: impl FnOnce(&LibraryMcp, &LibraryDb) -> Rep
 
 #[tauri::command]
 pub async fn enable_library_mcp(app: AppHandle) -> Reply {
+  let _span = crate::perf::metered!();
   change(app, LibraryMcp::enable).await
 }
 
 #[tauri::command]
 pub async fn disable_library_mcp(app: AppHandle) -> Reply {
+  let _span = crate::perf::metered!();
   change(app, LibraryMcp::disable).await
 }
 
 #[tauri::command]
 pub async fn rotate_library_mcp_token(app: AppHandle) -> Reply {
+  let _span = crate::perf::metered!();
   change(app, LibraryMcp::rotate_token).await
 }
 
 #[tauri::command]
 pub async fn allow_library_mcp_add(app: AppHandle, on: bool) -> Reply {
+  let _span = crate::perf::metered!();
   change(app, move |mcp, db| mcp.allow(db, LIBRARY_MCP_ADD, on)).await
 }
 
 #[tauri::command]
 pub async fn allow_library_mcp_edit(app: AppHandle, on: bool) -> Reply {
+  let _span = crate::perf::metered!();
   change(app, move |mcp, db| mcp.allow(db, LIBRARY_MCP_EDIT, on)).await
 }
 
@@ -326,10 +332,21 @@ mod tests {
     reply
   }
 
-  fn listed_tools(port: u16, token: &str) -> String {
+  fn initialized(port: u16, token: &str) -> String {
     let session = initialize(port, token);
     post(port, token, &session, r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#);
+    session
+  }
+
+  fn listed_tools(port: u16, token: &str) -> String {
+    let session = initialized(port, token);
     post(port, token, &session, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
+  }
+
+  fn call_tool(port: u16, token: &str, session: &str, name: &str) -> String {
+    let params = format!(r#"{{"name":"{name}","arguments":{{}}}}"#);
+    let body = format!(r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{params}}}"#);
+    post(port, token, session, &body)
   }
 
   fn closed(mut stream: TcpStream) -> bool {
@@ -623,6 +640,20 @@ mod tests {
     assert_eq!((edit.running, edit.allow_add, edit.allow_edit), (false, true, true));
     let back = as_a_command(&mcp, &db, LibraryMcp::enable);
     assert!(listed_tools(port, token(&back)).contains("update_card"));
+    as_a_command(&mcp, &db, LibraryMcp::disable);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_tool_call_is_metered_and_perf_report_reads_the_meter() {
+    let dir = temp_dir_for("library-mcp-perf");
+    let (db, port) = (Arc::new(open_at(&dir).unwrap()), free_port());
+    let mcp = Arc::new(in_memory(&dir, port));
+    let on = as_a_command(&mcp, &db, LibraryMcp::enable);
+    let session = initialized(port, token(&on));
+    assert!(call_tool(port, token(&on), &session, "list_boards").contains(r#"boards"#));
+    let report = call_tool(port, token(&on), &session, "perf_report");
+    assert!(report.contains(r#"\"name\":\"mcp:list_boards\""#), "{report}");
     as_a_command(&mcp, &db, LibraryMcp::disable);
     let _ = std::fs::remove_dir_all(&dir);
   }

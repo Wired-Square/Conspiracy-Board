@@ -180,12 +180,14 @@ fn index_media(app: &AppHandle, db: &LibraryDb, name: &str, force: bool) -> Resu
 /// Read these files again even if indexed: the Objects view's per-file reindex.
 #[tauri::command]
 pub fn reindex_media(jobs: State<Arc<Jobs>>, names: Vec<String>) {
+  let _span = crate::perf::metered!();
   jobs.enqueue(names, true);
 }
 
 /// Read every media file again, for the Objects view's "rebuild".
 #[tauri::command(async)]
 pub fn reindex_all(app: AppHandle, jobs: State<Arc<Jobs>>) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   jobs.enqueue(media_names(&app)?, true);
   Ok(())
 }
@@ -193,6 +195,7 @@ pub fn reindex_all(app: AppHandle, jobs: State<Arc<Jobs>>) -> Result<(), String>
 /// Files queued or being read, for the badge before its first `jobs:progress`.
 #[tauri::command]
 pub fn jobs_pending(jobs: State<Arc<Jobs>>) -> usize {
+  let _span = crate::perf::metered!();
   jobs.pending()
 }
 
@@ -234,6 +237,7 @@ pub(crate) fn write_outcome(tx: &Transaction, name: &str, size: u64, outcome: &E
 // The body stays synchronous; it only borrows the Mutex guard, never holding it across a wait.
 #[tauri::command(async)]
 pub fn search_documents(db: State<LibraryDb>, query: String, limit: u32) -> Result<Vec<DocHit>, String> {
+  let _span = crate::perf::metered!();
   let conn = db.lock_db()?;
   run_search(&conn, &query, limit)
 }
@@ -339,6 +343,7 @@ pub(crate) fn prune_documents(app: &AppHandle, db: &LibraryDb) -> Result<u32, St
 /// reaches it).
 #[tauri::command(async)]
 pub fn index_statuses(db: State<LibraryDb>) -> Result<Vec<DocStatus>, String> {
+  let _span = crate::perf::metered!();
   read_statuses(&*db.lock_db()?)
 }
 

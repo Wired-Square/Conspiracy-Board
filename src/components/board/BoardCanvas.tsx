@@ -15,6 +15,7 @@ import type { Viewport } from '../../types/board';
 import { fromStore } from '@wired-square/store/solid';
 import { EvidenceCard } from './EvidenceCard';
 import { camera, setCamera, withFitWhenDrawn } from './camera';
+import { measure, untilPainted } from '../../platform/perf';
 
 export { CanvasPanel } from '@wired-square/canvas';
 
@@ -117,14 +118,21 @@ export function BoardCanvas() {
   });
   const degrees = createMemo(() => linkDegrees(allEdges()));
   const dataFor = tieScaleInterner<CardNodeData>();
-  const display = createMemo(() =>
-    highlight(
-      drawnNodes(),
-      allEdges(),
-      { focusId: hoveredId() ?? selectedCardId(), selectedId: selectedCardId(), matchIds: matchIds(), degrees: degrees() },
-      dataFor,
-    ),
-  );
+  const display = createMemo(() => {
+    const shown = measure(
+      'canvas display',
+      () =>
+        highlight(
+          drawnNodes(),
+          allEdges(),
+          { focusId: hoveredId() ?? selectedCardId(), selectedId: selectedCardId(), matchIds: matchIds(), degrees: degrees() },
+          dataFor,
+        ),
+      (d) => [cards().length, d.nodes.length],
+    );
+    untilPainted('canvas painted', shown.nodes.length);
+    return shown;
+  });
 
   return (
     <Canvas<CardNodeData, StringEdgeData>

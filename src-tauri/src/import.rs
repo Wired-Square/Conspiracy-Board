@@ -126,6 +126,7 @@ fn document_draft(file_name: &str, file: String, meta: &MediaMeta) -> MediaDraft
 /// Any file, kept as a document card's file with what can be read of it.
 #[tauri::command(async)]
 pub fn attach_document(app: AppHandle, path: String) -> Result<MediaDraft, String> {
+  let _span = crate::perf::metered!();
   let path = Path::new(&path);
   let bytes = std::fs::read(path).map_err(|e| format!("Could not read the file: {e}"))?;
   let name = file_name(path);
@@ -141,7 +142,8 @@ pub(crate) fn app_media_draft(app: &AppHandle, file_name: &str, bytes: &[u8]) ->
 /// read or store drops out rather than sinking the batch.
 #[tauri::command(async)]
 pub fn import_media_files(app: AppHandle, paths: Vec<String>) -> Vec<MediaDraft> {
-  paths
+  let mut span = crate::perf::metered!();
+  let drafts: Vec<_> = paths
     .iter()
     .map(Path::new)
     .filter_map(|path| match std::fs::read(path) {
@@ -151,13 +153,16 @@ pub fn import_media_files(app: AppHandle, paths: Vec<String>) -> Vec<MediaDraft>
         None
       }
     })
-    .collect()
+    .collect();
+  span.rows(paths.len(), drafts.len());
+  drafts
 }
 
 /// The card a stored media file makes, read again: to adopt an orphan, or to refresh
 /// a card's metadata and recognised text.
 #[tauri::command(async)]
 pub fn media_card_draft(app: AppHandle, name: String) -> Result<Option<MediaDraft>, String> {
+  let _span = crate::perf::metered!();
   Ok(app_media_draft(&app, &name, &read_media(&app, &name)?))
 }
 
