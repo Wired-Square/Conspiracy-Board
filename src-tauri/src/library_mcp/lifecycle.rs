@@ -193,9 +193,20 @@ fn announce(app: &AppHandle, status: Reply) -> Reply {
   status
 }
 
+/// A dev build is re-signed on every rebuild, so the Keychain would prompt each launch.
+#[cfg(feature = "mcp")]
+fn token_store() -> impl SecretStore + 'static {
+  wslib_secret::MemoryStore::default()
+}
+
+#[cfg(not(feature = "mcp"))]
+fn token_store() -> impl SecretStore + 'static {
+  wslib_secret::Keychain
+}
+
 /// Off the setup thread: a taken port holds `start` for its bind retry.
 pub(crate) fn manage_and_resume(app: &AppHandle) -> Result<(), String> {
-  app.manage(LibraryMcp::new(library_dir(app)?, Arc::new(app.clone()), PORT, Arc::new(wslib_secret::Keychain)));
+  app.manage(LibraryMcp::new(library_dir(app)?, Arc::new(app.clone()), PORT, Arc::new(token_store())));
   let app = app.clone();
   tauri::async_runtime::spawn_blocking(move || {
     if let Err(e) = announce(&app, app.state::<LibraryMcp>().resume(&app.state::<LibraryDb>())) {
@@ -266,6 +277,18 @@ mod tests {
   use crate::board_store::temp_dir_for;
   use crate::library_mcp::writes::Detached;
   use crate::library_index::open_at;
+
+  #[test]
+  #[cfg(feature = "mcp")]
+  fn a_dev_build_keeps_the_token_in_memory() {
+    assert_eq!(std::any::type_name_of_val(&token_store()), std::any::type_name::<MemoryStore>());
+  }
+
+  #[test]
+  #[cfg(not(feature = "mcp"))]
+  fn a_release_build_keeps_the_token_in_the_keychain() {
+    assert_eq!(std::any::type_name_of_val(&token_store()), std::any::type_name::<wslib_secret::Keychain>());
+  }
 
   fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
