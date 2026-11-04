@@ -305,6 +305,8 @@ function DeleteCard(props: { cardId: string }) {
           tone="danger"
           class="card-delete"
           ref={autofocus}
+          // WebKit does not focus a clicked button: mousedown would blur this one and unmount it before the click.
+          onMouseDown={(e) => e.preventDefault()}
           onBlur={() => setConfirming(false)}
           onClick={() => boardStore.getState().deleteCard(props.cardId)}
         >
