@@ -5,6 +5,7 @@ import { otherEnd } from './connections';
 import { isEntityKind, CARD_KINDS } from './kinds';
 import { communicationParties } from './comms';
 import { newestFirst } from './dates';
+import { cardsById, oncePerArray } from './cardIndex';
 
 // Who is in what. Emails belong to people by address and to organisations by
 // domain, and an email belongs to both at once — so this is a graph, not a tree,
@@ -117,7 +118,7 @@ export type Roster = {
  * rather than left to chance. Surfacing that conflict to the user is worth doing
  * and is not this function's job.
  */
-export function buildRoster(cards: Card[]): Roster {
+export function buildRoster(cards: readonly Card[]): Roster {
   const roster: Roster = {
     personByAddress: new Map(),
     orgByAddress: new Map(),
@@ -206,6 +207,8 @@ export function buildRoster(cards: Card[]): Roster {
 
   return roster;
 }
+
+export const rosterOf = oncePerArray(buildRoster);
 
 /**
  * Wire one communication's participants into the graph: its people and organisations
@@ -327,7 +330,7 @@ export function relationsOf(
   cardId: string,
   cards: readonly Card[],
 ): { actors: Card[]; sent: Card[]; received: Card[] } {
-  const byId = new Map(cards.map((c) => [c.id, c]));
+  const byId = cardsById(cards);
   return {
     // Order comes from KIND_META, so a third actor kind lands in the right place
     // by declaring its register rather than by anyone remembering this list.

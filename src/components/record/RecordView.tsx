@@ -1,7 +1,7 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { cx } from '@wired-square/kit/core';
 import type { Card } from '../../types/board';
-import { buildRoster } from '../../lib/roster';
+import { rosterOf } from '../../lib/roster';
 import { visibleCards } from '../../lib/visibility';
 import { clusterColor, NO_CLUSTER_ACCENT, primaryClusterId } from '../../lib/clusters';
 import { mediaIconForKind } from '../../lib/mediaIcon';
@@ -13,6 +13,12 @@ import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { MediaIcon } from '../ui/MediaIcon';
 import { measure, untilPainted } from '../../platform/perf';
+import { createWindow } from '../createWindow';
+
+const ROW_H = 50;
+
+/** Where each board's list was scrolled to, so leaving for the board and back keeps the place. */
+const scrolledTo = new Map<string, number>();
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox
 // would bury the argument under two hundred cards of post — so it is here, in
@@ -29,7 +35,7 @@ export function RecordView() {
   const searchQuery = fromStore(boardStore, (s) => s.searchQuery);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const { selectCard } = boardStore.getState();
-  const roster = createMemo(() => buildRoster(allCards()));
+  const roster = () => rosterOf(allCards());
   const cards = createMemo(() =>
     measure(
       'record filter',
@@ -55,7 +61,57 @@ export function RecordView() {
   // Rows by card, not by row: recordRows builds fresh rows on every edit, and the
   // cards it wraps are what stays put.
   const loose = createMemo(() => new Map(record().rows.map((r) => [r.card.id, r.loose])));
-  const shown = () => (onlyLoose() ? record().rows.filter((r) => r.loose) : record().rows).map((r) => r.card);
+  const shown = createMemo(() => (onlyLoose() ? record().rows.filter((r) => r.loose) : record().rows).map((r) => r.card));
+
+  // Ten thousand emails: only the rows in view are drawn.
+  const rows = createWindow({
+    count: () => shown().length,
+    key: (i) => shown()[i].id,
+    estimate: () => ROW_H,
+    axis: 'y',
+    overscan: 800,
+  });
+  const boardId = boardStore.getState().currentBoardId ?? '';
+  let list: HTMLUListElement | undefined;
+  onMount(() => {
+    if (!list) return;
+    list.scrollTop = scrolledTo.get(boardId) ?? 0;
+    rows.sync();
+  });
+  onCleanup(() => list && scrolledTo.set(boardId, list.scrollTop));
+
+  // Tab walks every row in order, not just the drawn ones: the next row is drawn and
+  // focused here, and the focused row stays drawn wherever the list scrolls.
+  const rowButton = (id: string) => list?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"] .record-row`);
+  const rowOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('[data-card-id]')?.dataset.cardId ?? null;
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
+    const id = rowOf(e);
+    const from = id === null ? -1 : shown().findIndex((c) => c.id === id);
+    const to = from + (e.shiftKey ? -1 : 1);
+    if (from < 0 || to < 0 || to >= shown().length) return;
+    e.preventDefault();
+    rows.reveal(to);
+    rowButton(shown()[to].id)?.focus();
+  };
+  // Moving a focused row in the DOM drops its focus, so the row that had it gets it
+  // back; focus that left for somewhere else is let go.
+  let rowHasFocus = false;
+  const onFocusIn = (e: FocusEvent) => {
+    const id = rowOf(e);
+    rowHasFocus = id !== null;
+    rows.pin(id);
+  };
+  const onFocusOut = (e: FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to ? !list?.contains(to) : (e.target as Node).isConnected) rowHasFocus = false;
+  };
+  createEffect(
+    on(rows.drawn, () => {
+      const id = rows.pinned();
+      if (rowHasFocus && id !== null && !list?.contains(document.activeElement)) rowButton(id)?.focus({ preventScroll: true });
+    }),
+  );
 
   return (
     <div class="record">
@@ -85,18 +141,35 @@ export function RecordView() {
           </p>
         }
       >
-        <ul class="record__list">
-          <For each={shown()}>
+        <ul
+          class="record__list"
+          onKeyDown={onKeyDown}
+          onFocusIn={onFocusIn}
+          onFocusOut={onFocusOut}
+          ref={(el) => {
+            list = el;
+            rows.container(el);
+          }}
+        >
+          <li class="record__spacer" aria-hidden="true" style={{ height: `${rows.before()}px` }} />
+          <For each={rows.drawn().map((i) => shown()[i])}>
             {(card) => (
-              <RecordRow
-                card={card}
-                loose={loose().get(card.id) ?? null}
-                clusterColor={clusterColor(primaryClusterId(card.clusterIds), clusters())}
-                selected={card.id === selectedCardId()}
-                onPick={selectCard}
-              />
+              <li
+                data-card-id={card.id}
+                style={{ 'margin-top': `${rows.skipped(card.id)}px` }}
+                ref={(el) => rows.measure(el, card.id)}
+              >
+                <RecordRow
+                  card={card}
+                  loose={loose().get(card.id) ?? null}
+                  clusterColor={clusterColor(primaryClusterId(card.clusterIds), clusters())}
+                  selected={card.id === selectedCardId()}
+                  onPick={selectCard}
+                />
+              </li>
             )}
           </For>
+          <li class="record__spacer" aria-hidden="true" style={{ height: `${rows.after()}px` }} />
         </ul>
       </Show>
     </div>
@@ -114,39 +187,37 @@ type RowProps = {
 
 function RecordRow(props: RowProps) {
   return (
-    <li>
-      <button
-        type="button"
-        class={cx('app-menu__item record-row', props.selected && 'is-selected', props.loose && 'is-loose')}
-        style={{ '--accent': props.clusterColor ?? NO_CLUSTER_ACCENT }}
-        onClick={() => props.onPick(props.card.id)}
-        title={props.card.title}
-      >
-        {/* The picture if the message carried one, else the kind's own glyph —
-            a row is a fixed height either way, so the list does not jump. Not
-            loading="lazy": the rows already defer via content-visibility, and
-            WKWebView's lazy-load proved unreliable on the board faces. */}
-        <span class="record-row__thumb">
-          <Show
-            when={cardImageSrc(props.card)}
-            fallback={<MediaIcon type={mediaIconForKind(props.card.kind) ?? 'document'} />}
-          >
-            {(image) => (
-              <img src={image()} alt="" draggable={false} decoding="async" style={cardImageStyle(props.card)} />
-            )}
-          </Show>
-        </span>
-        <span class="record-row__main">
-          <span class="record-row__title">{props.card.title || 'Untitled'}</span>
-          <Show when={whoLine(props.card)}>{(who) => <span class="record-row__who">{who()}</span>}</Show>
-        </span>
-        {/* Says what is missing, not just that something is. "2 addresses
-            unaccounted" is a thing you can go and do; a bare warning is not. */}
-        <Show when={props.loose}>{(loose) => <span class="record-row__loose">{loose()}</span>}</Show>
-        <span class="record-row__when">
-          {props.card.occurredAt ? formatOccurredAt(props.card.occurredAt, props.card.occurredAtPrecision) : 'undated'}
-        </span>
-      </button>
-    </li>
+    <button
+      type="button"
+      class={cx('app-menu__item record-row', props.selected && 'is-selected', props.loose && 'is-loose')}
+      style={{ '--accent': props.clusterColor ?? NO_CLUSTER_ACCENT }}
+      onClick={() => props.onPick(props.card.id)}
+      title={props.card.title}
+    >
+      {/* The picture if the message carried one, else the kind's own glyph —
+          a row is a fixed height either way, so the list does not jump. Not
+          loading="lazy": only the rows in view are drawn, and WKWebView's
+          lazy-load proved unreliable on the board faces. */}
+      <span class="record-row__thumb">
+        <Show
+          when={cardImageSrc(props.card)}
+          fallback={<MediaIcon type={mediaIconForKind(props.card.kind) ?? 'document'} />}
+        >
+          {(image) => (
+            <img src={image()} alt="" draggable={false} decoding="async" style={cardImageStyle(props.card)} />
+          )}
+        </Show>
+      </span>
+      <span class="record-row__main">
+        <span class="record-row__title">{props.card.title || 'Untitled'}</span>
+        <Show when={whoLine(props.card)}>{(who) => <span class="record-row__who">{who()}</span>}</Show>
+      </span>
+      {/* Says what is missing, not just that something is. "2 addresses
+          unaccounted" is a thing you can go and do; a bare warning is not. */}
+      <Show when={props.loose}>{(loose) => <span class="record-row__loose">{loose()}</span>}</Show>
+      <span class="record-row__when">
+        {props.card.occurredAt ? formatOccurredAt(props.card.occurredAt, props.card.occurredAtPrecision) : 'undated'}
+      </span>
+    </button>
   );
 }

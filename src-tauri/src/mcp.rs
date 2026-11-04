@@ -59,15 +59,16 @@ impl Tools {
   fn router() -> ToolRouter<Self> {
     let mut app = Self::app_router();
     mark_read_only(&mut app);
-    app + dom::read_router() + dom::drive_router()
+    app + Self::meter_router() + dom::read_router() + dom::drive_router()
   }
 
   fn identity() -> ServerIdentity {
     ServerIdentity::new("conspiracy", wslib_build_id::build_version!())
       .with_title("Conspiracy (dev)")
       .with_instructions(
-        "Development harness for the Conspiracy board app. App tools only read state; every \
-         change goes through the UI, which the DOM tools drive by CSS selector in the main window.",
+        "Development harness for the Conspiracy board app. App tools only read state, bar \
+         perf_reset, which clears the meter; every change goes through the UI, which the DOM \
+         tools drive by CSS selector in the main window.",
       )
   }
 }
@@ -92,6 +93,20 @@ impl Tools {
   async fn jobs_pending(&self) -> Result<CallToolResult, ErrorData> {
     ok_json(json!({ "pending": self.jobs.pending() }))
   }
+
+  #[tool(description = "The performance meter's report, as the library MCP's perf_report gives it.")]
+  async fn perf_report(&self) -> Result<CallToolResult, ErrorData> {
+    ok_json(crate::perf::report())
+  }
+}
+
+#[tool_router(router = meter_router)]
+impl Tools {
+  #[tool(description = "Clears the performance meter, so a later perf_report covers only what follows.")]
+  async fn perf_reset(&self) -> Result<CallToolResult, ErrorData> {
+    crate::perf::reset();
+    ok_json(json!({}))
+  }
 }
 
 #[cfg(test)]
@@ -110,6 +125,8 @@ mod tests {
       ("click", false),
       ("console", true),
       ("jobs_pending", true),
+      ("perf_report", true),
+      ("perf_reset", false),
       ("press", false),
       ("query", true),
       ("type", false),

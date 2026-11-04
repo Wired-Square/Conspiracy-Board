@@ -35,10 +35,11 @@ import { CommsFields } from './CommsFields';
 import { DocumentFields } from './DocumentFields';
 import { EntityFields } from './EntityFields';
 import { GradeField, GradeLegend } from './GradeField';
-import { untilPainted } from '../../platform/perf';
+import { untilPainted, watchFramesAfterAction } from '../../platform/perf';
+import { cardsById } from '../../lib/cardIndex';
 
 export function CardEditor() {
-  const card = fromStore(boardStore, (s) => s.cards.find((c) => c.id === s.selectedCardId));
+  const card = fromStore(boardStore, (s) => (s.selectedCardId ? cardsById(s.cards).get(s.selectedCardId) : undefined));
   const close = () => boardStore.getState().selectCard(null);
 
   // No selection, no dialog: the editor is a modal now, not a persistent column,
@@ -66,6 +67,7 @@ export function CardEditor() {
 
 function CardEditorForm(props: { card: Card }) {
   untilPainted('card editor open');
+  watchFramesAfterAction();
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const { updateCard, setView } = boardStore.getState();
   const id = props.card.id;

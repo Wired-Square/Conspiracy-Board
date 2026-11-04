@@ -57,8 +57,8 @@ export function formatOccurredAt(iso: string, precision: DatePrecision): string 
  */
 export function dayKey(iso: string, precision: DatePrecision): string {
   if (precision === 'day') return iso.slice(0, 10);
-  // 'en-CA' formats as YYYY-MM-DD, which sorts correctly and reads back cleanly.
-  return new Date(iso).toLocaleDateString('en-CA');
+  // Not toLocaleDateString: WebKit builds a formatter per call, ~0.3 s over 11,000 chips.
+  return localDayString(new Date(iso));
 }
 
 /** Heading text for a day group, from a `dayKey` value. */

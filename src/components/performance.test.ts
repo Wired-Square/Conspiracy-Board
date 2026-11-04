@@ -3,20 +3,25 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { PerfReport } from '../bindings/PerfReport';
-import { perf } from '../platform/perf';
+import { holdFrameWatch, perf } from '../platform/perf';
 import { perfText } from '../lib/perfText';
 import { PerformanceModal } from './panels/PerformanceModal';
 
+const size = (rowsIn: number, rowsOut: number, bytes: number) => ({ rowsIn, rowsOut, bytes });
 const REPORT: PerfReport = {
   ops: [
-    { name: 'open_board_session', count: 2, p50Ms: 400, p95Ms: 900, maxMs: 900, lastMs: 400 },
-    { name: 'ui:frame gap', count: 1, p50Ms: 60, p95Ms: 60, maxMs: 60, lastMs: 60 },
+    { name: 'emit doc:changed', count: 2, p50Ms: 400, p95Ms: 900, maxMs: 900, lastMs: 400, lastSize: size(0, 1, 812) },
+    { name: 'ui:frame gap', count: 1, p50Ms: 60, p95Ms: 60, maxMs: 60, lastMs: 60, lastSize: size(0, 0, 0) },
   ],
   slowest: [{ name: 'open_board_session', ms: 900, at: 0, rowsIn: 0, rowsOut: 11034, bytes: 0 }],
 };
 const EMPTY: PerfReport = { ops: [], slowest: [] };
 
-vi.mock('../platform/perf', () => ({ perf: { report: vi.fn(), reset: vi.fn(async () => {}) } }));
+vi.mock('../platform/perf', () => ({
+  perf: { report: vi.fn(), reset: vi.fn(async () => {}) },
+  holdFrameWatch: vi.fn(),
+}));
+const released = vi.fn();
 const mocked = vi.mocked(perf);
 const writeText = vi.fn(async () => {});
 Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -35,7 +40,10 @@ const cells = (host: HTMLElement, table: number) =>
     [...tr.querySelectorAll('td')].map((td) => td.textContent),
   );
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(holdFrameWatch).mockReturnValue(released);
+});
 afterEach(() => {
   dispose?.();
   dispose = undefined;
@@ -47,8 +55,8 @@ test('the panel lists each operation slowest first, then the slowest calls with 
   const host = mount();
   await settle();
   expect(cells(host, 0)).toEqual([
-    ['open_board_session', '2', '400.0', '900.0', '900.0', '400.0'],
-    ['ui:frame gap', '1', '60.0', '60.0', '60.0', '60.0'],
+    ['emit doc:changed', '2', '400.0', '900.0', '900.0', '400.0', '812'],
+    ['ui:frame gap', '1', '60.0', '60.0', '60.0', '60.0', '0'],
   ]);
   expect(cells(host, 1)[0].slice(1)).toEqual(['open_board_session', '900.0', '0', '11034', '0']);
 });
@@ -74,4 +82,14 @@ test('a report that fails says why', async () => {
   const host = mount();
   await settle();
   expect(host.querySelector('[role="alert"]')?.textContent).toBe('The meter is unavailable.');
+});
+
+test('the open panel holds the frame watch, and closing it lets go', async () => {
+  mocked.report.mockResolvedValue(EMPTY);
+  mount();
+  expect(holdFrameWatch).toHaveBeenCalledTimes(1);
+  expect(released).not.toHaveBeenCalled();
+  dispose!();
+  dispose = undefined;
+  expect(released).toHaveBeenCalledTimes(1);
 });

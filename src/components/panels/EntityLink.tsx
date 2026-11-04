@@ -2,7 +2,8 @@ import { Index, Show, createMemo, createSignal, type Accessor } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
 import { x } from '@wired-square/icons/solid';
 import type { Card, CardKind, EmailAddress } from '../../types/board';
-import { buildRoster, type AddressMatch, type Roster } from '../../lib/roster';
+import { rosterOf, type AddressMatch, type Roster } from '../../lib/roster';
+import { cardsById } from '../../lib/cardIndex';
 import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { boardStore } from '../../store/boardStore';
@@ -24,10 +25,15 @@ export const NEW_ORG = 'new:org';
 export function entityLinkCommon() {
   const cards = fromStore(boardStore, (s) => s.cards);
   const { selectCard, addCard, updateCard } = boardStore.getState();
-  const roster = createMemo(() => buildRoster(cards()));
-  const cardsById = createMemo(() => new Map(cards().map((c) => [c.id, c])));
   const hasOrgs = createMemo(() => cards().some((c) => c.kind === 'organisation'));
-  return { selectCard, addCard, updateCard, roster, cardsById, hasOrgs };
+  return {
+    selectCard,
+    addCard,
+    updateCard,
+    roster: () => rosterOf(cards()),
+    cardsById: () => cardsById(cards()),
+    hasOrgs,
+  };
 }
 
 export type LinkRowContext = {

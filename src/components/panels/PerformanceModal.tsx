@@ -1,8 +1,8 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createSignal, onCleanup } from 'solid-js';
 import { Button, CopyButton, Dialog, DialogActions, Notice, Table, Td, Th, Tr } from '@wired-square/kit';
 import { errorMessage } from '../../lib/errors';
 import { perfText } from '../../lib/perfText';
-import { perf, type PerfReport } from '../../platform/perf';
+import { holdFrameWatch, perf, type PerfReport } from '../../platform/perf';
 import { closeDialog } from '../../store/dialogStore';
 
 const ms = (n: number) => n.toFixed(1);
@@ -17,9 +17,10 @@ export function PerformanceModal() {
   };
   const refresh = () => load(perf.report);
   refresh();
+  onCleanup(holdFrameWatch());
 
   return (
-    <Dialog title="Performance" wide onClose={close}>
+    <Dialog title="Performance" wide class="performance" onClose={close}>
       <p class="hint">
         How long each step has taken since launch or the last reset, in milliseconds, slowest first. p50 and p95
         cover each step’s last 256 calls. Nothing leaves this Mac.
@@ -43,6 +44,7 @@ export function PerformanceModal() {
                     <Th right>p95</Th>
                     <Th right>Max</Th>
                     <Th right>Last</Th>
+                    <Th right>Last bytes</Th>
                   </>
                 }
               >
@@ -55,6 +57,7 @@ export function PerformanceModal() {
                       <Td right numeric>{ms(op.p95Ms)}</Td>
                       <Td right numeric>{ms(op.maxMs)}</Td>
                       <Td right numeric>{ms(op.lastMs)}</Td>
+                      <Td right numeric>{op.lastSize.bytes}</Td>
                     </Tr>
                   )}
                 </For>

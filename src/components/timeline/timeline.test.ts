@@ -111,3 +111,76 @@ test('a selection elsewhere lights its chip', () => {
   expect(chip('later')!.classList.contains('is-selected')).toBe(true);
   expect(chip('drawn')!.classList.contains('is-selected')).toBe(false);
 });
+
+const daily = (n: number) =>
+  Array.from({ length: n }, (_, i) =>
+    card(`mail-${i}`, { kind: 'email', occurredAt: new Date(Date.UTC(2020, 0, 1 + i)).toISOString() }),
+  );
+
+test('a long strip draws only the days in view, holding the rest as spacers', () => {
+  boardStore.setState({ cards: daily(400) });
+  const drawn = host.querySelectorAll('.timeline-item').length;
+  expect(drawn).toBeGreaterThan(0);
+  expect(drawn).toBeLessThan(40);
+  const [before, after] = [...host.querySelectorAll<HTMLElement>('.timeline__spacer')].map((s) => parseFloat(s.style.width));
+  expect(before).toBe(0);
+  expect(after).toBeGreaterThan(300 * 150);
+});
+
+test('the event controls draw and centre a chip that was out of view', async () => {
+  boardStore.setState({ cards: [...daily(400), card('finale', { kind: 'event', occurredAt: '2021-06-01T00:00:00.000Z' })] });
+  expect(chip('finale')).toBeNull();
+  const strip = host.querySelector<HTMLElement>('.timeline__strip')!;
+  let scrolled = 0;
+  Object.defineProperty(strip, 'scrollLeft', { get: () => scrolled, set: (v: number) => (scrolled = v) });
+  button('End').click();
+  await new Promise((r) => setTimeout(r, 100));
+  expect(scrolled).toBeGreaterThan(300 * 150);
+  expect(chip('finale')).not.toBeNull();
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+});
+
+const tick = () => new Promise((r) => setTimeout(r));
+
+test('a chip the strip placed stays the anchor through a kind filter and back, though another is nearer the centre', async () => {
+  boardStore.setState({
+    cards: [
+      ...daily(40),
+      card('earlier', { kind: 'event', occurredAt: '2020-02-25T00:00:00.000Z' }),
+      card('finale', { kind: 'event', occurredAt: '2020-03-01T00:00:00.000Z' }),
+    ],
+  });
+  // At the strip's end the placed chip sits right of centre, and another is at it.
+  const at: Record<string, number> = { earlier: 450, finale: 900 };
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const id = (this as HTMLElement).dataset.cardId;
+    const left = id ? (at[id] ?? 2000) : 0;
+    return { left, right: left + 100 } as DOMRect;
+  });
+  const strip = host.querySelector<HTMLElement>('.timeline__strip')!;
+  let scrolled = 0;
+  Object.defineProperty(strip, 'scrollLeft', { get: () => scrolled, set: (v: number) => (scrolled = v) });
+  Object.defineProperty(strip, 'clientWidth', { value: 1000 });
+  button('End').click();
+  await new Promise((r) => setTimeout(r, 100));
+  const revealed = () => (vi.mocked(Element.prototype.scrollIntoView).mock.contexts.at(-1) as HTMLElement).dataset.cardId;
+  expect(revealed()).toBe('finale');
+
+  button('Filter').click();
+  const email = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role=menuitemcheckbox]')].find((o) => o.textContent?.includes('Email'))!;
+  email().click();
+  await tick();
+  expect(host.querySelector('.timeline__count')!.textContent).toBe('2 dated');
+  expect(revealed()).toBe('finale');
+  email().click();
+  await tick();
+  expect(host.querySelector('.timeline__count')!.textContent).toBe('42 dated');
+  expect(revealed()).toBe('finale');
+
+  strip.dispatchEvent(new Event('wheel'));
+  email().click();
+  await tick();
+  expect(revealed()).toBe('earlier');
+  vi.restoreAllMocks();
+});

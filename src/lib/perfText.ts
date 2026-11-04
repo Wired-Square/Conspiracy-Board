@@ -17,7 +17,7 @@ function columns(rows: string[][], labels: number): string {
 
 /** The report as plain text, to paste into a note or an issue. */
 export function perfText(report: PerfReport): string {
-  const ops = report.ops.map((o) => [o.name, String(o.count), ms(o.p50Ms), ms(o.p95Ms), ms(o.maxMs), ms(o.lastMs)]);
+  const ops = report.ops.map((o) => [o.name, String(o.count), ms(o.p50Ms), ms(o.p95Ms), ms(o.maxMs), ms(o.lastMs), String(o.lastSize.bytes)]);
   const calls = report.slowest.map((c) => [
     new Date(c.at).toISOString(),
     c.name,
@@ -28,7 +28,7 @@ export function perfText(report: PerfReport): string {
   ]);
   return [
     'Operations (ms), slowest first',
-    columns([['operation', 'calls', 'p50', 'p95', 'max', 'last'], ...ops], 1),
+    columns([['operation', 'calls', 'p50', 'p95', 'max', 'last', 'last bytes'], ...ops], 1),
     '',
     'Slowest calls',
     columns([['at (UTC)', 'operation', 'ms', 'rows in', 'rows out', 'bytes'], ...calls], 2),

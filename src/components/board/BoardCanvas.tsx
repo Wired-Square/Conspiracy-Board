@@ -5,7 +5,7 @@ import { NO_CLUSTER_ACCENT } from '../../lib/clusters';
 import { gradeTint } from '../../lib/grades';
 import { highlight, linkDegrees, tieScaleInterner } from '../../lib/highlight';
 import { CARD_H, CARD_W } from '../../lib/layout';
-import { allSuggestedLinks, buildRoster } from '../../lib/roster';
+import { allSuggestedLinks, rosterOf } from '../../lib/roster';
 import { drawnCardIds, linksWithin, searchMatchIds } from '../../lib/visibility';
 import { yarnPath } from '../../lib/yarn';
 import { boardStore } from '../../store/boardStore';
@@ -106,7 +106,7 @@ export function BoardCanvas() {
 
   // Derived links never reach the store or disk, and can't be selected: a suggestion
   // isn't something to grade or cut.
-  const roster = createMemo(() => buildRoster(cards()));
+  const roster = () => rosterOf(cards());
   const allEdges = createMemo((): StringEdge[] => {
     const derived = allSuggestedLinks(roster(), drawnIds(), drawnEdges()).map(({ source, target }) => ({
       id: `derived:${source}:${target}`,

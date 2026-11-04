@@ -13,6 +13,7 @@ import {
   nextPicks,
   stepEvent,
   timelineCards,
+  type DayGroup,
   type EventStep,
 } from '../../lib/timeline';
 import { CARD_H, CARD_W } from '../../lib/layout';
@@ -24,6 +25,16 @@ import { createDebounced } from '../createDebounced';
 import { createDocHits } from '../createDocHits';
 import { TimelineItem } from './TimelineItem';
 import { TimelineKindFilter } from './TimelineKindFilter';
+import { createWindow } from '../createWindow';
+
+// Sizes from .timeline-item, .timeline__chips and .timeline__slot, so a day's estimate is its width.
+const CHIP_W = 150;
+const CHIP_GAP = 8;
+const SLOT_GAP = 12;
+const GAP_MARKER_W = 90;
+
+const dayWidth = (group: DayGroup) =>
+  (group.gapDays > 1 ? GAP_MARKER_W + SLOT_GAP : 0) + group.cards.length * (CHIP_W + CHIP_GAP) - CHIP_GAP + SLOT_GAP;
 
 /**
  * A chronological strip under the board.
@@ -59,19 +70,25 @@ export function TimelineDrawer() {
   // restore effect below). Candidates rather than one id, so narrowing by kind
   // anchors on the closest chip that survives; an empty strip keeps the
   // previous anchor, so even a fruitless search returns you to where you were.
+  // A chip the strip put in view itself leads until the user scrolls: at either
+  // end of the strip it can't sit at the centre, and the chip that does is not
+  // the one being looked at.
   let anchor: string[] = [];
+  let placed: string | null = null;
+  const letGo = () => (placed = null);
   const captureAnchor = () => {
     if (!strip) return;
     const centre = strip.getBoundingClientRect().left + strip.clientWidth / 2;
     const chips = [...strip.querySelectorAll<HTMLElement>('[data-card-id]')];
     if (!chips.length) return;
-    anchor = chips
+    const byDistance = chips
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { id: el.dataset.cardId!, d: Math.abs((r.left + r.right) / 2 - centre) };
       })
       .sort((a, b) => a.d - b.d)
       .map((c) => c.id);
+    anchor = placed && byDistance.includes(placed) ? [placed, ...byDistance.filter((id) => id !== placed)] : byDistance;
   };
 
   // Which kinds the strip hides. The search has already narrowed the raw sets to
@@ -108,13 +125,7 @@ export function TimelineDrawer() {
   // (the milestone controls) isn't left off-screen. Two frames: the strip may be
   // opening from collapsed, so let it mount and settle before scrolling.
   const scrollChipIntoView = (id: string) => {
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        strip
-          ?.querySelector<HTMLElement>(`[data-card-id="${id}"]`)
-          ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }),
-      ),
-    );
+    requestAnimationFrame(() => requestAnimationFrame(() => revealChip(id, 'smooth')));
   };
 
   // Searching opens the drawer and jumps to the first (earliest) match — the way
@@ -137,13 +148,7 @@ export function TimelineDrawer() {
       if (query || !anchor.length) return;
       const candidates = anchor;
       anchor = [];
-      for (const id of candidates) {
-        const chip = strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
-        if (chip) {
-          chip.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
-          return;
-        }
-      }
+      candidates.some((id) => revealChip(id, 'instant'));
     }),
   );
 
@@ -201,7 +206,39 @@ export function TimelineDrawer() {
   // Consecutive chips under a day heading, with the elapsed gap between days. Keyed
   // by day, so an edit redraws only its own day.
   const groups = createMemo(() => new Map(dayGroups(dated()).map((g) => [g.key, g])));
-  const dayKeys = () => [...groups().keys()];
+  const dayKeys = createMemo(() => [...groups().keys()]);
+  const dayOf = createMemo(() => {
+    const day = new Map<string, number>();
+    dayKeys().forEach((key, i) => groups().get(key)!.cards.forEach((card) => day.set(card.id, i)));
+    return day;
+  });
+
+  // Eleven thousand emails are eleven thousand chips: only the days in view are drawn.
+  const days = createWindow({
+    count: () => dayKeys().length,
+    key: (i) => dayKeys()[i],
+    estimate: (i) => dayWidth(groups().get(dayKeys()[i])!),
+    axis: 'x',
+    overscan: 1500,
+  });
+  const shownDays = () => days.drawn().map((i) => dayKeys()[i]);
+
+  const chipEl = (id: string) => strip?.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
+  /** Scroll a dated chip to the strip's centre, drawing its day first if it is out of view. */
+  const revealChip = (id: string, behavior: ScrollBehavior) => {
+    const day = dayOf().get(id);
+    if (day === undefined) return false;
+    placed = id;
+    const reveal = () => chipEl(id)?.scrollIntoView({ behavior, inline: 'center', block: 'nearest' });
+    if (chipEl(id)) {
+      reveal();
+    } else {
+      days.centre(day);
+      // Inside an effect the drawn days only update once it returns.
+      queueMicrotask(reveal);
+    }
+    return true;
+  };
 
   const measurement = createMemo(() => measureBetween(picks(), datedById()));
   const marks = createMemo(() => measureMarks(measurement(), picks()));
@@ -335,19 +372,24 @@ export function TimelineDrawer() {
 
             <div
               class="timeline__strip"
+              onWheel={letGo}
+              onPointerDown={letGo}
+              onKeyDown={letGo}
               ref={(el) => {
                 strip = el;
+                days.container(el);
                 onCleanup(() => (strip = undefined));
               }}
             >
               <Show when={dayKeys().length === 0}>
                 <p class="hint timeline__empty">Give a card a date in the editor and it will appear here.</p>
               </Show>
-              <For each={dayKeys()}>
+              <div class="timeline__spacer" style={{ width: `${days.before()}px` }} />
+              <For each={shownDays()}>
                 {(key) => {
                   const group = () => groups().get(key)!;
                   return (
-                    <>
+                    <div class="timeline__slot" ref={(el) => days.measure(el, key)}>
                       <Show when={group().gapDays > 1}>
                         <div class="timeline__gap" aria-hidden="true">
                           — {group().gapDays} days —
@@ -359,10 +401,11 @@ export function TimelineDrawer() {
                           <For each={group().cards}>{(card) => chip(card, true)}</For>
                         </div>
                       </div>
-                    </>
+                    </div>
                   );
                 }}
               </For>
+              <div class="timeline__spacer" style={{ width: `${days.after()}px` }} />
             </div>
           </div>
         </div>

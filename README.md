@@ -831,6 +831,31 @@ the stylesheet and fails if any grade colour drifts within ΔE 25 of another or 
 plain red string, or if a chip stops clearing WCAG AA. Both are arithmetic, and
 both were broken by hand while the palette was being chosen.
 
+`bigBoard.budget.test.ts` builds an 11,000-card board and fails if a one-card
+edit stops being a one-card update, if the roster is rebuilt per view instead of
+once per change, or if the timeline's day grouping calls a date formatter (WebKit
+builds one per call; over 11,000 cards that was a third of a second per edit).
+Its timing limits are far above what a Mac measures, so they catch a full-board
+pass, not noise. `session/tests.rs` holds the Rust side of the same budget.
+
+## Performance
+
+The app meters itself, always, in memory only: every shell command, every
+library MCP call, and the webview's heavy paths (applying a change, painting the
+Record view and the canvas, opening the card editor, frames that stall for more
+than 50 ms). Each operation keeps its count, p50, p95, max and last size over its
+last 256 calls, plus the 50 slowest calls. **Help ▸ Performance…** shows it, with
+Copy as text; the [Library MCP](#library-mcp)'s read-only `perf_report` returns
+the same. Names, timings and sizes only: no content, and nothing leaves the Mac.
+In a release build the frame watcher runs only while the panel is open or for a
+few seconds after an edit, so an idle window paints nothing.
+
+To measure a big board repeatably, `scripts/perf-scenario.mjs` seeds or clones a
+throwaway library, launches the dev app on it, drives a fixed script (open,
+switch views, open the editor, delete and undo, sit idle) through the dev harness,
+and saves the report. The timeline and the Record view draw only what is in view,
+so a board of tens of thousands of records stays as quick as a small one.
+
 ## Known limits
 
 - **Undo is one level deep, and only for deletes.** A deleted card or cluster

@@ -58,7 +58,7 @@ fn is_staged_media(name: &str) -> bool {
 /// produce the same name, so importing a file twice stores it once — and a name
 /// can be shared by several cards, which is why media is swept, not deleted the
 /// moment one card lets go of it (see `gc_media`).
-pub(super) fn media_name(bytes: &[u8], ext: &str) -> String {
+pub(crate) fn media_name(bytes: &[u8], ext: &str) -> String {
   const HEX: &[u8; 16] = b"0123456789abcdef";
   let digest = Sha256::digest(bytes);
   let mut name = String::with_capacity(digest.len() * 2 + 1 + 8);
@@ -563,6 +563,21 @@ mod tests {
     assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
     assert!(gc(&dir.join("absent"), &[], &media, GC_MIN_AGE).is_err());
     assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_board_that_fails_to_read_or_is_missing_stops_the_sweep_and_is_left_alone() {
+    let (dir, boards, media) = library("gc-unreadable", &["kept.png", "orphan.pdf"], &[]);
+    save_board_file(&boards.join("brd_a.sqlite"), Some(&["kept.png"]));
+    std::fs::write(boards.join("brd_bad.sqlite"), b"not a database").unwrap();
+
+    let listed = ["brd_a".into(), "brd_bad".into(), "brd_away".into()];
+    let mut outcome = gc(&boards, &listed, &media, GC_MIN_AGE).unwrap();
+    outcome.unknown.sort();
+    assert_eq!(outcome, GcOutcome { removed: 0, unknown: vec!["brd_away".into(), "brd_bad".into()] });
+    assert_eq!(on_disk(&media), vec!["kept.png", "orphan.pdf"]);
+    assert_eq!(std::fs::read(boards.join("brd_bad.sqlite")).unwrap(), b"not a database");
     let _ = std::fs::remove_dir_all(&dir);
   }
 

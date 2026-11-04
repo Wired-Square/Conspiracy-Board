@@ -54,21 +54,59 @@ export const perf = {
   },
 };
 
-/** Watches for frame gaps (WebKit has no long-task observer) and sends the queue in batches. */
-export function startPerfMeter(): () => void {
-  let last = performance.now();
-  let frame = requestAnimationFrame(function tick(now) {
-    if (now - last > FRAME_GAP_MS) record('frame gap', now - last);
-    last = now;
-    frame = requestAnimationFrame(tick);
-  });
+const WATCH_AFTER_MS = 5000;
+
+let frame = 0;
+let last = 0;
+let holds = 0;
+let watchUntil = 0;
+
+function tick(now: number) {
+  if (now - last > FRAME_GAP_MS) record('frame gap', now - last);
+  last = now;
+  frame = holds || now < watchUntil ? requestAnimationFrame(tick) : 0;
+}
+
+function watch() {
+  if (frame || typeof requestAnimationFrame !== 'function') return;
+  last = performance.now();
+  frame = requestAnimationFrame(tick);
+}
+
+/** Watches for frame gaps until the returned release; the Performance panel holds it while open. */
+export function holdFrameWatch(): () => void {
+  holds++;
+  watch();
+  let held = true;
+  return () => {
+    if (held) holds--;
+    held = false;
+  };
+}
+
+/** Watches for frame gaps for a few seconds, around an action such as a change landing. */
+export function watchFramesAfterAction(): void {
+  watchUntil = Math.max(watchUntil, performance.now() + WATCH_AFTER_MS);
+  watch();
+}
+
+/**
+ * Sends the queue in batches, and watches for frame gaps (WebKit has no long-task
+ * observer): always in a dev build, otherwise only while held or after an action, so
+ * an idle release app schedules no frames.
+ */
+export function startPerfMeter(alwaysWatch = import.meta.env.DEV): () => void {
+  const release = alwaysWatch ? holdFrameWatch() : () => {};
   const onVisibility = () => {
     last = shownAt = performance.now();
   };
   document.addEventListener('visibilitychange', onVisibility);
   const timer = setInterval(() => void flushPerf(), FLUSH_MS);
   return () => {
+    release();
     cancelAnimationFrame(frame);
+    frame = 0;
+    watchUntil = 0;
     clearInterval(timer);
     document.removeEventListener('visibilitychange', onVisibility);
   };
