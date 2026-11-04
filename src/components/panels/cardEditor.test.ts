@@ -31,6 +31,7 @@ const actions = {
   updateConnection: vi.fn(),
   addConnection: vi.fn(),
   addCard: vi.fn(),
+  deleteCard: vi.fn(),
   setView: vi.fn(),
   selectCard: vi.fn((id: string | null) => boardStore.setState({ selectedCardId: id })),
 };
@@ -177,4 +178,29 @@ test('the picture link opens the image editor for this card', () => {
   open([card('a')]);
   button('Add image…').click();
   expect(dialogStore.getState().imageEditorCardId).toBe('a');
+});
+
+/** WebKit's click on a button: mousedown moves focus off the active element unless it is prevented. */
+const webkitClick = (el: HTMLElement) => {
+  const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  el.dispatchEvent(down);
+  if (!down.defaultPrevented) (document.activeElement as HTMLElement | null)?.blur();
+  el.click();
+};
+
+test('clicking Really delete? deletes the card, as WebKit orders the events', () => {
+  open([card('a')]);
+  webkitClick(button('Delete card'));
+  expect(document.activeElement).toBe(button('Really delete?'));
+  webkitClick(button('Really delete?'));
+  expect(actions.deleteCard).toHaveBeenCalledWith('a');
+});
+
+test('tabbing away from Really delete? dismisses the confirm', () => {
+  open([card('a')]);
+  button('Delete card').click();
+  field('Title').querySelector('input')!.focus();
+  expect(button('Really delete?')).toBeUndefined();
+  expect(button('Delete card')).toBeDefined();
+  expect(actions.deleteCard).not.toHaveBeenCalled();
 });
