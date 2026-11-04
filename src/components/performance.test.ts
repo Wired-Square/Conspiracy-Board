@@ -7,10 +7,11 @@ import { perf } from '../platform/perf';
 import { perfText } from '../lib/perfText';
 import { PerformanceModal } from './panels/PerformanceModal';
 
+const size = (rowsIn: number, rowsOut: number, bytes: number) => ({ rowsIn, rowsOut, bytes });
 const REPORT: PerfReport = {
   ops: [
-    { name: 'open_board_session', count: 2, p50Ms: 400, p95Ms: 900, maxMs: 900, lastMs: 400 },
-    { name: 'ui:frame gap', count: 1, p50Ms: 60, p95Ms: 60, maxMs: 60, lastMs: 60 },
+    { name: 'emit doc:changed', count: 2, p50Ms: 400, p95Ms: 900, maxMs: 900, lastMs: 400, lastSize: size(0, 1, 812) },
+    { name: 'ui:frame gap', count: 1, p50Ms: 60, p95Ms: 60, maxMs: 60, lastMs: 60, lastSize: size(0, 0, 0) },
   ],
   slowest: [{ name: 'open_board_session', ms: 900, at: 0, rowsIn: 0, rowsOut: 11034, bytes: 0 }],
 };
@@ -47,8 +48,8 @@ test('the panel lists each operation slowest first, then the slowest calls with 
   const host = mount();
   await settle();
   expect(cells(host, 0)).toEqual([
-    ['open_board_session', '2', '400.0', '900.0', '900.0', '400.0'],
-    ['ui:frame gap', '1', '60.0', '60.0', '60.0', '60.0'],
+    ['emit doc:changed', '2', '400.0', '900.0', '900.0', '400.0', '812'],
+    ['ui:frame gap', '1', '60.0', '60.0', '60.0', '60.0', '0'],
   ]);
   expect(cells(host, 1)[0].slice(1)).toEqual(['open_board_session', '900.0', '0', '11034', '0']);
 });

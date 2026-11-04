@@ -25,6 +25,19 @@ fn an_operation_keeps_its_count_max_and_last_and_takes_percentiles_from_its_ring
 }
 
 #[test]
+fn an_operation_reports_its_last_size_even_when_too_quick_to_be_among_the_slowest() {
+  let mut meter = Meter::new();
+  for _ in 0..SLOWEST {
+    meter.record("slow", us(1_000_000), Size::default(), 0);
+  }
+  meter.record("emit", us(50), Size { rows_in: 0, rows_out: 1, bytes: 40 }, 0);
+  meter.record("emit", us(60), Size { rows_in: 0, rows_out: 2, bytes: 900 }, 0);
+  let report = meter.report();
+  assert!(report.slowest.iter().all(|c| c.name == "slow"));
+  assert_eq!(stats(&report, "emit").last_size, Size { rows_in: 0, rows_out: 2, bytes: 900 });
+}
+
+#[test]
 fn operations_list_slowest_first_by_p95() {
   let mut meter = Meter::new();
   meter.record("quick", us(10), Size::default(), 0);

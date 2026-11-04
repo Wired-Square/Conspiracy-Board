@@ -50,6 +50,8 @@ pub struct OpStats {
   pub p95_ms: f64,
   pub max_ms: f64,
   pub last_ms: f64,
+  /// The last call's size: an op's sizes otherwise show only among the slowest calls.
+  pub last_size: Size,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -93,6 +95,7 @@ struct Op {
   next: usize,
   max_us: u32,
   last_us: u32,
+  last_size: Size,
 }
 
 struct Call {
@@ -121,6 +124,7 @@ impl Meter {
     entry.count += 1;
     entry.max_us = entry.max_us.max(us);
     entry.last_us = us;
+    entry.last_size = size;
 
     let call = Call { op, us, size, at };
     if self.slowest.len() < SLOWEST {
@@ -137,7 +141,8 @@ impl Meter {
     if self.ops.len() == MAX_OPS {
       return None;
     }
-    let op = Op { name: name.into(), count: 0, ring: [0; RING], next: 0, max_us: 0, last_us: 0 };
+    let op =
+      Op { name: name.into(), count: 0, ring: [0; RING], next: 0, max_us: 0, last_us: 0, last_size: Size::default() };
     self.ops.push(op);
     Some(self.ops.len() - 1)
   }
@@ -171,6 +176,7 @@ impl Op {
       p95_ms: ms(nearest_rank(&recent, 95)),
       max_ms: ms(self.max_us),
       last_ms: ms(self.last_us),
+      last_size: self.last_size,
     }
   }
 }

@@ -43,6 +43,7 @@ export function PerformanceModal() {
                     <Th right>p95</Th>
                     <Th right>Max</Th>
                     <Th right>Last</Th>
+                    <Th right>Last bytes</Th>
                   </>
                 }
               >
@@ -55,6 +56,7 @@ export function PerformanceModal() {
                       <Td right numeric>{ms(op.p95Ms)}</Td>
                       <Td right numeric>{ms(op.maxMs)}</Td>
                       <Td right numeric>{ms(op.lastMs)}</Td>
+                      <Td right numeric>{op.lastSize.bytes}</Td>
                     </Tr>
                   )}
                 </For>
