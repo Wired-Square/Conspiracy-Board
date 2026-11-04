@@ -18,4 +18,16 @@ describe('the board undo shortcut', () => {
     }
     expect(key({ target: { tagName: 'BUTTON', isContentEditable: false } as unknown as EventTarget })).toBe('undo');
   });
+
+  it('leaves every text-entry input type its own undo', () => {
+    for (const type of ['text', 'search', 'email', 'url', 'tel', 'password', 'number', 'TEXT', 'no-such-type']) {
+      expect(key({ target: { tagName: 'INPUT', type } as unknown as EventTarget })).toBeNull();
+    }
+  });
+
+  it('gives board undo to a focused checkbox or colour input', () => {
+    for (const type of ['checkbox', 'radio', 'color', 'range', 'button', 'submit', 'reset', 'file', 'image']) {
+      expect(key({ target: { tagName: 'INPUT', type } as unknown as EventTarget })).toBe('undo');
+    }
+  });
 });

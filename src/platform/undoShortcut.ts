@@ -2,10 +2,13 @@ import { boardStore } from '../store/boardStore';
 
 type Keyed = Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'target'>;
 
+const NON_TEXT_INPUT_TYPES = new Set(['checkbox', 'radio', 'color', 'range', 'button', 'submit', 'reset', 'file', 'image', 'hidden']);
+
 /** Whether the key event happened inside something that has its own undo. */
 function inEditable(target: EventTarget | null): boolean {
-  const el = target as Partial<HTMLElement> | null;
-  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
+  const el = target as Partial<HTMLInputElement> | null;
+  if (el?.tagName === 'INPUT') return !NON_TEXT_INPUT_TYPES.has(el.type?.toLowerCase() ?? 'text');
+  return el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
 }
 
 /** Cmd+Z is board undo and Shift+Cmd+Z board redo, except in a text field, which keeps its own. */
