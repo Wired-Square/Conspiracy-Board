@@ -58,7 +58,7 @@ fn is_staged_media(name: &str) -> bool {
 /// produce the same name, so importing a file twice stores it once — and a name
 /// can be shared by several cards, which is why media is swept, not deleted the
 /// moment one card lets go of it (see `gc_media`).
-pub(super) fn media_name(bytes: &[u8], ext: &str) -> String {
+pub(crate) fn media_name(bytes: &[u8], ext: &str) -> String {
   const HEX: &[u8; 16] = b"0123456789abcdef";
   let digest = Sha256::digest(bytes);
   let mut name = String::with_capacity(digest.len() * 2 + 1 + 8);

@@ -277,3 +277,6 @@ pub fn perf_record(samples: Vec<UiSample>) {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod seed;

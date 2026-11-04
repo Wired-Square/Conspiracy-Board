@@ -92,6 +92,11 @@ impl Tools {
   async fn jobs_pending(&self) -> Result<CallToolResult, ErrorData> {
     ok_json(json!({ "pending": self.jobs.pending() }))
   }
+
+  #[tool(description = "The performance meter's report, as the library MCP's perf_report gives it.")]
+  async fn perf_report(&self) -> Result<CallToolResult, ErrorData> {
+    ok_json(crate::perf::report())
+  }
 }
 
 #[cfg(test)]
@@ -110,6 +115,7 @@ mod tests {
       ("click", false),
       ("console", true),
       ("jobs_pending", true),
+      ("perf_report", true),
       ("press", false),
       ("query", true),
       ("type", false),

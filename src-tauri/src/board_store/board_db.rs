@@ -422,7 +422,7 @@ pub(super) fn delete_rows<'a>(tx: &Transaction, table: &str, ids: impl IntoItera
   Ok(())
 }
 
-fn read_board_db(path: &Path) -> Result<Board, String> {
+pub(crate) fn read_board_db(path: &Path) -> Result<Board, String> {
   reassemble_board(&open_board_db(path)?)
 }
 
