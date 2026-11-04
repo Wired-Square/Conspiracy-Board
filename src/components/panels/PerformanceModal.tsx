@@ -20,7 +20,7 @@ export function PerformanceModal() {
   onCleanup(holdFrameWatch());
 
   return (
-    <Dialog title="Performance" wide onClose={close}>
+    <Dialog title="Performance" wide class="performance" onClose={close}>
       <p class="hint">
         How long each step has taken since launch or the last reset, in milliseconds, slowest first. p50 and p95
         cover each step’s last 256 calls. Nothing leaves this Mac.

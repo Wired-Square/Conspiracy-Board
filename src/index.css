@@ -872,6 +872,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 }
 
 .app-dialog__actions > :only-child { margin-inline-start: auto; }
+/* Both tables at full height, the dialog scrolling, rather than each squeezed into its own box. */
+.performance .app-table-scroll { flex: none; }
 .app-notice { font-size: var(--cb-text-md); }
 .first-run__logo { width: 34px; height: 34px; border-radius: var(--app-radius); flex: 0 0 auto; }
 .first-run__choices { margin-top: var(--cb-space-1); }
