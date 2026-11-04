@@ -211,6 +211,10 @@ pub(crate) fn report() -> PerfReport {
   meter().report()
 }
 
+pub(crate) fn reset() {
+  meter().reset();
+}
+
 thread_local! {
   static EMITTED: Cell<Size> = const { Cell::new(Size { rows_in: 0, rows_out: 0, bytes: 0 }) };
 }
@@ -269,7 +273,7 @@ pub fn perf_report() -> PerfReport {
 #[tauri::command(async)]
 pub fn perf_reset() {
   let _span = metered!();
-  meter().reset();
+  reset();
 }
 
 #[tauri::command(async)]

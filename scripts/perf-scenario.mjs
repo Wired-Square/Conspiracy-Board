@@ -5,6 +5,8 @@
 //   node scripts/perf-scenario.mjs --seed <dir>             seed a fresh library at <dir>
 //   node scripts/perf-scenario.mjs --clone <source> <dir>   run on an APFS clone of <source>
 //
+// IDLE_TICKS=<n> sets how many 30 s ticks it idles for at the end (4 by default).
+//
 // Never point either at the real library: <dir> is replaced on every run.
 
 import { spawn, execFileSync } from 'node:child_process';
@@ -19,11 +21,13 @@ const HARNESS = 'http://127.0.0.1:8792/mcp';
 const HTTP_CAP_MS = 30_000;
 const LAUNCH_CAP_MS = 15 * 60_000;
 const BOARD_CAP_MS = 180_000;
-const IDLE_TICKS = 4;
+const IDLE_TICKS = Number(process.env.IDLE_TICKS ?? 4);
 // WebKit checks its memory every 30 s and, over its threshold, releases it on the main thread.
 const TICK_MS = 30_000;
 const FLUSH_WAIT_MS = 3_000;
 const STOP_CAP_MS = 15_000;
+// Activating the window stalls its first frames, so the clock starts once it has settled.
+const SETTLE_MS = 5_000;
 
 // tauri dev and the seed need cargo, which a non-login shell may not have on PATH.
 const ENV = { ...process.env, PATH: `${process.env.HOME}/.cargo/bin:${process.env.PATH}` };
@@ -163,11 +167,19 @@ async function drive(h, out) {
     await h.call('wait_for', { selector: 'dialog[aria-label="Edit card"]', state: 'gone', timeout_ms: 10_000 });
   };
   const settle = () => sleep(1500);
+  const count = async (selector) => (await h.call('query', { selector })).matches.length;
+  const dom = async (...selectors) => {
+    const counts = {};
+    for (const selector of selectors) counts[selector] = await count(`${selector} *`);
+    return counts;
+  };
 
+  out.dom = { board: await dom('body', '.board-canvas', '.timeline') };
   log('record view and back');
   await view('Record');
   await h.call('wait_for', { selector: '.record-row', state: 'visible', timeout_ms: 30_000 });
   await settle();
+  out.dom.record = await dom('body', '.board-canvas', '.record', '.timeline');
   await view('Board');
   await h.call('wait_for', { selector: '.record', state: 'gone', timeout_ms: 30_000 });
   await settle();
@@ -291,9 +303,12 @@ async function main() {
     log(`board open: ${summary.cards} cards, ${summary.connections} connections, ${summary.clusters} clusters`);
     out.board = { cards: summary.cards, connections: summary.connections, clusters: summary.clusters };
     await until('the extraction queue', BOARD_CAP_MS, async () => (await h.call('jobs_pending')).pending === 0);
+    execFileSync('osascript', ['-e', 'tell application "System Events" to set frontmost of (first process whose name contains "onspiracy") to true']);
     out.webContent = webContentPids().filter((pid) => !before.has(pid));
-    await sleep(5000);
+    await sleep(SETTLE_MS);
     out.footprintOpen = footprintMb(out.webContent);
+    out.launch = await h.call('perf_report');
+    await h.call('perf_reset');
     await drive(h, out);
     out.idleGaps = idleGaps(out, readFileSync(logPath, 'utf8'));
   } catch (e) {
