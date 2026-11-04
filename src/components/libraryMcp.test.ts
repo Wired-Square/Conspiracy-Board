@@ -11,8 +11,16 @@ import { LibraryMcpIndicator } from './LibraryMcpIndicator';
 import { LibraryMcpModal } from './panels/LibraryMcpModal';
 
 const URL = 'http://127.0.0.1:8793/mcp';
-const OFF: LibraryMcpStatus = { enabled: false, running: false, url: URL, token: null, error: null };
-const ON: LibraryMcpStatus = { enabled: true, running: true, url: URL, token: 'tok-1', error: null };
+const OFF: LibraryMcpStatus = {
+  enabled: false,
+  running: false,
+  url: URL,
+  token: null,
+  error: null,
+  allowAdd: false,
+  allowEdit: false,
+};
+const ON: LibraryMcpStatus = { ...OFF, enabled: true, running: true, token: 'tok-1' };
 const TAKEN: LibraryMcpStatus = { ...ON, running: false, error: 'Port 8793 is in use' };
 
 const listeners: ((status: LibraryMcpStatus) => void)[] = [];
@@ -22,6 +30,8 @@ vi.mock('../platform/libraryMcp', () => ({
     enable: vi.fn(),
     disable: vi.fn(),
     rotateToken: vi.fn(),
+    allowAdd: vi.fn(),
+    allowEdit: vi.fn(),
     listen: vi.fn((handler: (status: LibraryMcpStatus) => void) => {
       listeners.push(handler);
       return () => listeners.splice(listeners.indexOf(handler), 1);
@@ -41,7 +51,7 @@ function mount(component: Component) {
 const settle = () => new Promise((r) => setTimeout(r));
 const button = (host: HTMLElement, text: string) =>
   [...host.querySelectorAll('button')].find((b) => b.textContent === text)!;
-const toggle = (host: HTMLElement) => host.querySelector<HTMLInputElement>('.library-mcp__toggle')!;
+const toggle = (host: HTMLElement, which = 'toggle') => host.querySelector<HTMLInputElement>(`.library-mcp__${which}`)!;
 const values = (host: HTMLElement) => [...host.querySelectorAll('.library-mcp__value code')].map((c) => c.textContent);
 
 beforeEach(() => {
@@ -112,6 +122,29 @@ test('a command that fails leaves the toggle where it was and says why', async (
   expect(host.querySelector('[role="alert"]')?.textContent).toBe('database is locked');
 });
 
+test('the write switches follow the returned status and wait for each other', async () => {
+  libraryMcpStore.setState({ status: ON });
+  let answer!: (status: LibraryMcpStatus) => void;
+  mocked.allowAdd.mockReturnValue(new Promise((r) => (answer = r)));
+  mocked.allowEdit.mockResolvedValue({ ...ON, allowAdd: true, allowEdit: false });
+  const host = mount(LibraryMcpModal);
+  expect([toggle(host, 'add').checked, toggle(host, 'edit').checked]).toEqual([false, false]);
+
+  toggle(host, 'add').click();
+  expect(mocked.allowAdd).toHaveBeenCalledWith(true);
+  expect(toggle(host, 'add').checked).toBe(false);
+  expect([toggle(host, 'add').disabled, toggle(host, 'edit').disabled, toggle(host).disabled]).toEqual([true, true, true]);
+
+  answer({ ...ON, allowAdd: true });
+  await settle();
+  expect([toggle(host, 'add').checked, toggle(host, 'edit').disabled]).toEqual([true, false]);
+
+  toggle(host, 'edit').click();
+  await settle();
+  expect(mocked.allowEdit).toHaveBeenCalledWith(true);
+  expect(toggle(host, 'edit').checked).toBe(false);
+});
+
 test('Escape closes the dialog', () => {
   mount(LibraryMcpModal);
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -137,6 +170,11 @@ test('the indicator takes the status at startup, follows changes, and opens the 
 
   pill()!.click();
   expect(dialogStore.getState().libraryMcp).toBe(true);
+
+  listeners.forEach((l) => l({ ...ON, allowEdit: true }));
+  expect(pill()?.textContent).toBe('MCP on · writes');
+  expect(pill()?.classList.contains('is-writable')).toBe(true);
+  expect(pill()?.title).toBe(`Serving this library at ${URL}; a client may edit`);
 
   listeners.forEach((l) => l(OFF));
   expect(pill()).toBeNull();

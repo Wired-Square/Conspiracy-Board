@@ -204,6 +204,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--app-good); }
 .mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
+.mcp-indicator.is-writable:not(.is-error) .mcp-indicator__dot { background: var(--app-warn); }
 .cluster-panel { padding: var(--cb-space-3); min-width: 220px; max-height: 100%; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */

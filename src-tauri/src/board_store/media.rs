@@ -94,13 +94,18 @@ pub(crate) fn media_ext(name: &str) -> &str {
 /// import of the same file is a no-op — and queue it for the search index. Returns
 /// the name to link from the board.
 pub(crate) fn store_media_bytes(app: &AppHandle, bytes: &[u8], ext: &str) -> Result<String, String> {
-  let name = media_name(bytes, ext);
-  let path = media_file(app, &name)?;
-  if !path.exists() {
-    write_atomic(&path, bytes)?;
-  }
+  let name = keep_media_in(&media_dir(app)?, bytes, ext)?;
   if let Some(jobs) = app.try_state::<Arc<Jobs>>() {
     jobs.enqueue([name.clone()], false);
+  }
+  Ok(name)
+}
+
+pub(crate) fn keep_media_in(media: &Path, bytes: &[u8], ext: &str) -> Result<String, String> {
+  let name = media_name(bytes, ext);
+  let path = media.join(&name);
+  if !path.exists() {
+    write_atomic(&path, bytes)?;
   }
   Ok(name)
 }

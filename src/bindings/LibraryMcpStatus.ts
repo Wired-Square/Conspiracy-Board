@@ -4,4 +4,4 @@ export type LibraryMcpStatus = { enabled: boolean, running: boolean, url: string
 /**
  * Why the listener is not running although enabled, e.g. the port is taken.
  */
-error: string | null, };
+error: string | null, allowAdd: boolean, allowEdit: boolean, };

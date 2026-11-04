@@ -80,6 +80,13 @@ pub enum CardKind {
   Evidence,
 }
 
+impl CardKind {
+  /// The record, kept in the Record view and not drawn on the board (`isRecordKind`).
+  pub fn is_record(self) -> bool {
+    matches!(self, Self::Document | Self::Email | Self::Message | Self::Call)
+  }
+}
+
 /// How well the record supports a claim, from a court's finding down to a claim the
 /// record contradicts (definitions in GRADE_META, `src/lib/grades.ts`). Absent is not
 /// `unresolved`: that is a finding about the record, where absent is none.

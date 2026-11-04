@@ -51,7 +51,7 @@ pub(crate) fn library_dir(app: &AppHandle) -> Result<PathBuf, String> {
     .map_err(|e| format!("Nowhere to keep the library: {e}"))
 }
 
-fn boards_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn boards_dir(app: &AppHandle) -> Result<PathBuf, String> {
   Ok(library_dir(app)?.join("boards"))
 }
 
