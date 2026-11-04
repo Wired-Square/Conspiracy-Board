@@ -205,7 +205,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
 .mcp-indicator.is-writable:not(.is-error) .mcp-indicator__dot { background: var(--app-warn); }
-.cluster-panel { padding: var(--cb-space-3); min-width: 220px; max-height: 100%; overflow-y: auto; }
+.app__canvas { --cluster-panel-width: 16rem; }
+.cluster-panel { padding: var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
 .app-canvas-panel:has(> .cluster-panel) { display: flex; max-height: calc(100% - 12.375rem); }
@@ -724,6 +725,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   margin: 3.6rem var(--cb-space-4) 0;
   border-bottom: 1px solid var(--app-border);
 }
+
+.app__canvas:has(.cluster-panel__toggle[aria-expanded='true']) .record { padding-right: calc(var(--cluster-panel-width) + 1rem); }
 
 .record__bar > .app-menu__trigger, .record__filter { margin-left: auto; }
 .record__filter { gap: var(--cb-space-1); cursor: pointer; }
