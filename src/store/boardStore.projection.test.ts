@@ -16,6 +16,7 @@ vi.mock('../platform/document', () => ({
     open: vi.fn(),
     deleteCards: vi.fn(),
     updateCluster: vi.fn(),
+    setClustersVisible: vi.fn(),
     deleteCluster: vi.fn(),
     undo: vi.fn(),
   },
@@ -54,6 +55,7 @@ beforeEach(() => {
   vi.mocked(doc.edit).mockReset().mockResolvedValue();
   vi.mocked(doc.deleteCards).mockReset().mockResolvedValue();
   vi.mocked(doc.updateCluster).mockReset().mockResolvedValue();
+  vi.mocked(doc.setClustersVisible).mockReset().mockResolvedValue();
   vi.mocked(doc.deleteCluster).mockReset().mockResolvedValue();
   vi.mocked(doc.undo).mockReset().mockResolvedValue();
   boardStore.setState({
@@ -198,6 +200,13 @@ it('two quick edits to one cluster send only their own fields, so neither undoes
     ['brd_open', 'g1', { color: '#000' }],
     ['brd_open', 'g1', { label: 'Renamed' }],
   ]);
+});
+
+it('showing every cluster is one command to the shell, so one undo step', () => {
+  boardStore.setState({ clusters: ['g1', 'g2', 'g3'].map((id) => ({ id, label: id, color: '#fff', visible: id === 'g1' })) });
+  state().setClustersVisible(true);
+  expect(doc.setClustersVisible).toHaveBeenCalledExactlyOnceWith('brd_open', true);
+  expect(doc.updateCluster).not.toHaveBeenCalled();
 });
 
 it('a bundle import writes every chosen board in one call and opens only the last', async () => {

@@ -211,17 +211,13 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
 .app-canvas-panel:has(> .cluster-panel) { display: flex; max-height: calc(100% - 12.375rem); }
 
-.cluster-panel__toggle {
-  justify-content: space-between;
-  width: 100%;
-  gap: var(--cb-space-3);
-  padding: 0;
-}
+.cluster-panel__head { display: flex; align-items: center; gap: 0.375rem; margin-bottom: var(--cb-space-1); }
+.cluster-panel__toggle { flex: 1 1 auto; justify-content: space-between; padding: 0; }
 
 .cluster-panel__toggle:hover { background: none; }
 .panel-heading { font-size: var(--cb-text-sm); font-weight: 600; color: var(--app-text-muted); }
 .cluster-row { --app-control-pad-y: 0.2rem; margin-top: var(--cb-space-1); gap: 0.375rem; }
-.cluster-row input[type='checkbox'], .cluster-color { flex: none; width: 16px; height: 16px; margin: 0; }
+.cluster-row input[type='checkbox'], .cluster-show-all, .cluster-color { flex: none; width: 16px; height: 16px; margin: 0; }
 
 .cluster-color {
   padding: 0;

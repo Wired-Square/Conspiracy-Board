@@ -235,6 +235,7 @@ export type BoardState = {
   toggleCluster: (id: string) => void;
   addCluster: (label?: string) => string;
   updateCluster: (id: string, patch: ClusterPatch) => void;
+  setClustersVisible: (visible: boolean) => void;
   deleteCluster: (id: string) => void;
   addConnection: (source: string, target: string, label?: string) => void;
   updateConnection: (id: string, patch: ConnectionPatch) => void;
@@ -770,6 +771,10 @@ export const boardStore = createStore<BoardState>((set, get) => {
 
     updateCluster(id, patch) {
       send((board) => doc.updateCluster(board, id, patch));
+    },
+
+    setClustersVisible(visible) {
+      send((board) => doc.setClustersVisible(board, visible));
     },
 
     deleteCluster(id) {
