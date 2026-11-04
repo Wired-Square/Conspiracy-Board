@@ -285,6 +285,16 @@ fn update_cluster_patches_only_the_fields_it_names() {
 }
 
 #[test]
+fn showing_every_cluster_changes_only_the_hidden_ones() {
+  let mut f = Fixture::new("show-clusters");
+  f.session.update_cluster("g1", patch(json!({ "visible": false }))).unwrap().unwrap();
+  let change = f.session.set_clusters_visible(true).unwrap().unwrap();
+  assert_eq!(ids(&change.clusters), ["g1"]);
+  assert!(f.on_disk().clusters.iter().all(|c| c.visible));
+  assert_eq!(f.session.set_clusters_visible(true).unwrap(), None);
+}
+
+#[test]
 fn set_meta_changes_the_title_and_stamps() {
   let mut f = Fixture::new("meta");
   let change = f.session.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) }).unwrap().unwrap();
@@ -420,7 +430,7 @@ fn a_bad_import_writes_nothing() {
 
 #[test]
 fn every_kind_of_edit_undoes_and_redoes_exactly() {
-  let edits: [(&str, Edit); 15] = [
+  let edits: [(&str, Edit); 16] = [
     ("update_card", |s| s.update_card("a", patch(json!({ "title": "Renamed", "imageFile": "new.png" })), Logged::Edit)),
     ("move_cards", |s| s.move_cards(&[CardMove { id: "b".into(), position: Vec2 { x: 9.0, y: 9.0 } }])),
     ("tidy", |s| s.move_cards(&tidied())),
@@ -434,6 +444,7 @@ fn every_kind_of_edit_undoes_and_redoes_exactly() {
     ("add_cluster", |s| s.apply_edit(adding_cluster(cluster("g3")))),
     ("update_cluster", |s| s.update_cluster("g2", patch(json!({ "visible": false })))),
     ("recolour_cluster", |s| s.update_cluster("g2", patch(json!({ "color": "#0f0" })))),
+    ("hide_all_clusters", |s| s.set_clusters_visible(false)),
     ("delete_cluster", |s| s.delete_cluster("g1")),
     ("set_meta", |s| s.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) })),
   ];

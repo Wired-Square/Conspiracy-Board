@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createRenderEffect, createSignal } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
 import { chevronDown, chevronRight, plus, trash } from '@wired-square/icons/solid';
 import { boardStore } from '../../store/boardStore';
@@ -15,10 +15,15 @@ export function ClusterPanel() {
 
   return (
     <div class="cluster-panel">
-      <Button tone="plain" class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
-        <span class="panel-heading">Clusters</span>
-        {open() ? chevronDown() : chevronRight()}
-      </Button>
+      <div class="cluster-panel__head">
+        <Show when={clusters().length}>
+          <ShowAll clusters={clusters()} />
+        </Show>
+        <Button tone="plain" class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
+          <span class="panel-heading">Clusters</span>
+          {open() ? chevronDown() : chevronRight()}
+        </Button>
+      </div>
       <Show when={open()}>
         <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
         <Button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
@@ -26,6 +31,22 @@ export function ClusterPanel() {
         </Button>
       </Show>
     </div>
+  );
+}
+
+function ShowAll(props: { clusters: Cluster[] }) {
+  const shown = () => props.clusters.filter((c) => c.visible).length;
+  const all = () => shown() === props.clusters.length;
+  return (
+    <input
+      type="checkbox"
+      class="cluster-show-all"
+      checked={all()}
+      ref={(box) => createRenderEffect(() => (box.indeterminate = shown() > 0 && !all()))}
+      onChange={() => boardStore.getState().setClustersVisible(!all())}
+      aria-label="Show all clusters"
+      title={all() ? 'Hide all' : 'Show all'}
+    />
   );
 }
 
@@ -50,6 +71,7 @@ function ClusterRow(props: { cluster: Cluster }) {
       <input
         class="app-field__input cluster-label"
         value={label()}
+        title={label()}
         onInput={(e) => setLabel(e.currentTarget.value)}
         onBlur={flushLabel}
       />

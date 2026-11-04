@@ -279,6 +279,12 @@ impl Session {
     self.commit(DocChanged { clusters: changed(cluster, next), ..Default::default() })
   }
 
+  fn set_clusters_visible(&mut self, visible: bool) -> Outcome {
+    let clusters =
+      self.board.clusters.iter().filter(|c| c.visible != visible).map(|c| Cluster { visible, ..c.clone() }).collect();
+    self.commit(DocChanged { clusters, ..Default::default() })
+  }
+
   /// Member cards stay, losing only this membership.
   fn delete_cluster(&mut self, id: &str) -> Outcome {
     if !self.board.clusters.iter().any(|c| c.id == id) {
@@ -686,6 +692,18 @@ pub fn update_cluster(
 ) -> Result<(), String> {
   let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.update_cluster(&id, patch))
+}
+
+#[tauri::command(async)]
+pub fn set_clusters_visible(
+  app: AppHandle,
+  open: State<OpenBoard>,
+  library: State<LibraryDb>,
+  board_id: String,
+  visible: bool,
+) -> Result<(), String> {
+  let _span = crate::perf::metered!();
+  edit(&app, &open, &library, &board_id, |s| s.set_clusters_visible(visible))
 }
 
 #[tauri::command(async)]

@@ -55,6 +55,7 @@ pub fn run() {
       board_store::session::update_connection,
       board_store::session::delete_connections,
       board_store::session::update_cluster,
+      board_store::session::set_clusters_visible,
       board_store::session::delete_cluster,
       board_store::session::set_meta,
       board_store::session::set_viewport,

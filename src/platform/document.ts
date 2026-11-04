@@ -48,6 +48,7 @@ export const doc = {
   deleteConnections: (boardId: string, ids: string[]) => inOrder('delete_connections', { boardId, ids }),
   updateCluster: (boardId: string, id: string, patch: ClusterPatch) =>
     inOrder('update_cluster', { boardId, id, patch: clearing(patch) }),
+  setClustersVisible: (boardId: string, visible: boolean) => inOrder('set_clusters_visible', { boardId, visible }),
   deleteCluster: (boardId: string, id: string) => inOrder('delete_cluster', { boardId, id }),
   setMeta: (boardId: string, patch: MetaPatch) => inOrder('set_meta', { boardId, patch }),
   setViewport: (boardId: string, viewport: Viewport) => inOrder('set_viewport', { boardId, viewport }),
