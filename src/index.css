@@ -772,12 +772,12 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   width: 1em;
   height: 1em;
   vertical-align: -0.15em;
+  --icon-stroke: 1.8;
 }
 
 .media-icon svg { width: 100%; height: 100%; display: block; }
-.media-icon--email svg { transform: scale(1.12); }
 
-.media-icon__clip {
+.media-icon .media-icon__clip {
   position: absolute;
   right: -0.22em;
   bottom: -0.22em;
@@ -788,6 +788,9 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   background: var(--app-surface);
   color: var(--app-text-muted);
 }
+
+.kind-icon { vertical-align: -0.125em; }
+.kind-icon--lead { margin-inline-end: 0.3em; }
 
 .maintenance__error, .maintenance__note { margin: var(--cb-space-2) var(--cb-space-4) 0; }
 .maintenance-row { border-left-color: rgb(255 255 255 / 0.08); }

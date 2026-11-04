@@ -4,11 +4,11 @@ import { x } from '@wired-square/icons/solid';
 import type { Card, CardKind, EmailAddress } from '../../types/board';
 import { rosterOf, type AddressMatch, type Roster } from '../../lib/roster';
 import { cardsById } from '../../lib/cardIndex';
-import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { EntityPickerDialog, type PickerCreateOption } from './EntityPickerDialog';
+import { KindIcon } from '../ui/KindIcon';
 
 // The badge + "Link…" + unlink UI, shared by the email view (matched by address)
 // and the message/call view (matched by number). The whole of the address-vs-number
@@ -66,7 +66,7 @@ function EntityChip(props: { card: Card; inference?: boolean; onSelect: () => vo
         style={props.inference ? gradeTint('inference') : undefined}
         onClick={() => props.onSelect()}
       >
-        <span class="email-addr__icon">{KIND_META[props.card.kind].icon}</span>
+        <KindIcon kind={props.card.kind} class="email-addr__icon" />
         {props.card.title || 'Untitled'}
       </Button>
       <IconButton

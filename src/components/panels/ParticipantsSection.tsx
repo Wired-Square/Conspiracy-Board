@@ -1,11 +1,11 @@
 import { For, Show, createMemo } from 'solid-js';
 import type { Card } from '../../types/board';
 import { rosterOf, relationsOf } from '../../lib/roster';
-import { KIND_META } from '../../lib/kinds';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
+import { KindIcon } from '../ui/KindIcon';
 
 /**
  * What this card shares addresses with — derived, read-only, click to open.
@@ -40,7 +40,7 @@ export function ParticipantsSection(props: { cardId: string }) {
               {(c) => (
                 <li>
                   <button type="button" class="app-menu__item participants__row" onClick={() => selectCard(c.id)}>
-                    <span class="participants__icon">{KIND_META[c.kind].icon}</span>
+                    <KindIcon kind={c.kind} class="participants__icon" />
                     <span class="participants__title">{c.title}</span>
                   </button>
                 </li>

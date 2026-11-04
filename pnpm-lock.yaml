@@ -18,8 +18,8 @@ importers:
         specifier: 0.1.0
         version: 0.1.0(solid-js@1.9.18)
       '@wired-square/icons':
-        specifier: 0.1.1
-        version: 0.1.1(solid-js@1.9.18)
+        specifier: 0.1.2
+        version: 0.1.2(solid-js@1.9.18)
       '@wired-square/kit':
         specifier: 0.4.0
         version: 0.4.0(solid-js@1.9.18)(vitest@4.1.10(jsdom@30.1.3)(vite@7.3.5))
@@ -669,8 +669,8 @@ packages:
       solid-js:
         optional: true
 
-  '@wired-square/icons@0.1.1':
-    resolution: {integrity: sha512-Kwt2UqDG92Kv/pqgZGazAZ2XyJ6QUVTihAWHTTT5iaHfZNrbxt8Z2nlpi/fTVUQidE9yQCp0d6iZJJ+KN1iHng==}
+  '@wired-square/icons@0.1.2':
+    resolution: {integrity: sha512-TUVEXHZ262DyE9yNkvlwJcTmwdgvUPbCGPJ32sPJqO/joVdIljQ60dyHtP88aM5HqOXljyOdA4aTw5DxKQ0CBA==}
     peerDependencies:
       solid-js: ^1.9.11
     peerDependenciesMeta:
@@ -1714,7 +1714,7 @@ snapshots:
     optionalDependencies:
       solid-js: 1.9.18
 
-  '@wired-square/icons@0.1.1(solid-js@1.9.18)':
+  '@wired-square/icons@0.1.2(solid-js@1.9.18)':
     optionalDependencies:
       solid-js: 1.9.18
 

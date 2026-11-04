@@ -2,11 +2,11 @@ import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Button, IconButton } from '@wired-square/kit';
 import { plus, trash } from '@wired-square/icons/solid';
 import { touches } from '../../lib/connections';
-import { KIND_META } from '../../lib/kinds';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { GradeField } from './GradeField';
 import { EntityPickerDialog } from './EntityPickerDialog';
+import { KindIcon } from '../ui/KindIcon';
 
 export function ConnectionsSection(props: { cardId: string }) {
   const cards = fromStore(boardStore, (s) => s.cards);
@@ -46,9 +46,7 @@ export function ConnectionsSection(props: { cardId: string }) {
                     if (o) selectCard(o.id);
                   }}
                 >
-                  <Show when={other() && KIND_META[other()!.kind].icon}>
-                    {(icon) => <span class="email-addr__icon">{icon()}</span>}
-                  </Show>
+                  <Show when={other()}>{(o) => <KindIcon kind={o().kind} class="email-addr__icon" />}</Show>
                   {other()?.title || '(unknown)'}
                 </Button>
                 {/* The string's label, editable in place — its own paper tag on the

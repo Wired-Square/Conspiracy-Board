@@ -37,6 +37,7 @@ import { EntityFields } from './EntityFields';
 import { GradeField, GradeLegend } from './GradeField';
 import { untilPainted, watchFramesAfterAction } from '../../platform/perf';
 import { cardsById } from '../../lib/cardIndex';
+import { KindIcon } from '../ui/KindIcon';
 
 export function CardEditor() {
   const card = fromStore(boardStore, (s) => (s.selectedCardId ? cardsById(s.cards).get(s.selectedCardId) : undefined));
@@ -111,9 +112,7 @@ function CardEditorForm(props: { card: Card }) {
           <div class="field">
             <span>Kind</span>
             <span class="kind-locked">
-              <Show when={kindMeta().icon}>
-                <span aria-hidden="true">{kindMeta().icon} </span>
-              </Show>
+              <KindIcon kind={props.card.kind} class="kind-icon--lead" />
               {kindMeta().label}
             </span>
             <span class="field__hint">{kindMeta().hint}</span>
