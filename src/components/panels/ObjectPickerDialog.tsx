@@ -66,7 +66,7 @@ export function ObjectPickerDialog(props: Props) {
     id,
     label: () => (
       <>
-        {id !== 'all' && <KindIcon kind={id} class="kind-icon--lead" />}
+        {id !== 'all' && <KindIcon kind={id} class="inline-glyph--lead" />}
         {label}
         <span class="entity-picker__tab-count">{count}</span>
       </>
@@ -145,7 +145,7 @@ export function ObjectPickerDialog(props: Props) {
                 <div class="object-picker__preview">
                   <img src={shown().src} alt={rep().title} />
                   <span class="object-picker__caption">
-                    <KindIcon kind={rep().kind} class="kind-icon--lead" />
+                    <KindIcon kind={rep().kind} class="inline-glyph--lead" />
                     {rep().title || 'Untitled'}
                     <Show when={shared() > 0}>
                       <span class="object-picker__more"> +{shared()}</span>

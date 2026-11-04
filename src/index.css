@@ -789,8 +789,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
   color: var(--app-text-muted);
 }
 
-.kind-icon { vertical-align: -0.125em; }
-.kind-icon--lead { margin-inline-end: 0.3em; }
+.inline-glyph { vertical-align: -0.125em; }
+.inline-glyph--lead { margin-inline-end: 0.3em; }
 
 .maintenance__error, .maintenance__note { margin: var(--cb-space-2) var(--cb-space-4) 0; }
 .maintenance-row { border-left-color: rgb(255 255 255 / 0.08); }

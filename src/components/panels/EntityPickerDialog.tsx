@@ -79,7 +79,7 @@ export function EntityPickerDialog(props: Props) {
                   id: k,
                   label: () => (
                     <>
-                      <KindIcon kind={k} class="kind-icon--lead" />
+                      <KindIcon kind={k} class="inline-glyph--lead" />
                       {KIND_META[k].label}
                       <span class="entity-picker__tab-count">{counts().get(k) ?? 0}</span>
                     </>

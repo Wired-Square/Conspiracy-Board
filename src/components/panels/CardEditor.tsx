@@ -112,7 +112,7 @@ function CardEditorForm(props: { card: Card }) {
           <div class="field">
             <span>Kind</span>
             <span class="kind-locked">
-              <KindIcon kind={props.card.kind} class="kind-icon--lead" />
+              <KindIcon kind={props.card.kind} class="inline-glyph--lead" />
               {kindMeta().label}
             </span>
             <span class="field__hint">{kindMeta().hint}</span>

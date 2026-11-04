@@ -18,7 +18,7 @@ const GLYPHS: Record<KindGlyph, typeof page> = {
 export function KindIcon(props: { kind: CardKind; class?: string }) {
   return (
     <Show when={KIND_META[props.kind].icon}>
-      {(name) => GLYPHS[name()]({ class: cx('kind-icon', props.class) })}
+      {(name) => GLYPHS[name()]({ class: cx('inline-glyph', props.class) })}
     </Show>
   );
 }
