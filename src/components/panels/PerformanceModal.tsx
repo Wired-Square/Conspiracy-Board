@@ -1,8 +1,8 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createSignal, onCleanup } from 'solid-js';
 import { Button, CopyButton, Dialog, DialogActions, Notice, Table, Td, Th, Tr } from '@wired-square/kit';
 import { errorMessage } from '../../lib/errors';
 import { perfText } from '../../lib/perfText';
-import { perf, type PerfReport } from '../../platform/perf';
+import { holdFrameWatch, perf, type PerfReport } from '../../platform/perf';
 import { closeDialog } from '../../store/dialogStore';
 
 const ms = (n: number) => n.toFixed(1);
@@ -17,6 +17,7 @@ export function PerformanceModal() {
   };
   const refresh = () => load(perf.report);
   refresh();
+  onCleanup(holdFrameWatch());
 
   return (
     <Dialog title="Performance" wide onClose={close}>

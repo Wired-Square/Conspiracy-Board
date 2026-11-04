@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { PerfReport } from '../bindings/PerfReport';
-import { perf } from '../platform/perf';
+import { holdFrameWatch, perf } from '../platform/perf';
 import { perfText } from '../lib/perfText';
 import { PerformanceModal } from './panels/PerformanceModal';
 
@@ -17,7 +17,11 @@ const REPORT: PerfReport = {
 };
 const EMPTY: PerfReport = { ops: [], slowest: [] };
 
-vi.mock('../platform/perf', () => ({ perf: { report: vi.fn(), reset: vi.fn(async () => {}) } }));
+vi.mock('../platform/perf', () => ({
+  perf: { report: vi.fn(), reset: vi.fn(async () => {}) },
+  holdFrameWatch: vi.fn(),
+}));
+const released = vi.fn();
 const mocked = vi.mocked(perf);
 const writeText = vi.fn(async () => {});
 Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -36,7 +40,10 @@ const cells = (host: HTMLElement, table: number) =>
     [...tr.querySelectorAll('td')].map((td) => td.textContent),
   );
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(holdFrameWatch).mockReturnValue(released);
+});
 afterEach(() => {
   dispose?.();
   dispose = undefined;
@@ -75,4 +82,14 @@ test('a report that fails says why', async () => {
   const host = mount();
   await settle();
   expect(host.querySelector('[role="alert"]')?.textContent).toBe('The meter is unavailable.');
+});
+
+test('the open panel holds the frame watch, and closing it lets go', async () => {
+  mocked.report.mockResolvedValue(EMPTY);
+  mount();
+  expect(holdFrameWatch).toHaveBeenCalledTimes(1);
+  expect(released).not.toHaveBeenCalled();
+  dispose!();
+  dispose = undefined;
+  expect(released).toHaveBeenCalledTimes(1);
 });

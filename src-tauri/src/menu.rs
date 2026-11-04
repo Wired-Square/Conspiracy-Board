@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::menu::{
   AboutMetadata, CheckMenuItem, Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu, SubmenuBuilder,
+  HELP_SUBMENU_ID,
 };
 use tauri::{AppHandle, Emitter, Wry};
 #[cfg(target_os = "macos")]
@@ -92,19 +93,14 @@ const VIEWS: [(&str, &str, &str); 3] = [
 ];
 
 /// The View submenu — the three surfaces as checkmarks (the current one ticked),
-/// the Performance panel, then the stock Enter Full Screen kept from the menu we replace.
+/// then the stock Enter Full Screen kept from the menu we replace.
 fn view_submenu(app: &AppHandle, view: &str) -> tauri::Result<Submenu<Wry>> {
   let mut builder = SubmenuBuilder::new(app, "View");
   for (id, label, value) in VIEWS {
     let item = CheckMenuItem::with_id(app, id, label, true, view == value, None::<&str>)?;
     builder = builder.item(&item);
   }
-  builder
-    .separator()
-    .item(&MenuItem::with_id(app, "performance", "Performance…", true, None::<&str>)?)
-    .separator()
-    .item(&PredefinedMenuItem::fullscreen(app, None)?)
-    .build()
+  builder.separator().item(&PredefinedMenuItem::fullscreen(app, None)?).build()
 }
 
 /// The whole app menu: the stock macOS menu (App / Edit / Window, Quit, Copy &
@@ -127,6 +123,9 @@ fn build_menu(
   }
   menu.insert(&file_submenu(app, boards, current)?, 1)?;
   menu.insert(&view_submenu(app, view)?, 3)?;
+  if let Some(MenuItemKind::Submenu(help)) = menu.get(HELP_SUBMENU_ID) {
+    help.append(&MenuItem::with_id(app, PERFORMANCE_ITEM, "Performance…", true, None::<&str>)?)?;
+  }
   #[cfg(target_os = "macos")]
   {
     replace_about(app, &menu)?;
@@ -214,17 +213,35 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
   let evt = if let Some(board_id) = id.strip_prefix(OPEN_PREFIX) {
     BoardMenuEvent { action: "open".into(), id: Some(board_id.to_string()) }
   } else {
-    let action = match id {
-      "board.new" => "new",
-      "board.manage" => "manage",
-      "board.import" => "import",
-      "board.export" => "export",
-      "board.properties" => "properties",
-      "library.mcp" => "libraryMcp",
-      "performance" => "performance",
-      _ => return,
-    };
+    let Some(action) = board_action(id) else { return };
     BoardMenuEvent { action: action.into(), id: None }
   };
   let _ = app.emit("menu:board", evt);
+}
+
+const PERFORMANCE_ITEM: &str = "performance";
+
+/// The `menu:board` action an item sends, as `src/platform/boardMenu.ts` reads it.
+fn board_action(id: &str) -> Option<&'static str> {
+  Some(match id {
+    "board.new" => "new",
+    "board.manage" => "manage",
+    "board.import" => "import",
+    "board.export" => "export",
+    "board.properties" => "properties",
+    "library.mcp" => "libraryMcp",
+    PERFORMANCE_ITEM => "performance",
+    _ => return None,
+  })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn the_help_menus_performance_item_opens_the_panel() {
+    assert_eq!(board_action(PERFORMANCE_ITEM), Some("performance"));
+    assert_eq!(board_action("view.board"), None);
+  }
 }

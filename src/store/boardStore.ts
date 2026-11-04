@@ -13,7 +13,7 @@ import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
 import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocChanged, type Edit } from '../platform/document';
-import { measure, untilPainted } from '../platform/perf';
+import { measure, untilPainted, watchFramesAfterAction } from '../platform/perf';
 import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
@@ -414,6 +414,7 @@ export const boardStore = createStore<BoardState>((set, get) => {
           await storage.init();
           await doc.listen((change) => {
             untilPainted('doc:changed painted');
+            watchFramesAfterAction();
             measure('apply doc:changed', () => get().applyDocChanged(change), () => [
               changedRows(change),
               get().cards.length,
