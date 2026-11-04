@@ -171,16 +171,19 @@ pub(crate) fn set_on(conn: &Connection, key: &str, on: bool) -> Result<(), Strin
 
 #[tauri::command(async)]
 pub fn list_boards(db: State<LibraryDb>) -> Result<Vec<BoardSummary>, String> {
+  let _span = crate::perf::metered!();
   summaries(&*db.lock_db()?)
 }
 
 #[tauri::command(async)]
 pub fn current_board_id(db: State<LibraryDb>) -> Result<Option<String>, String> {
+  let _span = crate::perf::metered!();
   state(&*db.lock_db()?, "current_id")
 }
 
 #[tauri::command(async)]
 pub fn set_current_board_id(db: State<LibraryDb>, id: Option<String>) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   set_state(&*db.lock_db()?, "current_id", id.as_deref())
 }
 

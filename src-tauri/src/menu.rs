@@ -92,14 +92,19 @@ const VIEWS: [(&str, &str, &str); 3] = [
 ];
 
 /// The View submenu — the three surfaces as checkmarks (the current one ticked),
-/// then the stock Enter Full Screen kept from the menu we replace.
+/// the Performance panel, then the stock Enter Full Screen kept from the menu we replace.
 fn view_submenu(app: &AppHandle, view: &str) -> tauri::Result<Submenu<Wry>> {
   let mut builder = SubmenuBuilder::new(app, "View");
   for (id, label, value) in VIEWS {
     let item = CheckMenuItem::with_id(app, id, label, true, view == value, None::<&str>)?;
     builder = builder.item(&item);
   }
-  builder.separator().item(&PredefinedMenuItem::fullscreen(app, None)?).build()
+  builder
+    .separator()
+    .item(&MenuItem::with_id(app, "performance", "Performance…", true, None::<&str>)?)
+    .separator()
+    .item(&PredefinedMenuItem::fullscreen(app, None)?)
+    .build()
 }
 
 /// The whole app menu: the stock macOS menu (App / Edit / Window, Quit, Copy &
@@ -180,6 +185,7 @@ pub fn set_board_menu(
   current_id: Option<String>,
   view: String,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   let menu = build_menu(&app, &boards, current_id.as_deref(), &view)
     .map_err(|e| format!("Could not build the menu: {e}"))?;
   app.set_menu(menu).map_err(|e| format!("Could not set the menu: {e}"))?;
@@ -215,6 +221,7 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
       "board.export" => "export",
       "board.properties" => "properties",
       "library.mcp" => "libraryMcp",
+      "performance" => "performance",
       _ => return,
     };
     BoardMenuEvent { action: action.into(), id: None }

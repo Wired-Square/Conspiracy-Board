@@ -35,6 +35,7 @@ import { CommsFields } from './CommsFields';
 import { DocumentFields } from './DocumentFields';
 import { EntityFields } from './EntityFields';
 import { GradeField, GradeLegend } from './GradeField';
+import { untilPainted } from '../../platform/perf';
 
 export function CardEditor() {
   const card = fromStore(boardStore, (s) => s.cards.find((c) => c.id === s.selectedCardId));
@@ -64,6 +65,7 @@ export function CardEditor() {
 }
 
 function CardEditorForm(props: { card: Card }) {
+  untilPainted('card editor open');
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const { updateCard, setView } = boardStore.getState();
   const id = props.card.id;

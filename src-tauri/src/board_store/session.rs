@@ -110,6 +110,12 @@ pub struct BoardEdit {
   card_updates: Vec<CardUpdate>,
 }
 
+impl BoardEdit {
+  fn len(&self) -> usize {
+    self.clusters.len() + self.cards.len() + self.connections.len() + self.card_updates.len()
+  }
+}
+
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 pub struct CardUpdate {
@@ -543,7 +549,10 @@ fn edit(
 }
 
 pub(crate) fn emit_doc_changed(app: &AppHandle, change: &DocChanged) {
-  let _ = app.emit(DOC_CHANGED, change);
+  let _span = crate::perf::Span::start("emit doc:changed");
+  let Ok(json) = serde_json::to_string(change) else { return };
+  crate::perf::emitted(row_ids(change).count(), json.len());
+  let _ = app.emit_str(DOC_CHANGED, json);
 }
 
 /// Lists a content change in the board list, then broadcasts it.
@@ -559,16 +568,19 @@ fn publish(library: &LibraryDb, change: &DocChanged, emit: impl FnOnce(&DocChang
 /// or after the session is in place, never between.
 #[tauri::command(async)]
 pub fn open_board_session(app: AppHandle, open: State<OpenBoard>, board_id: String) -> Result<Board, String> {
+  let mut span = crate::perf::metered!();
   let path = board_db(&app, &board_id)?.ok_or("That board has no file.")?;
   let mut guard = open.lock()?;
   let session = Session::open(&path, board_id)?;
   let board = session.board.clone();
+  span.rows(0, board.cards.len());
   *guard = Some(session);
   Ok(board)
 }
 
 #[tauri::command(async)]
 pub fn close_board_session(open: State<OpenBoard>, board_id: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   open.close(&board_id)
 }
 
@@ -581,6 +593,7 @@ pub fn update_card(
   id: String,
   patch: Map<String, Value>,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.update_card(&id, patch, Logged::Edit))
 }
 
@@ -594,6 +607,7 @@ pub fn refresh_card(
   id: String,
   patch: Map<String, Value>,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.update_card(&id, patch, Logged::Unlogged))
 }
 
@@ -605,6 +619,8 @@ pub fn move_cards(
   board_id: String,
   moves: Vec<CardMove>,
 ) -> Result<(), String> {
+  let mut span = crate::perf::metered!();
+  span.rows(moves.len(), 0);
   edit(&app, &open, &library, &board_id, |s| s.move_cards(&moves))
 }
 
@@ -616,6 +632,8 @@ pub fn apply_edit(
   board_id: String,
   edit: BoardEdit,
 ) -> Result<(), String> {
+  let mut span = crate::perf::metered!();
+  span.rows(edit.len(), 0);
   self::edit(&app, &open, &library, &board_id, |s| s.apply_edit(edit))
 }
 
@@ -627,6 +645,8 @@ pub fn delete_cards(
   board_id: String,
   ids: Vec<String>,
 ) -> Result<(), String> {
+  let mut span = crate::perf::metered!();
+  span.rows(ids.len(), 0);
   edit(&app, &open, &library, &board_id, |s| s.delete_cards(&ids))
 }
 
@@ -639,6 +659,7 @@ pub fn update_connection(
   id: String,
   patch: Map<String, Value>,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.update_connection(&id, patch))
 }
 
@@ -650,6 +671,7 @@ pub fn delete_connections(
   board_id: String,
   ids: Vec<String>,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.delete_connections(&ids))
 }
 
@@ -662,6 +684,7 @@ pub fn update_cluster(
   id: String,
   patch: Map<String, Value>,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.update_cluster(&id, patch))
 }
 
@@ -673,6 +696,7 @@ pub fn delete_cluster(
   board_id: String,
   id: String,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.delete_cluster(&id))
 }
 
@@ -684,16 +708,19 @@ pub fn set_meta(
   board_id: String,
   patch: MetaPatch,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.set_meta(patch))
 }
 
 #[tauri::command(async)]
 pub fn undo(app: AppHandle, open: State<OpenBoard>, library: State<LibraryDb>, board_id: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, Session::undo)
 }
 
 #[tauri::command(async)]
 pub fn redo(app: AppHandle, open: State<OpenBoard>, library: State<LibraryDb>, board_id: String) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, Session::redo)
 }
 
@@ -705,6 +732,7 @@ pub fn set_viewport(
   board_id: String,
   viewport: Viewport,
 ) -> Result<(), String> {
+  let _span = crate::perf::metered!();
   edit(&app, &open, &library, &board_id, |s| s.set_viewport(viewport))
 }
 

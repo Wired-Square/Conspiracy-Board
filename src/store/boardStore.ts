@@ -13,6 +13,7 @@ import { slugify } from '../lib/slug';
 import { errorMessage } from '../lib/errors';
 import { storage } from '../storage';
 import { doc, type CardPatch, type ClusterPatch, type ConnectionPatch, type DocChanged, type Edit } from '../platform/document';
+import { measure, untilPainted } from '../platform/perf';
 import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
@@ -54,6 +55,14 @@ function blankCard(id: string, over: Partial<Card> & { position: Vec2 }): Card {
     ...over,
   };
 }
+
+const changedRows = (c: DocChanged) =>
+  c.cards.length +
+  c.connections.length +
+  c.clusters.length +
+  c.removedCards.length +
+  c.removedConnections.length +
+  c.removedClusters.length;
 
 /** A cluster in the next palette colour after `clusters`. */
 export function newCluster(label: string | undefined, clusters: Cluster[]): Cluster {
@@ -403,7 +412,13 @@ export const boardStore = createStore<BoardState>((set, get) => {
       initPromise ??= (async () => {
         const load = async () => {
           await storage.init();
-          await doc.listen((change) => get().applyDocChanged(change));
+          await doc.listen((change) => {
+            untilPainted('doc:changed painted');
+            measure('apply doc:changed', () => get().applyDocChanged(change), () => [
+              changedRows(change),
+              get().cards.length,
+            ]);
+          });
           const entries = await storage.listBoards();
 
           // Empty library — first run. Never seed anything on our own; ask what

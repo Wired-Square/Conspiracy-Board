@@ -6,11 +6,12 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::CallToolResult;
+use rmcp::handler::server::tool::ToolCallContext;
+use rmcp::model::{CallToolResponse, CallToolResult};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::{tool, tool_router, ErrorData, ServerHandler};
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,7 @@ use crate::board_store::board_db::peek_board;
 use crate::board_store::board_index::{summaries, BoardSummary};
 use crate::board_store::open_read_only;
 use crate::library_index::{run_search, DocHit};
+use crate::perf::Size;
 use crate::schema::{Board, Card, CardKind};
 
 pub(crate) mod lifecycle;
@@ -114,7 +116,7 @@ impl LibraryTools {
     mark_read_only(&mut read);
     let add = allowed.add.then(|| writes::not_destructive(Self::add_router()));
     let edit = allowed.edit.then(|| writes::not_destructive(Self::edit_router()));
-    compose(read, [add, edit])
+    metered(compose(read, [add, edit]))
   }
 
   fn identity(allowed: Allowed) -> ServerIdentity {
@@ -157,6 +159,29 @@ impl LibraryTools {
     let host = self.host.clone();
     respond(tauri::async_runtime::spawn_blocking(move || write(&*host)).await)
   }
+}
+
+/// Times every call as `mcp:<tool>`, with the bytes of its answer.
+fn metered<S: Send + Sync + 'static>(mut router: ToolRouter<S>) -> ToolRouter<S> {
+  for route in router.map.values_mut() {
+    let call = route.call.clone();
+    let name: Arc<str> = format!("mcp:{}", route.attr.name).into();
+    route.call = Arc::new(move |ctx: ToolCallContext<'_, S>| {
+      let (start, answer, name) = (Instant::now(), call(ctx), name.clone());
+      Box::pin(async move {
+        let answer = answer.await;
+        crate::perf::record(&name, start.elapsed(), Size { bytes: answer_bytes(&answer), ..Size::default() });
+        answer
+      })
+    });
+  }
+  router
+}
+
+fn answer_bytes(answer: &Result<CallToolResponse, ErrorData>) -> u32 {
+  let Ok(CallToolResponse::Complete(result)) = answer else { return 0 };
+  let bytes: usize = result.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.len()).sum();
+  bytes.try_into().unwrap_or(u32::MAX)
 }
 
 fn respond<T: Serialize, E: std::fmt::Display>(done: Result<Result<T, String>, E>) -> Result<CallToolResult, ErrorData> {
@@ -245,6 +270,13 @@ impl LibraryTools {
   #[tool(description = "The text extracted from one media file, and its index status.")]
   async fn media_text(&self, Parameters(args): Parameters<MediaArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| media_text(library, &args.name)).await
+  }
+
+  #[tool(description = "How long the app's commands, these tools and the board's own steps took since launch or \
+                        the last reset: per operation the count and the p50, p95, max and last in ms, slowest \
+                        first; then the 50 slowest calls with their sizes (rows in and out, bytes emitted).")]
+  async fn perf_report(&self) -> Result<CallToolResult, ErrorData> {
+    ok_json(crate::perf::report())
   }
 }
 
@@ -393,7 +425,7 @@ mod tests {
 
   #[test]
   fn the_tools_listed_are_the_reads_and_what_the_switches_allow_and_none_deletes() {
-    const READ: [&str; 8] = [
+    const READ: [&str; 9] = [
       "board_summary",
       "get_card",
       "list_boards",
@@ -401,6 +433,7 @@ mod tests {
       "list_clusters",
       "list_connections",
       "media_text",
+      "perf_report",
       "search_library",
     ];
     const ADD: [&str; 5] = ["create_board", "create_card", "create_cluster", "create_connection", "import_file"];

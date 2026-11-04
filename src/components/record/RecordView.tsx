@@ -12,6 +12,7 @@ import { cardImageStyle } from '../../lib/imageCrop';
 import { boardStore } from '../../store/boardStore';
 import { fromStore } from '@wired-square/store/solid';
 import { MediaIcon } from '../ui/MediaIcon';
+import { measure, untilPainted } from '../../platform/perf';
 
 // The record: the paper a board argues from. It is not on the canvas — an mbox
 // would bury the argument under two hundred cards of post — so it is here, in
@@ -29,14 +30,28 @@ export function RecordView() {
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const { selectCard } = boardStore.getState();
   const roster = createMemo(() => buildRoster(allCards()));
-  const cards = createMemo(() => visibleCards(allCards(), clusters(), searchQuery()));
+  const cards = createMemo(() =>
+    measure(
+      'record filter',
+      () => visibleCards(allCards(), clusters(), searchQuery()),
+      (shown) => [allCards().length, shown.length],
+    ),
+  );
 
   // A flag on everything marks nothing: straight after an mbox almost every row
   // is loose, because you only ever cared about a few of the senders. So the
   // list stays whole by default and this narrows it to the work.
   const [onlyLoose, setOnlyLoose] = createSignal(false);
 
-  const record = createMemo(() => recordRows(cards(), allCards(), roster(), connections()));
+  const record = createMemo(() => {
+    const rows = measure(
+      'record rows',
+      () => recordRows(cards(), allCards(), roster(), connections()),
+      (r) => [cards().length, r.rows.length],
+    );
+    untilPainted('record painted', rows.rows.length);
+    return rows;
+  });
   // Rows by card, not by row: recordRows builds fresh rows on every edit, and the
   // cards it wraps are what stays put.
   const loose = createMemo(() => new Map(record().rows.map((r) => [r.card.id, r.loose])));

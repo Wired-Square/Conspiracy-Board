@@ -11,6 +11,7 @@ mod mail;
 #[cfg(feature = "mcp")]
 mod mcp;
 mod menu;
+mod perf;
 mod quit;
 mod schema;
 
@@ -88,6 +89,9 @@ pub fn run() {
       library_mcp::lifecycle::allow_library_mcp_add,
       library_mcp::lifecycle::allow_library_mcp_edit,
       menu::set_board_menu,
+      perf::perf_report,
+      perf::perf_reset,
+      perf::perf_record,
     ])
     .on_menu_event(menu::on_event)
     .setup(|app| {

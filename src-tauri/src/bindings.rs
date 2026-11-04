@@ -25,6 +25,8 @@ fn export_all(dir: &Path) -> Result<(), ts_rs::ExportError> {
   crate::library_index::DocHit::export_all_to(dir)?;
   crate::library_index::DocStatus::export_all_to(dir)?;
   crate::library_mcp::lifecycle::LibraryMcpStatus::export_all_to(dir)?;
+  crate::perf::PerfReport::export_all_to(dir)?;
+  crate::perf::UiSample::export_all_to(dir)?;
   std::fs::write(dir.join("fileTypes.ts"), crate::file_types::typescript())?;
   Ok(())
 }
