@@ -128,7 +128,7 @@ export function EmailImportModal() {
 
       <TabPanel id="files" selected={tab()}>
         <div class="field">
-          <span>.eml or .mbox files</span>
+          <span>.eml, .emlx or .mbox files</span>
           <div class="field__row">
             <Button onClick={() => void onPickFiles()} disabled={busy()}>
               Choose files…
