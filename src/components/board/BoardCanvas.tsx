@@ -87,6 +87,7 @@ function StringTag(props: { label: string; geometry: EdgeGeometry }) {
 export function BoardCanvas() {
   const cards = fromStore(boardStore, (s) => s.cards);
   const clusters = fromStore(boardStore, (s) => s.clusters);
+  const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const searchQuery = fromStore(boardStore, (s) => s.searchQuery);
   const nodes = fromStore(projectionStore, (s) => s.nodes);
@@ -95,7 +96,7 @@ export function BoardCanvas() {
 
   // Filtered here, not in the projection, which keeps a node per card so a kind
   // switch works both ways; the canvas simply declines to draw.
-  const drawnIds = createMemo(() => drawnCardIds(cards(), clusters()));
+  const drawnIds = createMemo(() => drawnCardIds(cards(), clusters(), unclusteredHidden()));
   const drawnNodes = createMemo(() => nodes().filter((n) => drawnIds().has(n.id)));
   const drawnEdges = createMemo(() => linksWithin(edges(), drawnIds()));
   const matchIds = createMemo(() => searchMatchIds(cards(), drawnIds(), searchQuery()));

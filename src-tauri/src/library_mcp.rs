@@ -198,6 +198,7 @@ struct BoardArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[cfg_attr(test, derive(Default))]
 struct CardsArgs {
   board_id: String,
   /// One of person, organisation, document, email, message, call, event or evidence.
@@ -205,6 +206,10 @@ struct CardsArgs {
   kind: Option<CardKind>,
   /// Keep only cards whose title or notes contain this, ignoring case.
   text: Option<String>,
+  /// Keep only cards in this cluster, or in no cluster when `none`.
+  cluster_id: Option<String>,
+  /// Skip this many matches first, to page through them (default 0).
+  offset: Option<usize>,
   /// At most this many cards (default 50).
   limit: Option<usize>,
 }
@@ -241,7 +246,7 @@ impl LibraryTools {
   }
 
   #[tool(description = "A board's cards in brief (id, kind, title, date, clusters), optionally filtered by \
-                        kind or text. `total` counts every match, before the limit.")]
+                        kind, text or cluster. `total` counts every match, before the offset and limit.")]
   async fn list_cards(&self, Parameters(args): Parameters<CardsArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| cards(library, &args)).await
   }
@@ -314,9 +319,15 @@ fn cards(library: &Path, args: &CardsArgs) -> Result<Value, String> {
     .filter(|c| {
       text.as_deref().is_none_or(|t| c.title.to_lowercase().contains(t) || c.notes.to_lowercase().contains(t))
     })
+    .filter(|c| match args.cluster_id.as_deref() {
+      None => true,
+      Some("none") => c.cluster_ids.is_empty(),
+      Some(id) => c.cluster_ids.iter().any(|x| x == id),
+    })
     .collect();
   let brief: Vec<_> = matches
     .iter()
+    .skip(args.offset.unwrap_or(0))
     .take(args.limit.unwrap_or(50))
     .map(|c| {
       json!({ "id": c.id, "kind": c.kind, "title": c.title, "occurredAt": c.occurred_at, "clusterIds": c.cluster_ids })
@@ -400,7 +411,7 @@ mod tests {
       "cards": [
         fixture_card("p", "Jane Roe", "person", json!({ "notes": "Director of Acme" })),
         fixture_card("d", "Ledger", "document", json!({ "document": { "file": "aa.pdf" } })),
-        fixture_card("e", "Meeting", "event", json!({ "notes": "Jane meets the auditor" })),
+        fixture_card("e", "Meeting", "event", json!({ "notes": "Jane meets the auditor", "clusterIds": [] })),
       ],
       "connections": [{ "id": "c", "source": "p", "target": "d", "label": "signed" }],
     }))
@@ -414,9 +425,8 @@ mod tests {
     dir
   }
 
-  fn cards_where(library: &Path, kind: Option<CardKind>, text: Option<&str>, limit: Option<usize>) -> Value {
-    let args = CardsArgs { board_id: "brd_acme".into(), kind, text: text.map(String::from), limit };
-    cards(library, &args).unwrap()
+  fn cards_where(library: &Path, args: CardsArgs) -> Value {
+    cards(library, &CardsArgs { board_id: "brd_acme".into(), ..args }).unwrap()
   }
 
   fn ids(cards: &Value) -> Vec<&str> {
@@ -482,12 +492,25 @@ mod tests {
   #[test]
   fn cards_filter_by_kind_and_text_and_count_before_the_limit() {
     let dir = library("mcp-cards");
-    assert_eq!(ids(&cards_where(&dir, None, None, None)), ["p", "d", "e"]);
-    assert_eq!(ids(&cards_where(&dir, Some(CardKind::Person), None, None)), ["p"]);
-    let jane = cards_where(&dir, None, Some("JANE"), Some(1));
+    let text = |t: &str| Some(t.to_string());
+    assert_eq!(ids(&cards_where(&dir, CardsArgs::default())), ["p", "d", "e"]);
+    assert_eq!(ids(&cards_where(&dir, CardsArgs { kind: Some(CardKind::Person), ..Default::default() })), ["p"]);
+    let jane = cards_where(&dir, CardsArgs { text: text("JANE"), limit: Some(1), ..Default::default() });
     assert_eq!((jane["total"].as_u64(), ids(&jane)), (Some(2), vec!["p"]));
-    assert_eq!(ids(&cards_where(&dir, Some(CardKind::Event), Some("jane"), None)), ["e"]);
+    let event = CardsArgs { kind: Some(CardKind::Event), text: text("jane"), ..Default::default() };
+    assert_eq!(ids(&cards_where(&dir, event)), ["e"]);
     assert_eq!(jane["cards"][0], json!({ "id": "p", "kind": "person", "title": "Jane Roe", "occurredAt": null, "clusterIds": ["g"] }));
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn cards_filter_by_cluster_or_none_and_page_by_offset() {
+    let dir = library("mcp-cards-cluster");
+    let in_cluster = |id: &str| CardsArgs { cluster_id: Some(id.into()), ..Default::default() };
+    assert_eq!(ids(&cards_where(&dir, in_cluster("g"))), ["p", "d"]);
+    assert_eq!(ids(&cards_where(&dir, in_cluster("none"))), ["e"]);
+    let page = cards_where(&dir, CardsArgs { offset: Some(1), limit: Some(1), ..Default::default() });
+    assert_eq!((page["total"].as_u64(), ids(&page)), (Some(3), vec!["d"]));
     let _ = std::fs::remove_dir_all(&dir);
   }
 

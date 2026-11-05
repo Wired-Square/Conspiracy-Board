@@ -163,7 +163,7 @@ fn an_edit_that_changes_nothing_neither_stamps_nor_emits() {
   assert_eq!(f.session.move_cards(&[CardMove { id: "a".into(), position: Vec2 { x: 0.0, y: 0.0 } }]).unwrap(), None);
   assert_eq!(f.session.update_cluster("g1", patch(json!({ "label": "One" }))).unwrap(), None);
   assert_eq!(f.session.update_cluster("gone", patch(json!({ "label": "X" }))).unwrap(), None);
-  assert_eq!(f.session.set_meta(MetaPatch { title: Some("Case".into()), country_code: None }).unwrap(), None);
+  assert_eq!(f.session.set_meta(MetaPatch { title: Some("Case".into()), ..Default::default() }).unwrap(), None);
   assert_eq!(f.session.set_viewport(Viewport { x: 0.0, y: 0.0, zoom: 1.0 }).unwrap(), None);
   assert_eq!(f.session.delete_cards(&["gone".into()]).unwrap(), None);
   assert_eq!(f.session.delete_connections(&["gone".into()]).unwrap(), None);
@@ -295,9 +295,21 @@ fn showing_every_cluster_changes_only_the_hidden_ones() {
 }
 
 #[test]
+fn hiding_every_cluster_hides_the_unclustered_too_in_one_undo_step() {
+  let mut f = Fixture::new("hide-unclustered");
+  let change = f.session.set_clusters_visible(false).unwrap().unwrap();
+  assert!(change.meta.unwrap().unclustered_hidden);
+  assert!(f.on_disk().meta.unclustered_hidden);
+  f.session.undo().unwrap().unwrap();
+  let board = f.on_disk();
+  assert!(!board.meta.unclustered_hidden && board.clusters.iter().all(|c| c.visible));
+}
+
+#[test]
 fn set_meta_changes_the_title_and_stamps() {
   let mut f = Fixture::new("meta");
-  let change = f.session.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) }).unwrap().unwrap();
+  let renamed = MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()), ..Default::default() };
+  let change = f.session.set_meta(renamed).unwrap().unwrap();
   let meta = change.meta.unwrap();
   assert_eq!((meta.title.as_str(), meta.country_code.as_deref()), ("Renamed", Some("+44")));
   assert_ne!(meta.updated_at, STAMPED_BEFORE);
@@ -446,7 +458,7 @@ fn every_kind_of_edit_undoes_and_redoes_exactly() {
     ("recolour_cluster", |s| s.update_cluster("g2", patch(json!({ "color": "#0f0" })))),
     ("hide_all_clusters", |s| s.set_clusters_visible(false)),
     ("delete_cluster", |s| s.delete_cluster("g1")),
-    ("set_meta", |s| s.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()) })),
+    ("set_meta", |s| s.set_meta(MetaPatch { title: Some("Renamed".into()), country_code: Some("+44".into()), ..Default::default() })),
   ];
   for (name, edit) in edits {
     let mut f = Fixture::new(&format!("undo-{name}"));

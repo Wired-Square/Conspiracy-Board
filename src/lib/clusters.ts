@@ -61,11 +61,8 @@ export function extraClusterColors(
   return colors;
 }
 
-export function hiddenClusterIds(clusters: Cluster[]): Set<string> {
-  return new Set(clusters.filter((c) => !c.visible).map((c) => c.id));
-}
-
-/** A card/node is visible when it has no clusters, or at least one visible one. */
-export function isVisible(clusterIds: readonly string[], hidden: Set<string>): boolean {
-  return clusterIds.length === 0 || clusterIds.some((id) => !hidden.has(id));
+/** Whether a card is shown by its clusters: any one of them shown, or none and the unclustered shown. */
+export function clusterFilter(clusters: Cluster[], unclusteredHidden: boolean): (clusterIds: readonly string[]) => boolean {
+  const hidden = new Set(clusters.filter((c) => !c.visible).map((c) => c.id));
+  return (clusterIds) => (clusterIds.length === 0 ? !unclusteredHidden : clusterIds.some((id) => !hidden.has(id)));
 }

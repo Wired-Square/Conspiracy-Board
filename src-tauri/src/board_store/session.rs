@@ -83,13 +83,14 @@ impl DocChanged {
   }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(optional_fields))]
 #[serde(rename_all = "camelCase")]
 pub struct MetaPatch {
   title: Option<String>,
   country_code: Option<String>,
+  unclustered_hidden: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -279,10 +280,14 @@ impl Session {
     self.commit(DocChanged { clusters: changed(cluster, next), ..Default::default() })
   }
 
+  /// Cards in no cluster go with them, as one undo step.
   fn set_clusters_visible(&mut self, visible: bool) -> Outcome {
     let clusters =
       self.board.clusters.iter().filter(|c| c.visible != visible).map(|c| Cluster { visible, ..c.clone() }).collect();
-    self.commit(DocChanged { clusters, ..Default::default() })
+    let current = &self.board.meta;
+    let meta =
+      (current.unclustered_hidden == visible).then(|| BoardMeta { unclustered_hidden: !visible, ..current.clone() });
+    self.commit(DocChanged { clusters, meta, ..Default::default() })
   }
 
   /// Member cards stay, losing only this membership.
@@ -305,6 +310,7 @@ impl Session {
     let meta = BoardMeta {
       title: patch.title.unwrap_or_else(|| current.title.clone()),
       country_code: patch.country_code.or_else(|| current.country_code.clone()),
+      unclustered_hidden: patch.unclustered_hidden.unwrap_or(current.unclustered_hidden),
       updated_at: current.updated_at.clone(),
     };
     let meta = (meta != *current).then_some(meta);

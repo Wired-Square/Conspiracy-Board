@@ -1,5 +1,5 @@
 import type { Card, CardKind, Cluster } from '../types/board';
-import { hiddenClusterIds, isVisible } from './clusters';
+import { clusterFilter } from './clusters';
 import { dayKey, daysBetween, daysBetweenCards } from './dates';
 import { markedEventSourceIds } from './events';
 import { CARD_KINDS, isTimelineKind } from './kinds';
@@ -20,12 +20,13 @@ export type TimelineCards = {
 export function timelineCards(
   cards: Card[],
   clusters: Cluster[],
+  unclusteredHidden: boolean,
   query: string,
   docHits: Set<string>,
 ): TimelineCards {
-  const hidden = hiddenClusterIds(clusters);
+  const shown = clusterFilter(clusters, unclusteredHidden);
   const q = normaliseQuery(query);
-  const visible = cards.filter((c) => isVisible(c.clusterIds, hidden) && cardMatchesWithDocs(c, q, docHits));
+  const visible = cards.filter((c) => shown(c.clusterIds) && cardMatchesWithDocs(c, q, docHits));
 
   const dated: Card[] = [];
   const undated: Card[] = [];
