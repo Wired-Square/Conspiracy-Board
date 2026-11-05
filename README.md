@@ -338,6 +338,31 @@ A flag on everything marks nothing, though — straight after an mbox nearly eve
 row is loose, because you only ever cared about a few of the senders. So the list
 stays whole by default and **Only what isn't linked** narrows it to the work.
 
+## Confidential cards
+
+Tick **Confidential** in a card's editor, or **Mark confidential** in the email
+import dialog, and the card is *masked*: on the board, in the record and on the
+timeline it shows only its kind and date under "Redacted", and no search or
+filter matches it. Its strings still draw.
+
+Two switches in the **View** menu govern it. **Mask Confidential** is on at every
+launch; turn it off and everything shows in full, with an amber **Unmasked** in the
+toolbar (click it to mask again). It masks again by itself after 15 minutes
+without input. **Show Masked Items** decides whether masked cards appear at all,
+redacted, or vanish with their strings.
+
+To read one masked card, open it and press **Unmask**. It masks again as soon as
+the selection leaves it. Marking works masked or not; clearing the flag needs the
+card readable, unmasked or with Mask off.
+
+The library MCP always sees the masked view, whatever the switches say: a
+confidential card reads redacted, never matches a text filter or a search, its
+files' text is withheld, and no tool can edit it or change its flag (it can
+still be moved).
+
+This hides, it does not encrypt. The imported files sit readable in the library
+folder like any other.
+
 ## Architecture
 
 Three rules explain most of the code:
@@ -728,6 +753,9 @@ or off restarts the server with the same token.
 
 - **Nothing deletes.** No tool removes a board, card, string or cluster, and an
   edit cannot change the files a card holds.
+- **Confidential cards stay masked**
+  ([Confidential cards](#confidential-cards)). `import_file` takes
+  `confidential: true` to mark what it brings in.
 - **An edit to the open board can be undone** with Cmd+Z, like your own. A write
   to a board that is not open has no undo.
 - **The token is kept in your Keychain**, so a client's config survives a relaunch.

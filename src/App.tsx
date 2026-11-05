@@ -26,6 +26,7 @@ import { startImportProgress } from './platform/importProgress';
 import { startJobProgress } from './platform/jobProgress';
 import { startLibraryMcpStatus } from './platform/libraryMcpStatus';
 import { startPerfMeter } from './platform/perf';
+import { startMaskIdle } from './platform/maskIdle';
 import { boardStore } from './store/boardStore';
 import { closeDialog, dialogStore } from './store/dialogStore';
 import { emailImportStore } from './store/emailImportStore';
@@ -48,6 +49,7 @@ export default function App() {
       startJobProgress,
       startLibraryMcpStatus,
       startPerfMeter,
+      startMaskIdle,
     ]) {
       onCleanup(start());
     }

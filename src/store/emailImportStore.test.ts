@@ -68,3 +68,26 @@ it('frames the drawn cards an import adds, though the shell has not sent them ba
   expect(drawnIds).toEqual([person.id]);
   expect(boardStore.getState().cards.some((c) => c.id === person.id)).toBe(false);
 });
+
+it('"Mark confidential" flags every card the import adds or completes, in the same edit', async () => {
+  emailImportStore.getState().setConfidential(true);
+  emailImportStore.setState({
+    drafts: [message('New', '<new>'), message('Plan', '<waiting>'), message('Seen', '<seen>')],
+    clusterId: 'g1',
+  });
+  await emailImportStore.getState().commit({
+    entityDrafts: [{ title: 'Jo', kind: 'person' }],
+    patches: [['person', { notes: 'jo@example.com' }]],
+  });
+
+  expect(doc.edit).toHaveBeenCalledOnce();
+  const edit = vi.mocked(doc.edit).mock.calls[0][1];
+  expect(edit.cards!.map((c) => [c.title, c.confidential])).toEqual([
+    ['Jo', true],
+    ['New', true],
+  ]);
+  expect(edit.cardUpdates!.filter((u) => u.patch.confidential).map((u) => u.id)).toEqual(['waiting']);
+
+  emailImportStore.getState().openWith();
+  expect(emailImportStore.getState().confidential).toBe(false);
+});

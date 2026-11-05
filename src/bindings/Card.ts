@@ -57,4 +57,8 @@ email?: EmailMeta, message?: MessageMeta, call?: CallMeta, person?: PersonMeta, 
 /**
  * Only meaningful for `event` and `evidence` (`isGradedKind`). Absent is ungraded.
  */
-grade?: Grade, };
+grade?: Grade, 
+/**
+ * Shown redacted while the view is locked, and always to the library MCP.
+ */
+confidential?: boolean, };

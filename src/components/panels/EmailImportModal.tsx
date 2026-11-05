@@ -1,9 +1,11 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { count } from '@wired-square/kit/core';
-import { Button, Dialog, DialogActions, Notice, Select, TabPanel, Tabs, TextArea } from '@wired-square/kit';
+import { Button, Dialog, DialogActions, Notice, Select, TabPanel, Tabs, TextArea, Tick } from '@wired-square/kit';
 import { camera } from '../board/camera';
 import { NEW_CLUSTER, emailImportStore, type ImportTab } from '../../store/emailImportStore';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
+import { pickableCards } from '../../lib/mask';
 import { EMAIL_FILE_FILTER } from '../../lib/fileTypes';
 import { emailCardsByMessageId, emptyEmailMeta } from '../../lib/email/meta';
 import { MAX_MESSAGES, addLabel, batchStatus, cap, hidden, matchBatch } from '../../lib/email/importSummary';
@@ -30,7 +32,8 @@ export function EmailImportModal() {
   const clusterId = fromStore(emailImportStore, (s) => s.clusterId);
   const busy = fromStore(emailImportStore, (s) => s.busy);
   const progress = fromStore(emailImportStore, (s) => s.progress);
-  const { close, setTab, setClusterId, parseFiles, parsePaste, commit } = emailImportStore.getState();
+  const confidential = fromStore(emailImportStore, (s) => s.confidential);
+  const { close, setTab, setClusterId, setConfidential, parseFiles, parsePaste, commit } = emailImportStore.getState();
 
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const cards = fromStore(boardStore, (s) => s.cards);
@@ -55,8 +58,9 @@ export function EmailImportModal() {
   // Where a row can be aimed instead of minting a card. Both kinds are offered
   // for an address, since an organisation holds mail in its own right — legal@
   // is nobody's personal mail, and a new person named "legal" is not the answer.
-  const people = createMemo(() => entitiesOfKind(cards(), 'person'));
-  const orgs = createMemo(() => entitiesOfKind(cards(), 'organisation'));
+  const pickable = fromStore(seenStore, (s) => pickableCards(s.cards));
+  const people = createMemo(() => entitiesOfKind(pickable(), 'person'));
+  const orgs = createMemo(() => entitiesOfKind(pickable(), 'organisation'));
 
   // What the ticked rows will do. The footer and onAdd read this one derivation,
   // so what the button promises is exactly what the button does. Only the rows on
@@ -160,6 +164,12 @@ export function EmailImportModal() {
         <option value={NEW_CLUSTER}>New cluster</option>
         <For each={clusters()}>{(c) => <option value={c.id}>{c.label}</option>}</For>
       </Select>
+      <Tick
+        label="Mark confidential"
+        hint="every card this adds, masked while Mask is on."
+        checked={confidential()}
+        onChange={setConfidential}
+      />
 
       <Show when={errors().length > 0}>
         <div class="field">

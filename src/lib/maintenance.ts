@@ -1,5 +1,6 @@
-import type { CardKind } from '../types/board';
-import type { CardMediaKind } from './media';
+import type { Card, CardKind } from '../types/board';
+import { cardMediaEntries, type CardMediaKind } from './media';
+import { REDACTED, isMasked, type MaskView } from './mask';
 import type { DocStatus, MediaEntry } from '../storage/StorageAdapter';
 import { count } from '@wired-square/kit/core';
 
@@ -37,6 +38,8 @@ export type MediaRow = {
   /** The card on the open board that references it, or null. */
   owner: MediaOwner | null;
   status: MediaStatus;
+  /** A masked card carries it: shown redacted, and never matched. */
+  masked?: boolean;
 };
 
 /** A file with a problem is worth the user's eye first; among equals, the big ones. */
@@ -98,6 +101,7 @@ function mediaRowMatches(row: MediaRow, q: string): boolean {
  * card. Mirrors lib/search's `cardMatchesWithDocs`.
  */
 export function mediaRowMatchesWithDocs(row: MediaRow, q: string, docHits: Set<string>): boolean {
+  if (row.masked) return !q;
   return mediaRowMatches(row, q) || docHits.has(row.file);
 }
 
@@ -153,4 +157,14 @@ export function auditMedia(
   return rows.sort(
     (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (b.size ?? 0) - (a.size ?? 0),
   );
+}
+
+/** The rows as the mask lets them be seen: a file any masked card carries shows redacted, or not at all. */
+export function seenMediaRows(rows: MediaRow[], cards: Card[], view: MaskView): MediaRow[] {
+  const masked = new Set(cards.filter((c) => isMasked(c, view)).flatMap((c) => cardMediaEntries(c).map((e) => e.file)));
+  if (!masked.size) return rows;
+  return rows.flatMap((r) => {
+    if (!masked.has(r.file)) return [r];
+    return view.showMasked ? [{ ...r, owner: r.owner && { ...r.owner, title: REDACTED }, masked: true }] : [];
+  });
 }

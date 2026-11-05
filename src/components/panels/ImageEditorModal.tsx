@@ -3,6 +3,7 @@ import { Button, Dialog, DialogActions, Notice } from '@wired-square/kit';
 import { ObjectPickerDialog, type PickableObject } from './ObjectPickerDialog';
 import { closeDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { storage } from '../../storage';
 import { mediaSrc } from '../../storage/media';
 import {
@@ -38,7 +39,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 const messageOf = (e: unknown) => String((e as Error).message ?? e);
 
 export function ImageEditorModal(props: { cardId: string }) {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => s.cards);
   const card = createMemo(() => cards().find((c) => c.id === props.cardId));
   const close = () => closeDialog('imageEditorCardId');
 

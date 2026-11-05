@@ -4,6 +4,7 @@ import { rosterOf, relationsOf } from '../../lib/roster';
 import { gradeTint } from '../../lib/grades';
 import { formatOccurredAt } from '../../lib/dates';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { fromStore } from '@wired-square/store/solid';
 import { KindIcon } from '../ui/KindIcon';
 
@@ -23,7 +24,7 @@ import { KindIcon } from '../ui/KindIcon';
  * addresses is not made to display its own emptiness.
  */
 export function ParticipantsSection(props: { cardId: string }) {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => s.cards);
   const { selectCard } = boardStore.getState();
   const relations = createMemo(() => relationsOf(rosterOf(cards()), props.cardId, cards()));
 

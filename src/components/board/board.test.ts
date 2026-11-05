@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
+import { maskStore } from '../../store/maskStore';
 import type { Card, Connection } from '../../types/board';
 import { BoardCanvas } from './BoardCanvas';
 import { camera } from './camera';
@@ -119,6 +120,17 @@ test('the search lens frames the matches, and clearing the box goes back', async
   await vi.waitFor(() => expect(camera()!.getViewport()).not.toEqual(home));
   boardStore.setState({ searchQuery: '' });
   await vi.waitFor(() => expect(camera()!.getViewport()).toEqual(home));
+});
+
+test('a masked card draws redacted with its string, and goes with it when masked items are hidden', () => {
+  boardStore.setState((s) => ({ cards: s.cards.map((c) => (c.id === 'ann' ? { ...c, confidential: true } : c)) }));
+  expect(node('ann')!.textContent).toContain('Redacted');
+  expect(node('ann')!.textContent).not.toContain('ann@example.com');
+  expect(host.querySelector('.red-string__tag')!.textContent).toBe('wrote');
+  maskStore.getState().setShowMasked(false);
+  expect(node('ann')).toBeNull();
+  expect(host.querySelector('.app-canvas__edge')).toBeNull();
+  maskStore.setState({ showMasked: true });
 });
 
 const pointer = (target: Element, type: string, x: number, y: number) => {

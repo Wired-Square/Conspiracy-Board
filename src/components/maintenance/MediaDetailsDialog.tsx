@@ -54,8 +54,9 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
   // The embedded properties are a live re-parse of the file, so only for on-disk files
   // and only on open. A resource keeps only the latest read, so a row changed mid-read
   // never shows the old file's properties.
+  const readable = () => props.row.onDisk && !props.row.masked;
   const [meta] = createResource(
-    () => props.row.onDisk && props.row.file,
+    () => readable() && props.row.file,
     (file) => storage.extractMediaMeta(file).catch(() => null),
   );
 
@@ -98,7 +99,7 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
         )}
       </Show>
 
-      <Show when={props.row.onDisk}>
+      <Show when={readable()}>
         <span class="panel-heading media-details__heading">File properties</span>
         <Show when={!meta.loading} fallback={<p class="hint">Reading file…</p>}>
           <Show when={facts().length} fallback={<p class="hint">No embedded properties.</p>}>
@@ -107,7 +108,7 @@ export function MediaDetailsDialog(props: { row: MediaRow; index?: DocStatus; on
         </Show>
       </Show>
       <div class="app-dialog__actions">
-        <Show when={props.row.onDisk}>
+        <Show when={readable()}>
           <Button onClick={() => void storage.openMedia(props.row.file)}>Open file</Button>
         </Show>
         <Button onClick={props.onClose}>Close</Button>

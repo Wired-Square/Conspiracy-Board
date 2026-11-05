@@ -6,10 +6,11 @@ import { storage } from '../../storage';
 import type { DocStatus } from '../../storage/StorageAdapter';
 import { mediaSrc } from '../../storage/media';
 import { isDocumentFile, isImageFile } from '../../lib/fileTypes';
-import { countIssues, indexFailure, isIssue, mediaRowMatchesWithDocs, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
+import { countIssues, indexFailure, isIssue, mediaRowMatchesWithDocs, seenMediaRows, STATUS_LABEL, type MediaRow } from '../../lib/maintenance';
 import { normaliseQuery } from '../../lib/search';
 import { mediaIconFor } from '../../lib/mediaIcon';
 import { boardStore } from '../../store/boardStore';
+import { maskStore } from '../../store/maskStore';
 import { jobsStore } from '../../store/jobsStore';
 import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '@wired-square/store/solid';
@@ -45,7 +46,10 @@ export function ObjectView() {
   // The status line written here is what the toolbar badge shows during a bulk op.
   // The view re-audits on mount — it is keyed on the board in App, so a board switch
   // remounts and refreshes.
-  const rows = fromStore(mediaAuditStore, (s) => s.rows);
+  const audited = fromStore(mediaAuditStore, (s) => s.rows);
+  const cards = fromStore(boardStore, (s) => s.cards);
+  const maskView = fromStore(maskStore, (s) => s);
+  const rows = createMemo(() => seenMediaRows(audited(), cards(), maskView()));
   const loading = fromStore(mediaAuditStore, (s) => s.loading);
   const error = fromStore(mediaAuditStore, (s) => s.error);
   const incomplete = fromStore(mediaAuditStore, (s) => s.incomplete);
@@ -221,7 +225,7 @@ function MediaFileRow(props: RowProps) {
   const file = props.row.file;
   // An orphan image or document can become a card, right here.
   const canAdopt = () => props.row.status === 'orphan' && isAdoptable(file);
-  const isImage = () => props.row.owner?.mediaKind === 'image' || (!props.row.owner && isImageFile(file));
+  const isImage = () => !props.row.masked && (props.row.owner?.mediaKind === 'image' || (!props.row.owner && isImageFile(file)));
   return (
     <li class={`maintenance-row is-${props.row.status}`}>
       <span class="record-row__thumb">
@@ -294,9 +298,11 @@ function MediaFileRow(props: RowProps) {
           <Button tone="plain" onClick={() => props.onVerify(file)} disabled={props.check === 'checking'}>
             {props.check === 'checking' ? 'Verifying…' : 'Verify'}
           </Button>
-          <Button tone="plain" onClick={() => void storage.openMedia(file)}>
-            Open
-          </Button>
+          <Show when={!props.row.masked}>
+            <Button tone="plain" onClick={() => void storage.openMedia(file)}>
+              Open
+            </Button>
+          </Show>
         </Show>
       </span>
     </li>

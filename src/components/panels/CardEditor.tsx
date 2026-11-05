@@ -1,9 +1,12 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Button, Dialog, Field, IconButton, Select, TextArea, Tick } from '@wired-square/kit';
 import { cx } from '@wired-square/kit/core';
 import { x } from '@wired-square/icons/solid';
 import { openDialog } from '../../store/dialogStore';
 import { boardStore } from '../../store/boardStore';
+import { maskStore, seenStore } from '../../store/maskStore';
+import { isRedacted } from '../../lib/mask';
+import { formatOccurredAt } from '../../lib/dates';
 import { strungNote } from '../../lib/connections';
 import {
   CARD_KINDS,
@@ -40,7 +43,12 @@ import { cardsById } from '../../lib/cardIndex';
 import { KindIcon } from '../ui/KindIcon';
 
 export function CardEditor() {
-  const card = fromStore(boardStore, (s) => (s.selectedCardId ? cardsById(s.cards).get(s.selectedCardId) : undefined));
+  const cards = fromStore(seenStore, (s) => s.cards);
+  const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
+  const card = createMemo(() => {
+    const id = selectedCardId();
+    return id ? cardsById(cards()).get(id) : undefined;
+  });
   const close = () => boardStore.getState().selectCard(null);
 
   // No selection, no dialog: the editor is a modal now, not a persistent column,
@@ -58,7 +66,9 @@ export function CardEditor() {
           {/* Keyed on the id, so the title/notes drafts commit to the card they
               were typed for when the selection moves. */}
           <Show when={card().id} keyed>
-            <CardEditorForm card={card()} />
+            <Show when={!isRedacted(card())} fallback={<MaskedCard card={card()} />}>
+              <CardEditorForm card={card()} />
+            </Show>
           </Show>
         </Dialog>
       )}
@@ -140,6 +150,7 @@ function CardEditorForm(props: { card: Card }) {
       <Show when={isTimelineKind(props.card.kind) && props.card.kind !== 'event'}>
         <EventToggle cardId={id} />
       </Show>
+      <ConfidentialToggle card={props.card} />
 
       <Show when={props.card.kind === 'email'}>
         <EmailFields card={props.card} />
@@ -257,6 +268,41 @@ function CardEditorForm(props: { card: Card }) {
       <ParticipantsSection cardId={id} />
       <DeleteCard cardId={id} />
     </>
+  );
+}
+
+function MaskedCard(props: { card: Card }) {
+  return (
+    <>
+      <div class="field">
+        <span>Kind</span>
+        <span class="kind-locked">
+          <KindIcon kind={props.card.kind} class="inline-glyph--lead" />
+          {KIND_META[props.card.kind].label}
+        </span>
+      </div>
+      <p class="masked-card">
+        <strong>{props.card.title}</strong>
+        {props.card.occurredAt && ` · ${formatOccurredAt(props.card.occurredAt, props.card.occurredAtPrecision)}`}
+      </p>
+      <ConfidentialToggle card={props.card} />
+      <div class="field__row">
+        <Button onClick={() => maskStore.getState().unmask(props.card.id)}>Unmask</Button>
+      </div>
+    </>
+  );
+}
+
+function ConfidentialToggle(props: { card: Card }) {
+  const masked = () => isRedacted(props.card);
+  return (
+    <Tick
+      label="Confidential"
+      hint={masked() ? 'unmask it to clear this.' : 'masked while Mask is on, and always to the library MCP.'}
+      checked={!!props.card.confidential}
+      disabled={masked()}
+      onChange={(on) => maskStore.getState().mark([props.card.id], on)}
+    />
   );
 }
 

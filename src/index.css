@@ -205,6 +205,8 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator.is-error { border-color: var(--cb-string); background: var(--cb-string-wash); }
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
 .mcp-indicator.is-writable:not(.is-error) .mcp-indicator__dot { background: var(--app-warn); }
+.mask-indicator { border-color: var(--app-warn); background: var(--cb-warn-wash); }
+.mask-indicator .mcp-indicator__dot { background: var(--app-warn); }
 .app__canvas { --cluster-panel-width: 17rem; }
 .cluster-panel { display: flex; flex-direction: column; padding: var(--cb-space-2) var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; }
 .cluster-panel__list { min-height: 0; overflow-y: auto; }
@@ -546,6 +548,7 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 }
 
 .kind-locked { font-size: var(--cb-text-md); padding: var(--cb-space-1) 0; }
+.masked-card { margin: 0; color: var(--app-text-muted); }
 
 .card-editor__preview {
   position: relative;

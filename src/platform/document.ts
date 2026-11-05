@@ -37,6 +37,8 @@ export const doc = {
   refreshCard: (boardId: string, id: string, patch: CardPatch) =>
     inOrder('refresh_card', { boardId, id, patch: clearing(patch) }),
   moveCards: (boardId: string, moves: CardMove[]) => inOrder('move_cards', { boardId, moves }),
+  setConfidential: (boardId: string, ids: string[], confidential: boolean) =>
+    inOrder('set_confidential', { boardId, ids, confidential }),
   edit: (boardId: string, { clusters = [], cards = [], connections = [], cardUpdates = [] }: Edit) =>
     inOrder('apply_edit', {
       boardId,

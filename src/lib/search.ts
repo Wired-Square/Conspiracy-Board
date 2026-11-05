@@ -2,6 +2,7 @@ import type { Card } from '../types/board';
 import { participantAddresses } from './roster';
 import { communicationParties } from './comms';
 import { cardMediaEntries } from './media';
+import { isRedacted } from './mask';
 
 // Free-text search over a card. One matcher, so every surface agrees on what a
 // query matches: the board dims by it, the record filters by it, the timeline
@@ -58,6 +59,7 @@ function identifierHit(card: Card, hit: Hit): boolean {
 
 export function cardMatches(card: Card, q: string): boolean {
   if (!q) return true;
+  if (isRedacted(card)) return false;
   const hit: Hit = (s) => !!s && s.toLowerCase().includes(q);
 
   // Title and notes carry the most, and every kind has them — notes is also where
@@ -108,6 +110,7 @@ export function cardMatchesWithDocs(card: Card, q: string, docHits: Set<string>)
  */
 export function cardMatchesEntity(card: Card, q: string): boolean {
   if (!q) return true;
+  if (isRedacted(card)) return false;
   const hit: Hit = (s) => !!s && s.toLowerCase().includes(q);
   // An actor's name is its title (see types/board.ts); everything else it matches on
   // is a shared identifier.

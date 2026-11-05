@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::*;
 use crate::board_store::board_db::peek_board;
 use crate::board_store::board_index::summaries;
-use crate::library_mcp::tests::library;
+use crate::library_mcp::tests::{confide, library};
 use crate::schema::CardKind;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/mail");
@@ -32,8 +32,12 @@ impl Library {
   }
 
   fn import(&self, path: &str) -> Result<Value, String> {
-    let args = ImportArgs { board_id: "brd_acme".into(), path: path.into(), position: None, cluster_ids: Some(vec!["g".into()]) };
-    import_file(&self.host, args)
+    self.import_marked(path, None)
+  }
+
+  fn import_marked(&self, path: &str, confidential: Option<bool>) -> Result<Value, String> {
+    let cluster_ids = Some(vec!["g".into()]);
+    import_file(&self.host, ImportArgs { board_id: "brd_acme".into(), path: path.into(), position: None, cluster_ids, confidential })
   }
 
   fn file(&self, name: &str, bytes: &[u8]) -> String {
@@ -111,7 +115,7 @@ fn an_import_refuses_what_isnt_an_importable_regular_file() {
   assert_eq!(library.board().cards.len(), 3);
 
   let tools = LibraryTools { library: library.dir.clone(), host: Arc::new(Detached::new(&library.dir)) };
-  let args = ImportArgs { board_id: "brd_acme".into(), path: "relative".into(), position: None, cluster_ids: None };
+  let args = ImportArgs { board_id: "brd_acme".into(), path: "relative".into(), position: None, cluster_ids: None, confidential: None };
   let answer = tauri::async_runtime::block_on(tools.import_file(Parameters(args))).unwrap();
   assert_eq!(answer.is_error, Some(true));
 }
@@ -187,4 +191,28 @@ fn boards_clusters_and_connections_are_made_and_then_edited() {
   let board = library.board();
   assert_eq!((board.meta.title.as_str(), board.cards[0].title.as_str(), board.clusters.len()), ("Acme Ltd", "Jane Doe", 3));
   assert_eq!(board.connections.len(), 2);
+}
+
+#[test]
+fn a_confidential_card_moves_but_its_content_and_flag_stay_out_of_reach() {
+  let library = Library::new("confidential-edits");
+  confide(&library.dir, "brd_acme", "p");
+  let edit = |run: Box<dyn FnOnce(&mut Session) -> Outcome + '_>| changed(library.host.edit("brd_acme", run));
+  let mark = edit(Box::new(|s| s.edit_card("e", fields(json!({ "confidential": true })))));
+  assert!(mark.unwrap_err().contains("isn't a card field"));
+  let retitle = edit(Box::new(|s| s.edit_card("p", fields(json!({ "title": "Jane Doe" })))));
+  assert!(retitle.unwrap_err().contains("confidential"));
+  let moved = edit(Box::new(|s| s.move_existing(vec![("p".into(), Vec2 { x: 7.0, y: 8.0 })])));
+  assert_eq!(moved.unwrap(), json!({ "changed": true }));
+  let card = library.board().cards.into_iter().find(|c| c.id == "p").unwrap();
+  assert_eq!((card.title.as_str(), card.position, card.confidential), ("Jane Roe", Vec2 { x: 7.0, y: 8.0 }, true));
+}
+
+#[test]
+fn an_import_marked_confidential_makes_confidential_cards_and_answers_redacted() {
+  let library = Library::new("import-confidential");
+  let imported = library.import_marked(&format!("{FIXTURES}/sample.eml"), Some(true)).unwrap();
+  assert_eq!(imported["cards"][0]["title"], "Redacted");
+  let card = library.board().cards.into_iter().last().unwrap();
+  assert_eq!((card.title.as_str(), card.confidential), ("Re: the “collection”", true));
 }
