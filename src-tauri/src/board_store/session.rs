@@ -203,6 +203,14 @@ impl Session {
     self.commit(DocChanged { cards, ..Default::default() })
   }
 
+  fn set_confidential(&mut self, ids: &[String], confidential: bool) -> Outcome {
+    let cards = ids
+      .iter()
+      .filter_map(|id| self.card(id).filter(|c| c.confidential != confidential).map(|c| Card { confidential, ..c.clone() }))
+      .collect();
+    self.commit(DocChanged { cards, ..Default::default() })
+  }
+
   /// Clusters, cards and the strings among them added, and cards patched, in one edit.
   /// A string repeating an existing source→target pair is dropped, as `addConnection`
   /// drops it; a patch to an unknown card is skipped, and patches to one card stack.
@@ -634,6 +642,20 @@ pub fn move_cards(
   let mut span = crate::perf::metered!();
   span.rows(moves.len(), 0);
   edit(&app, &open, &library, &board_id, |s| s.move_cards(&moves))
+}
+
+#[tauri::command(async)]
+pub fn set_confidential(
+  app: AppHandle,
+  open: State<OpenBoard>,
+  library: State<LibraryDb>,
+  board_id: String,
+  ids: Vec<String>,
+  confidential: bool,
+) -> Result<(), String> {
+  let mut span = crate::perf::metered!();
+  span.rows(ids.len(), 0);
+  edit(&app, &open, &library, &board_id, |s| s.set_confidential(&ids, confidential))
 }
 
 #[tauri::command(async)]

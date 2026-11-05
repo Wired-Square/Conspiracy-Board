@@ -2,6 +2,7 @@
 //! files, never through the webview, and write only through the board session when a
 //! switch allows it (`writes`). Also the bring-up the dev harness (`mcp`) shares.
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -121,7 +122,8 @@ impl LibraryTools {
 
   fn identity(allowed: Allowed) -> ServerIdentity {
     let reads = "the Conspiracy library: its boards, their cards, connections and clusters, and the text \
-                 extracted from imported files.";
+                 extracted from imported files. A confidential card is redacted: only its kind, date, position \
+                 and clusters show, and the files it carries are left out of search and extracted text.";
     let instructions = match allowed {
       Allowed { add: false, edit: false } => format!("Read-only access to {reads} Nothing here changes the library."),
       Allowed { add, edit } => {
@@ -246,12 +248,14 @@ impl LibraryTools {
   }
 
   #[tool(description = "A board's cards in brief (id, kind, title, date, clusters), optionally filtered by \
-                        kind, text or cluster. `total` counts every match, before the offset and limit.")]
+                        kind, text or cluster. `total` counts every match, before the offset and limit. A \
+                        confidential card is titled \"Redacted\" and never matches a text filter.")]
   async fn list_cards(&self, Parameters(args): Parameters<CardsArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| cards(library, &args)).await
   }
 
-  #[tool(description = "One card in full: notes, kind payload, media files and all.")]
+  #[tool(description = "One card in full: notes, kind payload, media files and all. A confidential card comes \
+                        back redacted: its kind, date, position and clusters only.")]
   async fn get_card(&self, Parameters(args): Parameters<CardArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| card(library, &args.board_id, &args.card_id)).await
   }
@@ -267,12 +271,14 @@ impl LibraryTools {
   }
 
   #[tool(description = "Full-text search over the text extracted from every imported file, best first. Each \
-                        hit names the media file, a snippet, and the cards that carry it.")]
+                        hit names the media file, a snippet, and the cards that carry it. A file any \
+                        confidential card carries is left out.")]
   async fn search_library(&self, Parameters(args): Parameters<SearchArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| search(library, &args.query, args.limit.unwrap_or(20))).await
   }
 
-  #[tool(description = "The text extracted from one media file, and its index status.")]
+  #[tool(description = "The text extracted from one media file, and its index status. Refused for a file a \
+                        confidential card carries.")]
   async fn media_text(&self, Parameters(args): Parameters<MediaArgs>) -> Result<CallToolResult, ErrorData> {
     self.answer(move |library| media_text(library, &args.name)).await
   }
@@ -317,7 +323,9 @@ fn cards(library: &Path, args: &CardsArgs) -> Result<Value, String> {
     .iter()
     .filter(|c| args.kind.is_none_or(|k| c.kind == k))
     .filter(|c| {
-      text.as_deref().is_none_or(|t| c.title.to_lowercase().contains(t) || c.notes.to_lowercase().contains(t))
+      text.as_deref().is_none_or(|t| {
+        !c.confidential && (c.title.to_lowercase().contains(t) || c.notes.to_lowercase().contains(t))
+      })
     })
     .filter(|c| match args.cluster_id.as_deref() {
       None => true,
@@ -330,7 +338,13 @@ fn cards(library: &Path, args: &CardsArgs) -> Result<Value, String> {
     .skip(args.offset.unwrap_or(0))
     .take(args.limit.unwrap_or(50))
     .map(|c| {
-      json!({ "id": c.id, "kind": c.kind, "title": c.title, "occurredAt": c.occurred_at, "clusterIds": c.cluster_ids })
+      let c = locked((*c).clone());
+      let mut brief =
+        json!({ "id": c.id, "kind": c.kind, "title": c.title, "occurredAt": c.occurred_at, "clusterIds": c.cluster_ids });
+      if c.confidential {
+        brief["confidential"] = json!(true);
+      }
+      brief
     })
     .collect();
   Ok(json!({ "total": matches.len(), "cards": brief }))
@@ -338,7 +352,53 @@ fn cards(library: &Path, args: &CardsArgs) -> Result<Value, String> {
 
 fn card(library: &Path, board_id: &str, card_id: &str) -> Result<Card, String> {
   let board = board(library, board_id)?;
-  board.cards.into_iter().find(|c| c.id == card_id).ok_or_else(|| format!("No card {card_id:?}."))
+  board.cards.into_iter().find(|c| c.id == card_id).map(locked).ok_or_else(|| format!("No card {card_id:?}."))
+}
+
+/// The card as the locked view shows it. Built field by field, so a new field stays
+/// hidden until it is chosen here.
+pub(super) fn locked(card: Card) -> Card {
+  if !card.confidential {
+    return card;
+  }
+  Card {
+    id: card.id,
+    title: "Redacted".into(),
+    notes: String::new(),
+    image_url: None,
+    image_file: None,
+    image_crop: None,
+    image_meta: None,
+    cluster_ids: card.cluster_ids,
+    position: card.position,
+    kind: card.kind,
+    occurred_at: card.occurred_at,
+    occurred_at_precision: card.occurred_at_precision,
+    email: None,
+    message: None,
+    call: None,
+    person: None,
+    organisation: None,
+    document: None,
+    event: None,
+    grade: None,
+    confidential: true,
+  }
+}
+
+/// Every card in the library with its board id. A board that can't be read fails the
+/// whole read rather than being skipped, so its confidential cards can't be missed.
+fn library_cards(library: &Path) -> Result<Vec<(String, Card)>, String> {
+  let mut all = Vec::new();
+  for summary in boards(library)? {
+    let Some(board) = peek_board(&library.join("boards"), &summary.id)? else { continue };
+    all.extend(board.cards.into_iter().map(|card| (summary.id.clone(), card)));
+  }
+  Ok(all)
+}
+
+fn confidential_media(cards: &[(String, Card)]) -> HashSet<&str> {
+  cards.iter().filter(|(_, c)| c.confidential).flat_map(|(_, c)| c.media_files()).collect()
 }
 
 #[derive(Serialize)]
@@ -357,20 +417,27 @@ struct SearchHit {
 }
 
 fn search(library: &Path, query: &str, limit: u32) -> Result<Value, String> {
-  let hits = run_search(&index(library)?, query, limit)?;
-  let mut found: Vec<SearchHit> = hits.into_iter().map(|hit| SearchHit { hit, cards: Vec::new() }).collect();
-  for summary in boards(library)? {
-    let Ok(Some(board)) = peek_board(&library.join("boards"), &summary.id) else { continue };
-    for card in &board.cards {
-      for found in found.iter_mut().filter(|f| card.media_files().any(|m| m == f.hit.name)) {
-        found.cards.push(CardRef { board_id: summary.id.clone(), card_id: card.id.clone(), title: card.title.clone() });
-      }
-    }
-  }
+  let cards = library_cards(library)?;
+  let hidden = confidential_media(&cards);
+  let headroom = u32::try_from(hidden.len()).unwrap_or(u32::MAX);
+  let found: Vec<SearchHit> = run_search(&index(library)?, query, limit.saturating_add(headroom))?
+    .into_iter()
+    .filter(|hit| !hidden.contains(hit.name.as_str()))
+    .take(limit as usize)
+    .map(|hit| {
+      let carriers = cards.iter().filter(|(_, card)| card.media_files().any(|m| m == hit.name));
+      let refs = carriers
+        .map(|(board_id, card)| CardRef { board_id: board_id.clone(), card_id: card.id.clone(), title: card.title.clone() });
+      SearchHit { cards: refs.collect(), hit }
+    })
+    .collect();
   Ok(json!({ "hits": found }))
 }
 
 fn media_text(library: &Path, name: &str) -> Result<Value, String> {
+  if confidential_media(&library_cards(library)?).contains(name) {
+    return Err(format!("{name:?} is carried by a confidential card, so its text is withheld."));
+  }
   let (status, text): (String, Option<String>) = index(library)?
     .query_row(
       "SELECT d.status, f.body FROM documents d LEFT JOIN doc_fts f ON f.rowid = d.id WHERE d.name = ?1",
@@ -423,6 +490,25 @@ mod tests {
     write_outcome(&tx, "bb.png", 10, &ExtractOutcome::Unsupported).unwrap();
     tx.commit().unwrap();
     dir
+  }
+
+  pub(super) fn confide(library: &Path, board_id: &str, card_id: &str) {
+    let board = rusqlite::Connection::open(library.join(format!("boards/{board_id}.sqlite"))).unwrap();
+    let sql = "UPDATE cards SET json = json_set(json, '$.confidential', json('true')) WHERE id = ?1";
+    assert_eq!(board.execute(sql, [card_id]).unwrap(), 1);
+  }
+
+  fn add_board(library: &Path, id: &str, cards: Value) {
+    let board = parse_board(json!({
+      "version": 4,
+      "meta": { "title": id, "updatedAt": "2026-01-03T00:00:00.000Z" },
+      "clusters": [],
+      "cards": cards,
+      "connections": [],
+    }))
+    .unwrap();
+    create_board_db(&library.join(format!("boards/{id}.sqlite")), &board).unwrap();
+    upsert_summary(&*open_at(library).unwrap().lock_db().unwrap(), id, id, "2026-01-03T00:00:00.000Z").unwrap();
   }
 
   fn cards_where(library: &Path, args: CardsArgs) -> Value {
@@ -535,6 +621,43 @@ mod tests {
     );
     assert_eq!(media_text(&dir, "bb.png").unwrap()["text"], Value::Null);
     assert!(media_text(&dir, "cc.pdf").is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn a_confidential_card_reads_redacted_and_never_matches_text() {
+    let dir = library("mcp-confidential");
+    confide(&dir, "brd_acme", "p");
+    let redacted = serde_json::to_value(card(&dir, "brd_acme", "p").unwrap()).unwrap();
+    assert_eq!(
+      redacted,
+      json!({
+        "id": "p", "title": "Redacted", "notes": "", "imageUrl": null, "imageFile": null, "imageCrop": null,
+        "imageMeta": null, "clusterIds": ["g"], "position": { "x": 0.0, "y": 0.0 }, "kind": "person",
+        "occurredAt": null, "occurredAtPrecision": "minute", "confidential": true,
+      })
+    );
+    let listed = cards_where(&dir, CardsArgs::default());
+    let brief = json!({ "id": "p", "kind": "person", "title": "Redacted", "occurredAt": null, "clusterIds": ["g"], "confidential": true });
+    assert_eq!(listed["cards"][0], brief);
+    for text in ["jane", "director", "redacted"] {
+      let found = cards_where(&dir, CardsArgs { text: Some(text.into()), ..Default::default() });
+      assert!(!ids(&found).contains(&"p"), "{text}");
+    }
+    assert_eq!(board(&dir, "brd_acme").unwrap().connections[0].label.as_deref(), Some("signed"));
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn search_and_media_text_withhold_a_file_any_confidential_card_carries() {
+    let dir = library("mcp-confidential-media");
+    add_board(&dir, "brd_other", json!([fixture_card("x", "Copy", "document", json!({ "document": { "file": "aa.pdf" } }))]));
+    assert_eq!(search(&dir, "offshore", 20).unwrap()["hits"][0]["cards"].as_array().unwrap().len(), 2);
+    confide(&dir, "brd_other", "x");
+    assert_eq!(search(&dir, "offshore", 20).unwrap(), json!({ "hits": [] }));
+    assert!(media_text(&dir, "aa.pdf").unwrap_err().contains("confidential"));
+    assert_eq!(media_text(&dir, "bb.png").unwrap()["status"], "unsupported");
+    assert_eq!(card(&dir, "brd_acme", "d").unwrap().document.unwrap().file.as_deref(), Some("aa.pdf"));
     let _ = std::fs::remove_dir_all(&dir);
   }
 

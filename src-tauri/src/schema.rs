@@ -366,6 +366,10 @@ pub struct Card {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   #[cfg_attr(test, ts(optional))]
   pub grade: Option<Grade>,
+  /// Shown redacted while the view is locked, and always to the library MCP.
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  #[cfg_attr(test, ts(as = "Option<bool>", optional))]
+  pub confidential: bool,
 }
 
 impl Card {

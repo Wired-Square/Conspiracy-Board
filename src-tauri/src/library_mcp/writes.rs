@@ -14,7 +14,7 @@ use tauri::{AppHandle, Manager};
 use wslib_mcp::rmcp;
 use wslib_secret::{Encoding, Secret};
 
-use super::LibraryTools;
+use super::{locked, LibraryTools};
 use crate::board_store::board_db::create_listed_board;
 use crate::board_store::media::{media_store, ocr_bytes};
 use crate::board_store::session::writes::{edit_board, only, CARD_FIELDS};
@@ -124,6 +124,8 @@ struct ImportArgs {
   position: Option<Point>,
   /// The clusters the new cards join.
   cluster_ids: Option<Vec<String>>,
+  /// Marks every card the import makes confidential, so this server shows them only redacted.
+  confidential: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -195,7 +197,8 @@ struct RenameArgs {
 impl LibraryTools {
   #[tool(description = "Import a file from disk onto a board: email (.eml, .emlx, .mbox) becomes email cards, a \
                         picture an evidence card, a document a document card. The file is copied into the \
-                        library. A message already on the board is skipped.")]
+                        library. A message already on the board is skipped. With confidential, every card it makes \
+                        is confidential and reads back redacted.")]
   async fn import_file(&self, Parameters(args): Parameters<ImportArgs>) -> Result<CallToolResult, ErrorData> {
     self.write(move |host| import_file(host, args)).await
   }
@@ -226,7 +229,7 @@ impl LibraryTools {
   #[tool(description = "Change a card's fields: title, notes, kind, occurredAt, occurredAtPrecision, grade, \
                         clusterIds, or its kind's payload (email, message, call, person, organisation, document, \
                         event). A payload is replaced whole, and the files it names must stay as they are. \
-                        move_cards moves a card.")]
+                        move_cards moves a card. A confidential card can't be changed here, only moved.")]
   async fn update_card(&self, Parameters(args): Parameters<UpdateArgs>) -> Result<CallToolResult, ErrorData> {
     self.write(move |host| changed(host.edit(&args.board_id, Box::new(|s| s.edit_card(&args.id, args.patch))))).await
   }
@@ -271,6 +274,7 @@ fn new_card(mut fields: Map<String, Value>) -> Result<Card, String> {
 }
 
 fn brief(card: &Card) -> Value {
+  let card = locked(card.clone());
   json!({ "id": card.id, "kind": card.kind, "title": card.title })
 }
 
@@ -316,12 +320,13 @@ fn import_file(host: &dyn Host, args: ImportArgs) -> Result<Value, String> {
     return Err(errors.join("\n"));
   }
   let clusters = json!(args.cluster_ids.unwrap_or_default());
+  let confidential = args.confidential.unwrap_or_default();
   let mut cards = drafts
     .into_iter()
     .map(|draft| {
       let mut fields = draft.as_object().cloned().unwrap_or_default();
       fields.insert("clusterIds".into(), clusters.clone());
-      new_card(fields)
+      new_card(fields).map(|card| Card { confidential, ..card })
     })
     .collect::<Result<Vec<_>, _>>()?;
   let total = cards.len();

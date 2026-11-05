@@ -442,10 +442,11 @@ fn a_bad_import_writes_nothing() {
 
 #[test]
 fn every_kind_of_edit_undoes_and_redoes_exactly() {
-  let edits: [(&str, Edit); 16] = [
+  let edits: [(&str, Edit); 17] = [
     ("update_card", |s| s.update_card("a", patch(json!({ "title": "Renamed", "imageFile": "new.png" })), Logged::Edit)),
     ("move_cards", |s| s.move_cards(&[CardMove { id: "b".into(), position: Vec2 { x: 9.0, y: 9.0 } }])),
     ("tidy", |s| s.move_cards(&tidied())),
+    ("set_confidential", |s| s.set_confidential(&["a".into(), "c".into()], true)),
     ("email_import", |s| s.apply_edit(email_import())),
     ("add_cards", |s| s.apply_edit(adding(vec![card("x")], vec![link("e3", "x", "a")]))),
     ("add_connections", |s| s.apply_edit(adding(vec![], vec![link("e3", "c", "a")]))),
@@ -479,6 +480,20 @@ fn every_kind_of_edit_undoes_and_redoes_exactly() {
     f.session.undo().unwrap().unwrap();
     assert_eq!(unstamped(f.on_disk()), unstamped(fixture()), "{name}");
   }
+}
+
+#[test]
+fn marking_a_selection_confidential_is_one_undo_step_touching_only_what_changes() {
+  let mut f = Fixture::new("confidential");
+  f.session.set_confidential(&["a".into()], true).unwrap().unwrap();
+  let marked = f.session.set_confidential(&["a".into(), "b".into(), "gone".into()], true).unwrap().unwrap();
+  assert_eq!(ids(&marked.cards), ["b"]);
+  assert_eq!(f.session.set_confidential(&["a".into(), "b".into()], true).unwrap(), None);
+  f.session.undo().unwrap().unwrap();
+  let confidential = |board: Board| board.cards.iter().filter(|c| c.confidential).map(|c| c.id.clone()).collect::<Vec<_>>();
+  assert_eq!(confidential(f.on_disk()), ["a"]);
+  f.session.set_confidential(&["a".into()], false).unwrap().unwrap();
+  assert!(confidential(f.on_disk()).is_empty());
 }
 
 #[test]

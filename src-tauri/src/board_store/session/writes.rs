@@ -135,6 +135,9 @@ impl Session {
   pub(crate) fn edit_card(&mut self, id: &str, patch: Map<String, Value>) -> Outcome {
     only(&patch, CARD_FIELDS, "card")?;
     let card = self.card(id).ok_or_else(|| format!("No card {id:?}."))?;
+    if card.confidential {
+      return Err(format!("Card {id:?} is confidential, so it can't be edited here; move_cards can still move it."));
+    }
     let next = patched(card, patch, parse_card)?;
     if !next.media_files().eq(card.media_files()) {
       return Err("An edit can't change the files a card holds.".into());

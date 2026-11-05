@@ -196,6 +196,20 @@ mod v4 {
   fn lets_cluster_ids_win_when_a_card_carries_both_shapes() {
     assert!(parse(v1_with(4, json!({ "clusterId": "cl_1", "clusterIds": [] }))).cards[0].cluster_ids.is_empty());
   }
+
+  #[test]
+  fn a_card_without_the_confidential_flag_is_open_and_writes_none() {
+    let card = &parse(v1_with(4, json!({}))).cards[0];
+    assert!(!card.confidential);
+    assert!(serde_json::to_value(card).unwrap().get("confidential").is_none());
+  }
+
+  #[test]
+  fn round_trips_a_confidential_card() {
+    let card = &parse(v1_with(4, json!({ "confidential": true }))).cards[0];
+    assert!(card.confidential);
+    assert_eq!(serde_json::to_value(card).unwrap()["confidential"], true);
+  }
 }
 
 mod rejection {
