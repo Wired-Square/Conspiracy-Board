@@ -13,3 +13,4 @@ dist-ssr
 # Local agent instructions — never commit
 CLAUDE.md
 .claude/
+.env
