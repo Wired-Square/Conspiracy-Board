@@ -37,7 +37,7 @@ describe('timelineCards', () => {
       card('who', '2024-03-01', 'person'),
       card('gone', '2024-03-01', 'evidence', { clusterIds: ['k'] }),
     ];
-    const { dated, undated } = timelineCards(cards, [hiddenCluster], '', new Set());
+    const { dated, undated } = timelineCards(cards, [hiddenCluster], false, '', new Set());
     expect(dated.map((c) => c.id)).toEqual(['early', 'late']);
     expect(undated.map((c) => c.id)).toEqual(['loose']);
   });
@@ -45,7 +45,7 @@ describe('timelineCards', () => {
   it('folds a marked source under its event', () => {
     const source = card('src', '2024-03-01');
     const event = card('ev', '2024-03-01', 'event', { event: { sourceCardId: 'src' } });
-    expect(timelineCards([source, event], [], '', new Set()).dated.map((c) => c.id)).toEqual(['ev']);
+    expect(timelineCards([source, event], [], false, '', new Set()).dated.map((c) => c.id)).toEqual(['ev']);
   });
 });
 

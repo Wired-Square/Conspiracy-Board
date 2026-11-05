@@ -389,7 +389,7 @@ fn create_board(host: &dyn Host, title: &str) -> Result<Value, String> {
     return Err("A board needs a title.".into());
   }
   let id = new_id("brd")?;
-  let meta = BoardMeta { title: title.to_string(), updated_at: now_utc(), country_code: None };
+  let meta = BoardMeta { title: title.to_string(), updated_at: now_utc(), country_code: None, unclustered_hidden: false };
   let board = Board { version: BOARD_VERSION, meta, clusters: vec![], cards: vec![], connections: vec![], viewport: None };
   host.create_board(&id, &board)?;
   Ok(json!({ "board": { "id": id, "title": title } }))

@@ -3,8 +3,7 @@ import type { Cluster } from '../types/board';
 import {
   clusterColor,
   extraClusterColors,
-  hiddenClusterIds,
-  isVisible,
+  clusterFilter,
   primaryClusterId,
 } from './clusters';
 
@@ -42,20 +41,22 @@ describe('extraClusterColors', () => {
   });
 });
 
-describe('isVisible', () => {
-  const hidden = hiddenClusterIds(clusters);
+describe('clusterFilter', () => {
+  const shown = clusterFilter(clusters, false);
 
-  it('always shows a clusterless card', () => {
-    expect(isVisible([], hidden)).toBe(true);
+  it('shows a clusterless card unless the unclustered are hidden', () => {
+    expect(shown([])).toBe(true);
+    expect(clusterFilter(clusters, true)([])).toBe(false);
   });
 
   it('hides a card whose every cluster is hidden', () => {
-    expect(isVisible(['cl_b'], hidden)).toBe(false);
+    expect(shown(['cl_b'])).toBe(false);
   });
 
   it('shows a card with at least one visible cluster, wherever it sits', () => {
-    expect(isVisible(['cl_b', 'cl_a'], hidden)).toBe(true);
-    expect(isVisible(['cl_a', 'cl_b'], hidden)).toBe(true);
+    expect(shown(['cl_b', 'cl_a'])).toBe(true);
+    expect(shown(['cl_a', 'cl_b'])).toBe(true);
+    expect(clusterFilter(clusters, true)(['cl_a'])).toBe(true);
   });
 });
 

@@ -30,6 +30,7 @@ const scrolledTo = new Map<string, number>();
 
 export function RecordView() {
   const clusters = fromStore(boardStore, (s) => s.clusters);
+  const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
   const connections = fromStore(boardStore, (s) => s.connections);
   const allCards = fromStore(boardStore, (s) => s.cards);
   const searchQuery = fromStore(boardStore, (s) => s.searchQuery);
@@ -39,7 +40,7 @@ export function RecordView() {
   const cards = createMemo(() =>
     measure(
       'record filter',
-      () => visibleCards(allCards(), clusters(), searchQuery()),
+      () => visibleCards(allCards(), clusters(), unclusteredHidden(), searchQuery()),
       (shown) => [allCards().length, shown.length],
     ),
   );

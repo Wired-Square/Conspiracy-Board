@@ -1,5 +1,5 @@
 import type { Card, Cluster } from '../types/board';
-import { hiddenClusterIds, isVisible } from './clusters';
+import { clusterFilter } from './clusters';
 import { isBoardKind } from './kinds';
 import { cardMatchesEntity, normaliseQuery } from './search';
 
@@ -9,19 +9,19 @@ import { cardMatchesEntity, normaliseQuery } from './search';
  * cardMatchesEntity). The board dims rather than drops, so it matches the query
  * itself (see searchMatchIds).
  */
-export function visibleCards(cards: Card[], clusters: Cluster[], searchQuery: string): Card[] {
-  const hidden = hiddenClusterIds(clusters);
+export function visibleCards(cards: Card[], clusters: Cluster[], unclusteredHidden: boolean, searchQuery: string): Card[] {
+  const shown = clusterFilter(clusters, unclusteredHidden);
   const q = normaliseQuery(searchQuery);
-  return cards.filter((c) => isVisible(c.clusterIds, hidden) && cardMatchesEntity(c, q));
+  return cards.filter((c) => shown(c.clusterIds) && cardMatchesEntity(c, q));
 }
 
 /**
- * The cards the board draws. Two reasons a card is not drawn: every cluster it
- * is in is hidden, or it is the record and belongs in the Record view.
+ * The cards the board draws. Two reasons a card is not drawn: its clusters are
+ * hidden (see clusterFilter), or it is the record and belongs in the Record view.
  */
-export function drawnCardIds(cards: Card[], clusters: Cluster[]): Set<string> {
-  const hidden = hiddenClusterIds(clusters);
-  return new Set(cards.filter((c) => isVisible(c.clusterIds, hidden) && isBoardKind(c.kind)).map((c) => c.id));
+export function drawnCardIds(cards: Card[], clusters: Cluster[], unclusteredHidden: boolean): Set<string> {
+  const shown = clusterFilter(clusters, unclusteredHidden);
+  return new Set(cards.filter((c) => shown(c.clusterIds) && isBoardKind(c.kind)).map((c) => c.id));
 }
 
 /**

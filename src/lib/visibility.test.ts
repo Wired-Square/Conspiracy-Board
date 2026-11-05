@@ -25,14 +25,20 @@ const cards = [card('alpha', 'person', ['shown']), card('beta', 'person', ['hidd
 
 describe('drawnCardIds', () => {
   it('leaves out hidden clusters and the record', () => {
-    expect([...drawnCardIds(cards, clusters)]).toEqual(['alpha']);
+    expect([...drawnCardIds(cards, clusters, false)]).toEqual(['alpha']);
+  });
+
+  it('leaves out a card in no cluster when the unclustered are hidden', () => {
+    const loose = [...cards, card('gamma')];
+    expect([...drawnCardIds(loose, clusters, false)]).toEqual(['alpha', 'gamma']);
+    expect([...drawnCardIds(loose, clusters, true)]).toEqual(['alpha']);
   });
 });
 
 describe('visibleCards', () => {
   it('keeps the record but filters by cluster and search', () => {
-    expect(visibleCards(cards, clusters, '').map((c) => c.id)).toEqual(['alpha', 'mail']);
-    expect(visibleCards(cards, clusters, 'ALP').map((c) => c.id)).toEqual(['alpha']);
+    expect(visibleCards(cards, clusters, false, '').map((c) => c.id)).toEqual(['alpha', 'mail']);
+    expect(visibleCards(cards, clusters, false, 'ALP').map((c) => c.id)).toEqual(['alpha']);
   });
 });
 

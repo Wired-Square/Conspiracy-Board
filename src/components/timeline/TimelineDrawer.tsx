@@ -48,6 +48,7 @@ const dayWidth = (group: DayGroup) =>
 export function TimelineDrawer() {
   const cards = fromStore(boardStore, (s) => s.cards);
   const clusters = fromStore(boardStore, (s) => s.clusters);
+  const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const { selectCard } = boardStore.getState();
   let strip: HTMLDivElement | undefined;
@@ -59,7 +60,7 @@ export function TimelineDrawer() {
   const [tlText, setTlText] = createSignal('');
   const tlQuery = createDebounced(tlText, 200);
   const tlDocHits = createDocHits(tlQuery);
-  const raw = createMemo(() => timelineCards(cards(), clusters(), tlQuery(), tlDocHits()));
+  const raw = createMemo(() => timelineCards(cards(), clusters(), unclusteredHidden(), tlQuery(), tlDocHits()));
 
   // Keeping your place: changing a filter used to snap the strip back to the
   // start — the filtered strip is short, so the old scroll offset lands near

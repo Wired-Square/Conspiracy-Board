@@ -168,7 +168,7 @@ impl Session {
     if title.is_empty() {
       return Err("A board needs a title.".into());
     }
-    self.set_meta(MetaPatch { title: Some(title.to_string()), country_code: None })
+    self.set_meta(MetaPatch { title: Some(title.to_string()), ..Default::default() })
   }
 }
 

@@ -35,6 +35,9 @@ pub struct BoardMeta {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   #[cfg_attr(test, ts(optional))]
   pub country_code: Option<String>,
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  #[cfg_attr(test, ts(as = "Option<bool>", optional))]
+  pub unclustered_hidden: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

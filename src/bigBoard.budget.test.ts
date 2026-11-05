@@ -122,17 +122,17 @@ describe('an 11,000-card board', () => {
   it('builds the Record view rows within budget (17 ms)', () => {
     const { cards, clusters, connections } = board;
     const roster = buildRoster(cards);
-    const shown = visibleCards(cards, clusters, '');
+    const shown = visibleCards(cards, clusters, false, '');
     expect(time(() => recordRows(shown, cards, roster, connections))).toBeLessThan(BUDGET_MS.recordRows);
   });
 
   it('sorts the timeline within budget (11 ms)', () => {
     const { cards, clusters } = board;
-    expect(time(() => timelineCards(cards, clusters, '', new Set()))).toBeLessThan(BUDGET_MS.timeline);
+    expect(time(() => timelineCards(cards, clusters, false, '', new Set()))).toBeLessThan(BUDGET_MS.timeline);
   });
 
   it('groups 11,000 days without building a date formatter per card (3 ms)', () => {
-    const { dated } = timelineCards(board.cards, board.clusters, '', new Set());
+    const { dated } = timelineCards(board.cards, board.clusters, false, '', new Set());
     const formatted = vi.spyOn(Date.prototype, 'toLocaleDateString');
     const formatter = vi.spyOn(Intl, 'DateTimeFormat');
     expect(dayGroups(dated).length).toBeGreaterThan(1000);

@@ -5,4 +5,4 @@ export type BoardMeta = { title: string, updatedAt: string,
  * The local calling code (e.g. `+61`) a leading national `0` folds to when
  * normalising phone numbers; absent means the default (Australia).
  */
-countryCode?: string, };
+countryCode?: string, unclusteredHidden?: boolean, };

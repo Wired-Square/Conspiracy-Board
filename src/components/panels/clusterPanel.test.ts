@@ -12,13 +12,20 @@ const updateCluster = vi.fn((id: string, patch: Partial<Cluster>) =>
 );
 
 const setClustersVisible = vi.fn((visible: boolean) =>
-  boardStore.setState((s) => ({ clusters: s.clusters.map((c) => ({ ...c, visible })) })),
+  boardStore.setState((s) => ({
+    clusters: s.clusters.map((c) => ({ ...c, visible })),
+    meta: { ...s.meta, unclusteredHidden: !visible },
+  })),
 );
+const toggleUnclustered = vi.fn(() =>
+  boardStore.setState((s) => ({ meta: { ...s.meta, unclusteredHidden: !s.meta.unclusteredHidden } })),
+);
+const meta = { title: 'Case', updatedAt: '2026-01-01T00:00:00.000Z' };
 
 let host: HTMLElement;
 let dispose: () => void;
 beforeEach(() => {
-  boardStore.setState({ clusters: [cluster('a'), cluster('b')], updateCluster, setClustersVisible });
+  boardStore.setState({ clusters: [cluster('a'), cluster('b')], meta, updateCluster, setClustersVisible, toggleUnclustered });
   host = document.body.appendChild(document.createElement('div'));
   dispose = render(() => ClusterPanel(), host);
 });
@@ -30,6 +37,7 @@ afterEach(() => {
 });
 
 const showAll = () => host.querySelector<HTMLInputElement>('.cluster-show-all');
+const noCluster = () => host.querySelector<HTMLInputElement>('.cluster-row--none input')!;
 
 test('a renamed cluster keeps its row and focus through its own write', () => {
   vi.useFakeTimers();
@@ -45,7 +53,7 @@ test('a renamed cluster keeps its row and focus through its own write', () => {
 
 test('the toggle collapses the list and says so', () => {
   const toggle = host.querySelector<HTMLButtonElement>('.cluster-panel__toggle')!;
-  expect(host.querySelectorAll('.cluster-row')).toHaveLength(2);
+  expect(host.querySelectorAll('.cluster-row')).toHaveLength(3);
   toggle.click();
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
   expect(host.querySelectorAll('.cluster-row')).toHaveLength(0);
@@ -56,6 +64,8 @@ test('the show-all box is checked, indeterminate or clear as all, some or none a
   boardStore.setState({ clusters: [cluster('a'), cluster('b', { visible: false })] });
   expect([showAll()!.checked, showAll()!.indeterminate]).toEqual([false, true]);
   boardStore.setState({ clusters: [cluster('a', { visible: false }), cluster('b', { visible: false })] });
+  expect([showAll()!.checked, showAll()!.indeterminate]).toEqual([false, true]);
+  boardStore.setState({ meta: { ...meta, unclusteredHidden: true } });
   expect([showAll()!.checked, showAll()!.indeterminate]).toEqual([false, false]);
 });
 
@@ -73,4 +83,15 @@ test('the show-all box stays while the panel is collapsed and goes with the last
   expect(showAll()).not.toBeNull();
   boardStore.setState({ clusters: [] });
   expect(showAll()).toBeNull();
+});
+
+test('the no-cluster box toggles the unclustered and counts toward show-all', () => {
+  expect(noCluster().checked).toBe(true);
+  noCluster().click();
+  expect(toggleUnclustered).toHaveBeenCalledTimes(1);
+  expect(noCluster().checked).toBe(false);
+  expect([showAll()!.checked, showAll()!.indeterminate]).toEqual([false, true]);
+  showAll()!.click();
+  expect(setClustersVisible).toHaveBeenLastCalledWith(true);
+  expect(noCluster().checked).toBe(true);
 });

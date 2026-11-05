@@ -236,6 +236,7 @@ export type BoardState = {
   addCluster: (label?: string) => string;
   updateCluster: (id: string, patch: ClusterPatch) => void;
   setClustersVisible: (visible: boolean) => void;
+  toggleUnclustered: () => void;
   deleteCluster: (id: string) => void;
   addConnection: (source: string, target: string, label?: string) => void;
   updateConnection: (id: string, patch: ConnectionPatch) => void;
@@ -775,6 +776,11 @@ export const boardStore = createStore<BoardState>((set, get) => {
 
     setClustersVisible(visible) {
       send((board) => doc.setClustersVisible(board, visible));
+    },
+
+    toggleUnclustered() {
+      const unclusteredHidden = !get().meta.unclusteredHidden;
+      send((board) => doc.setMeta(board, { unclusteredHidden }));
     },
 
     deleteCluster(id) {
