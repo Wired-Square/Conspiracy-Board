@@ -22,25 +22,27 @@ export function ClusterPanel() {
           <ShowAll shown={clusters().filter((c) => c.visible).length + Number(unclusteredShown())} of={clusters().length + 1} />
         </Show>
         <Button tone="plain" class="cluster-panel__toggle" aria-expanded={open()} onClick={() => setOpen((v) => !v)}>
-          <span class="panel-heading">Clusters</span>
+          Clusters
           {open() ? chevronDown() : chevronRight()}
         </Button>
       </div>
       <Show when={open()}>
-        <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
-        <div class="cluster-row cluster-row--none">
-          <input
-            type="checkbox"
-            checked={unclusteredShown()}
-            onChange={() => boardStore.getState().toggleUnclustered()}
-            title="Show/hide cards in no cluster"
-          />
-          <span class="cluster-swatch" style={{ background: NO_CLUSTER_ACCENT }} />
-          <span class="cluster-label">No cluster</span>
+        <div class="cluster-panel__list">
+          <For each={clusterIds()}>{(id) => <ClusterRow cluster={clusters().find((c) => c.id === id)!} />}</For>
+          <div class="cluster-row cluster-row--none">
+            <input
+              type="checkbox"
+              checked={unclusteredShown()}
+              onChange={() => boardStore.getState().toggleUnclustered()}
+              title="Show/hide cards in no cluster"
+            />
+            <span class="cluster-swatch" style={{ background: NO_CLUSTER_ACCENT }} />
+            <span class="cluster-label">No cluster</span>
+          </div>
+          <Button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
+            {plus()} Add cluster
+          </Button>
         </div>
-        <Button class="cluster-add" onClick={() => boardStore.getState().addCluster()}>
-          {plus()} Add cluster
-        </Button>
       </Show>
     </div>
   );

@@ -206,13 +206,14 @@ body { background: var(--app-bg); color: var(--app-text); font-family: var(--app
 .mcp-indicator.is-error .mcp-indicator__dot { background: var(--cb-string); }
 .mcp-indicator.is-writable:not(.is-error) .mcp-indicator__dot { background: var(--app-warn); }
 .app__canvas { --cluster-panel-width: 17rem; }
-.cluster-panel { padding: var(--cb-space-2) var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; overflow-y: auto; }
+.cluster-panel { display: flex; flex-direction: column; padding: var(--cb-space-2) var(--cb-space-3); width: var(--cluster-panel-width); max-height: 100%; }
+.cluster-panel__list { min-height: 0; overflow-y: auto; }
 
 /* Clear of the minimap (kit's 9.375rem at 1rem from the foot) however many clusters there are. */
 .app-canvas-panel:has(> .cluster-panel) { display: flex; max-height: calc(100% - 12.375rem); }
 
-.cluster-panel__head { display: flex; align-items: center; gap: 0.375rem; margin-bottom: var(--cb-space-1); }
-.cluster-panel__toggle { flex: 1 1 auto; justify-content: space-between; padding: 0; }
+.cluster-panel__head { flex: none; display: flex; align-items: center; gap: 0.375rem; margin-bottom: var(--cb-space-1); }
+.cluster-panel__toggle { flex: 1 1 auto; justify-content: space-between; padding: 0; color: var(--app-text); }
 
 .cluster-panel__toggle:hover { background: none; }
 .panel-heading { font-size: var(--cb-text-sm); font-weight: 600; color: var(--app-text-muted); }
