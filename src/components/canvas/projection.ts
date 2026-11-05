@@ -3,6 +3,7 @@ import type { Card, Cluster, Connection } from '../../types/board';
 import type { CardNode, StringEdge, StringEdgeData } from '../../types/canvas';
 import { clusterColor, extraClusterColors, primaryClusterId } from '../../lib/clusters';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 
 // The board as the canvas sees it: nodes and edges derived from the store's
 // cards and connections, each reused while what it was built from is unchanged.
@@ -90,18 +91,26 @@ export function reconcileEdges(prev: StringEdge[], connections: Connection[]): S
 type ProjectionState = { nodes: CardNode[]; edges: StringEdge[] };
 
 export const projectionStore = createStore<ProjectionState>(() => {
-  const { cards, clusters, connections } = boardStore.getState();
+  const { clusters } = boardStore.getState();
+  const { cards, connections } = seenStore.getState();
   return { nodes: reconcileNodes([], clusters, cards, clusters), edges: reconcileEdges([], connections) };
 });
 
+let drawnFrom = { clusters: boardStore.getState().clusters, ...seenStore.getState() };
+
 // Synchronous, so a render never sees cards and nodes out of step.
-const unsubscribe = boardStore.subscribe((s, prev) => {
+function refresh() {
+  const prev = drawnFrom;
+  const next = { clusters: boardStore.getState().clusters, ...seenStore.getState() };
+  drawnFrom = next;
   const projection = projectionStore.getState();
   const nodes =
-    s.cards !== prev.cards || s.clusters !== prev.clusters
-      ? reconcileNodes(projection.nodes, prev.clusters, s.cards, s.clusters)
+    next.cards !== prev.cards || next.clusters !== prev.clusters
+      ? reconcileNodes(projection.nodes, prev.clusters, next.cards, next.clusters)
       : projection.nodes;
-  const edges = s.connections !== prev.connections ? reconcileEdges(projection.edges, s.connections) : projection.edges;
+  const edges =
+    next.connections !== prev.connections ? reconcileEdges(projection.edges, next.connections) : projection.edges;
   if (nodes !== projection.nodes || edges !== projection.edges) projectionStore.setState({ nodes, edges });
-});
-import.meta.hot?.dispose(unsubscribe);
+}
+const unsubscribe = [boardStore.subscribe(refresh), seenStore.subscribe(refresh)];
+import.meta.hot?.dispose(() => unsubscribe.forEach((off) => off()));

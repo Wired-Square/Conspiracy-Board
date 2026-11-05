@@ -6,6 +6,7 @@ import { rosterOf, type AddressMatch, type Roster } from '../../lib/roster';
 import { cardsById } from '../../lib/cardIndex';
 import { gradeTint } from '../../lib/grades';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { fromStore } from '@wired-square/store/solid';
 import { EntityPickerDialog, type PickerCreateOption } from './EntityPickerDialog';
 import { KindIcon } from '../ui/KindIcon';
@@ -23,7 +24,7 @@ export const NEW_ORG = 'new:org';
 
 /** The store-derived bits every linking view needs, gathered once. */
 export function entityLinkCommon() {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => s.cards);
   const { selectCard, addCard, updateCard } = boardStore.getState();
   const hasOrgs = createMemo(() => cards().some((c) => c.kind === 'organisation'));
   return {

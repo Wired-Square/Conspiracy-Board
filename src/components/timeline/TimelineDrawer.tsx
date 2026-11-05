@@ -20,6 +20,7 @@ import { CARD_H, CARD_W } from '../../lib/layout';
 import type { Card, CardKind } from '../../types/board';
 import { camera } from '../board/camera';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
 import { createDocHits } from '../createDocHits';
@@ -46,7 +47,7 @@ const dayWidth = (group: DayGroup) =>
  * markers give the temporal reading without the scaling pathology.
  */
 export function TimelineDrawer() {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => s.cards);
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);

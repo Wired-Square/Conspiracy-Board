@@ -33,11 +33,14 @@ type EmailImportState = {
   busy: boolean;
   /** null while parsing has started but no message has finished yet. */
   progress: { done: number; total: number } | null;
+  /** Every card the import adds or completes is marked confidential. */
+  confidential: boolean;
 
   openWith: () => void;
   close: () => void;
   setTab: (tab: ImportTab) => void;
   setClusterId: (id: string | null) => void;
+  setConfidential: (confidential: boolean) => void;
 
   /** Parse picked files into staged drafts. */
   parseFiles: (paths: string[]) => Promise<void>;
@@ -76,15 +79,17 @@ export const emailImportStore = createStore<EmailImportState>((set, get) => {
     clusterId: null,
     busy: false,
     progress: null,
+    confidential: false,
 
     openWith: () =>
-      set({ open: true, tab: 'files', drafts: [], errors: [], busy: false, progress: null }),
+      set({ open: true, tab: 'files', drafts: [], errors: [], busy: false, progress: null, confidential: false }),
 
     close: () =>
       set({ open: false, drafts: [], errors: [], busy: false, progress: null }),
 
     setTab: (tab) => set({ tab }),
     setClusterId: (clusterId) => set({ clusterId }),
+    setConfidential: (confidential) => set({ confidential }),
 
     async parseFiles(paths) {
       if (paths.length) await parse(() => storage.parseEmailFiles(paths));
@@ -95,7 +100,7 @@ export const emailImportStore = createStore<EmailImportState>((set, get) => {
     stage: ({ drafts, errors }) => set({ drafts, errors, busy: false, progress: null }),
 
     async commit({ entityDrafts, patches }) {
-      const { drafts, clusterId } = get();
+      const { drafts, clusterId, confidential } = get();
       const board = boardStore.getState();
       const byMessageId = emailCardsByMessageId(board.cards);
       const { matches } = matchBatch(drafts, byMessageId);
@@ -128,7 +133,8 @@ export const emailImportStore = createStore<EmailImportState>((set, get) => {
       // back. Nothing is strung together — who is on what is derived from the
       // addresses themselves (see lib/roster.ts), and only the user draws a
       // connection.
-      const added = board.addCards([...emailDrafts, ...entityDrafts], {
+      const marked = confidential ? { confidential } : {};
+      const added = board.addCards([...emailDrafts, ...entityDrafts].map((d) => ({ ...d, ...marked })), {
         clusterId: cid,
         alongside: {
           clusters: fresh ? [fresh] : [],

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
+import { maskStore } from '../../store/maskStore';
 import type { Card } from '../../types/board';
 import { RecordView } from './RecordView';
 
@@ -192,4 +193,17 @@ test('a measurement is applied on the next frame, not inside the observer callba
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test('a masked row reads Redacted, drops out of a search, and goes when masked items are hidden', () => {
+  boardStore.setState((s) => ({ cards: s.cards.map((c) => (c.id === 'stray' ? { ...c, confidential: true } : c)) }));
+  expect(titles().sort()).toEqual(['Redacted', 'linked']);
+  boardStore.setState({ searchQuery: 'red' });
+  expect(titles()).toEqual([]);
+  boardStore.setState({ searchQuery: '' });
+  maskStore.getState().setShowMasked(false);
+  expect(titles()).toEqual(['linked']);
+  maskStore.getState().setMask(false);
+  expect(titles().sort()).toEqual(['linked', 'stray']);
+  maskStore.setState({ mask: true, showMasked: true });
 });

@@ -9,6 +9,7 @@ import { allSuggestedLinks, rosterOf } from '../../lib/roster';
 import { drawnCardIds, linksWithin, searchMatchIds } from '../../lib/visibility';
 import { yarnPath } from '../../lib/yarn';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { projectionStore } from '../canvas/projection';
 import type { CardNodeData, StringEdge, StringEdgeData } from '../../types/canvas';
 import type { Viewport } from '../../types/board';
@@ -85,7 +86,7 @@ function StringTag(props: { label: string; geometry: EdgeGeometry }) {
 }
 
 export function BoardCanvas() {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => s.cards);
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);

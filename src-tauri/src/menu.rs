@@ -92,15 +92,32 @@ const VIEWS: [(&str, &str, &str); 3] = [
   ("view.objects", "Objects", "object"),
 ];
 
+/// The webview's two mask controls, as the View menu ticks them.
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskMenu {
+  mask: bool,
+  show_masked: bool,
+}
+
+const MASK_ITEM: &str = "view.mask";
+const SHOW_MASKED_ITEM: &str = "view.showMasked";
+
 /// The View submenu — the three surfaces as checkmarks (the current one ticked),
-/// then the stock Enter Full Screen kept from the menu we replace.
-fn view_submenu(app: &AppHandle, view: &str) -> tauri::Result<Submenu<Wry>> {
+/// the mask controls, then the stock Enter Full Screen kept from the menu we replace.
+fn view_submenu(app: &AppHandle, view: &str, mask: MaskMenu) -> tauri::Result<Submenu<Wry>> {
   let mut builder = SubmenuBuilder::new(app, "View");
   for (id, label, value) in VIEWS {
     let item = CheckMenuItem::with_id(app, id, label, true, view == value, None::<&str>)?;
     builder = builder.item(&item);
   }
-  builder.separator().item(&PredefinedMenuItem::fullscreen(app, None)?).build()
+  builder
+    .separator()
+    .item(&CheckMenuItem::with_id(app, MASK_ITEM, "Mask Confidential", true, mask.mask, None::<&str>)?)
+    .item(&CheckMenuItem::with_id(app, SHOW_MASKED_ITEM, "Show Masked Items", true, mask.show_masked, None::<&str>)?)
+    .separator()
+    .item(&PredefinedMenuItem::fullscreen(app, None)?)
+    .build()
 }
 
 /// The whole app menu: the stock macOS menu (App / Edit / Window, Quit, Copy &
@@ -112,6 +129,7 @@ fn build_menu(
   boards: &[BoardEntry],
   current: Option<&str>,
   view: &str,
+  mask: MaskMenu,
 ) -> tauri::Result<Menu<Wry>> {
   let menu = Menu::default(app)?;
   for item in menu.items()? {
@@ -122,7 +140,7 @@ fn build_menu(
     }
   }
   menu.insert(&file_submenu(app, boards, current)?, 1)?;
-  menu.insert(&view_submenu(app, view)?, 3)?;
+  menu.insert(&view_submenu(app, view, mask)?, 3)?;
   if let Some(MenuItemKind::Submenu(help)) = menu.get(HELP_SUBMENU_ID) {
     help.append(&MenuItem::with_id(app, PERFORMANCE_ITEM, "Performance…", true, None::<&str>)?)?;
   }
@@ -169,9 +187,9 @@ fn replace_quit(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
 
 /// Install the initial menu at startup, before the webview has mounted to send a
 /// real board list — so the menus are there from the first frame. The view starts
-/// on the board, matching the store's default.
+/// on the board with Mask on, matching the stores' defaults.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
-  app.set_menu(build_menu(app, &[], None, "board")?)?;
+  app.set_menu(build_menu(app, &[], None, "board", MaskMenu { mask: true, show_masked: true })?)?;
   Ok(())
 }
 
@@ -183,9 +201,10 @@ pub fn set_board_menu(
   boards: Vec<BoardEntry>,
   current_id: Option<String>,
   view: String,
+  mask: MaskMenu,
 ) -> Result<(), String> {
   let _span = crate::perf::metered!();
-  let menu = build_menu(&app, &boards, current_id.as_deref(), &view)
+  let menu = build_menu(&app, &boards, current_id.as_deref(), &view, mask)
     .map_err(|e| format!("Could not build the menu: {e}"))?;
   app.set_menu(menu).map_err(|e| format!("Could not set the menu: {e}"))?;
   Ok(())
@@ -230,6 +249,8 @@ fn board_action(id: &str) -> Option<&'static str> {
     "board.export" => "export",
     "board.properties" => "properties",
     "library.mcp" => "libraryMcp",
+    MASK_ITEM => "mask",
+    SHOW_MASKED_ITEM => "showMasked",
     PERFORMANCE_ITEM => "performance",
     _ => return None,
   })
@@ -243,5 +264,11 @@ mod tests {
   fn the_help_menus_performance_item_opens_the_panel() {
     assert_eq!(board_action(PERFORMANCE_ITEM), Some("performance"));
     assert_eq!(board_action("view.board"), None);
+  }
+
+  #[test]
+  fn the_view_menus_mask_items_toggle_the_webviews_controls() {
+    assert_eq!(board_action(MASK_ITEM), Some("mask"));
+    assert_eq!(board_action(SHOW_MASKED_ITEM), Some("showMasked"));
   }
 }

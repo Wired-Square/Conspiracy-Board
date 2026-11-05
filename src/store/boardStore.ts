@@ -18,6 +18,7 @@ import { openDialog } from './dialogStore';
 import type { MediaDraft } from '../storage/StorageAdapter';
 import { boardMediaRefs, cardMediaEntries } from '../lib/media';
 import { drafts } from '../lib/drafts';
+import { REDACTED } from '../lib/mask';
 import { migrateBoardMedia, recoverCardAttachments } from './boardMigration';
 
 export type CardDraft = Partial<Omit<Card, 'id' | 'position'>>;
@@ -213,6 +214,7 @@ export type BoardState = {
    */
   arrangeCards: (positions: Map<string, Vec2>) => void;
   updateCard: (id: string, patch: CardPatch) => void;
+  setConfidential: (ids: string[], confidential: boolean) => void;
   /**
    * Mark a card as an event, or unmark it. Ticking it on spawns a graded `event` card
    * carrying the source's moment, strung to it ("evidences"); ticking off removes that
@@ -705,6 +707,10 @@ export const boardStore = createStore<BoardState>((set, get) => {
       patchCard(id, patch, doc.updateCard);
     },
 
+    setConfidential(ids, confidential) {
+      send((board) => doc.setConfidential(board, ids, confidential));
+    },
+
     setIsEvent(cardId, on) {
       const source = get().cards.find((c) => c.id === cardId);
       if (!source) return;
@@ -744,7 +750,7 @@ export const boardStore = createStore<BoardState>((set, get) => {
         // The editor reads this. Left pointing at a card that is gone, it would
         // render against undefined.
         selectedCardId: selectedCardId === id ? null : selectedCardId,
-        lastDeleted: { kind: 'card', id, label: card.title },
+        lastDeleted: { kind: 'card', id, label: card.confidential ? REDACTED : card.title },
       });
       send((board) => doc.deleteCards(board, [id]));
     },

@@ -10,6 +10,7 @@ import { formatOccurredAt } from '../../lib/dates';
 import { cardImageSrc } from '../../storage/media';
 import { cardImageStyle } from '../../lib/imageCrop';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { fromStore } from '@wired-square/store/solid';
 import { MediaIcon } from '../ui/MediaIcon';
 import { measure, untilPainted } from '../../platform/perf';
@@ -31,8 +32,8 @@ const scrolledTo = new Map<string, number>();
 export function RecordView() {
   const clusters = fromStore(boardStore, (s) => s.clusters);
   const unclusteredHidden = fromStore(boardStore, (s) => s.meta.unclusteredHidden ?? false);
-  const connections = fromStore(boardStore, (s) => s.connections);
-  const allCards = fromStore(boardStore, (s) => s.cards);
+  const connections = fromStore(seenStore, (s) => s.connections);
+  const allCards = fromStore(seenStore, (s) => s.cards);
   const searchQuery = fromStore(boardStore, (s) => s.searchQuery);
   const selectedCardId = fromStore(boardStore, (s) => s.selectedCardId);
   const { selectCard } = boardStore.getState();

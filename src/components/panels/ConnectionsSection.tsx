@@ -3,14 +3,15 @@ import { Button, IconButton } from '@wired-square/kit';
 import { plus, trash } from '@wired-square/icons/solid';
 import { touches } from '../../lib/connections';
 import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { fromStore } from '@wired-square/store/solid';
 import { GradeField } from './GradeField';
 import { EntityPickerDialog } from './EntityPickerDialog';
 import { KindIcon } from '../ui/KindIcon';
 
 export function ConnectionsSection(props: { cardId: string }) {
-  const cards = fromStore(boardStore, (s) => s.cards);
-  const connections = fromStore(boardStore, (s) => s.connections);
+  const cards = fromStore(seenStore, (s) => s.cards);
+  const connections = fromStore(seenStore, (s) => s.connections);
   const { addConnection, updateConnection, deleteConnection, selectCard } = boardStore.getState();
 
   const [picking, setPicking] = createSignal(false);

@@ -19,6 +19,7 @@ import { mediaAuditStore } from '../../store/mediaAuditStore';
 import { fromStore } from '@wired-square/store/solid';
 import { createDebounced } from '../createDebounced';
 import { LibraryMcpIndicator } from '../LibraryMcpIndicator';
+import { MaskIndicator } from '../MaskIndicator';
 import { BackgroundTaskIndicator } from '../BackgroundTaskIndicator';
 
 const VIEW_ORDER = Object.keys(VIEW_META) as View[];
@@ -145,6 +146,7 @@ export function Toolbar() {
               (src-tauri/src/menu.rs); autosave means there is no Save item to
               miss. A failed save is what's worth showing — the strip below. */}
         </div>
+        <MaskIndicator />
         <LibraryMcpIndicator />
         <BackgroundTaskIndicator />
       </div>

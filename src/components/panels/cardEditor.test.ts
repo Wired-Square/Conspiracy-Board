@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { boardStore } from '../../store/boardStore';
 import { dialogStore } from '../../store/dialogStore';
+import { maskStore } from '../../store/maskStore';
 import { DRAFT_COMMIT_MS } from '../../lib/drafts';
 import { GRADE_META } from '../../lib/grades';
 import type { Card, Connection, EmailAddress } from '../../types/board';
@@ -32,6 +33,7 @@ const actions = {
   addConnection: vi.fn(),
   addCard: vi.fn(),
   deleteCard: vi.fn(),
+  setConfidential: vi.fn(),
   setView: vi.fn(),
   selectCard: vi.fn((id: string | null) => boardStore.setState({ selectedCardId: id })),
 };
@@ -40,6 +42,7 @@ let host: HTMLElement;
 let dispose: (() => void) | undefined;
 beforeEach(() => {
   Object.values(actions).forEach((a) => a.mockClear());
+  maskStore.setState({ mask: true, showMasked: true, unmaskedId: null });
   boardStore.setState({ ...actions, cards: [], connections: [], clusters: [], selectedCardId: null });
   host = document.body.appendChild(document.createElement('div'));
   dispose = render(() => CardEditor(), host);
@@ -194,6 +197,34 @@ test('clicking Really delete? deletes the card, as WebKit orders the events', ()
   expect(document.activeElement).toBe(button('Really delete?'));
   webkitClick(button('Really delete?'));
   expect(actions.deleteCard).toHaveBeenCalledWith('a');
+});
+
+const tick = (label: string) =>
+  [...host.querySelectorAll('label')].find((l) => l.textContent?.startsWith(label))!.querySelector('input')!;
+
+test('a masked card opens redacted, and Unmask reveals it until the selection moves', () => {
+  open([card('secret', { confidential: true, notes: 'private', kind: 'document' }), card('b')]);
+  expect(host.textContent).toContain('Redacted');
+  expect(host.textContent).not.toContain('private');
+  expect(field('Title')).toBeUndefined();
+  expect(tick('Confidential').checked).toBe(true);
+  expect(tick('Confidential').disabled).toBe(true);
+
+  button('Unmask').click();
+  expect(field('Title').querySelector('input')!.value).toBe('secret');
+  expect(tick('Confidential').disabled).toBe(false);
+  tick('Confidential').click();
+  expect(actions.setConfidential).toHaveBeenCalledWith(['secret'], false);
+
+  actions.selectCard('b');
+  actions.selectCard('secret');
+  expect(host.textContent).toContain('Redacted');
+});
+
+test('the Confidential tick marks an open card', () => {
+  open([card('a')]);
+  tick('Confidential').click();
+  expect(actions.setConfidential).toHaveBeenCalledWith(['a'], true);
 });
 
 test('tabbing away from Really delete? dismisses the confirm', () => {

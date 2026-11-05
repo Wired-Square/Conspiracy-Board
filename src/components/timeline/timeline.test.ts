@@ -184,3 +184,11 @@ test('a chip the strip placed stays the anchor through a kind filter and back, t
   expect(revealed()).toBe('earlier');
   vi.restoreAllMocks();
 });
+
+test('a masked chip keeps its date and glyph but reads Redacted', () => {
+  boardStore.setState((s) => ({ cards: s.cards.map((c) => (c.id === 'mail' ? { ...c, confidential: true } : c)) }));
+  expect(chip('mail')!.textContent).toContain('Redacted');
+  expect(chip('mail')!.textContent).not.toContain('mail');
+  expect(chip('mail')!.querySelector('.timeline-item__when')).not.toBeNull();
+  expect(chip('mail')!.querySelector('.timeline-item__glyph')).not.toBeNull();
+});

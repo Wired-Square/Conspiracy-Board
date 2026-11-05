@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { boardStore, type BoardState } from '../store/boardStore';
 import { openDialog } from '../store/dialogStore';
+import { maskStore } from '../store/maskStore';
 import { storage } from '../storage';
 import { prompt } from '../store/promptStore';
 import type { View } from '../types/view';
@@ -18,16 +19,18 @@ type ViewMenuEvent = { view: View };
 /** Rebuild the native menu from the current library and view. */
 async function syncMenu() {
   const { currentBoardId, meta, view } = boardStore.getState();
+  const { mask, showMasked } = maskStore.getState();
   const summaries = await storage.listBoards();
   const boards = summaries.map((b) => ({
     id: b.id,
     title: b.id === currentBoardId ? meta.title : b.title,
   }));
-  await invoke('set_board_menu', { boards, currentId: currentBoardId, view });
+  await invoke('set_board_menu', { boards, currentId: currentBoardId, view, mask: { mask, showMasked } });
 }
 
 async function handle(event: BoardMenuEvent) {
   const store = boardStore.getState();
+  const mask = maskStore.getState();
   switch (event.action) {
     case 'new': {
       const name = await prompt({
@@ -60,6 +63,12 @@ async function handle(event: BoardMenuEvent) {
       break;
     case 'performance':
       openDialog({ performance: true });
+      break;
+    case 'mask':
+      mask.setMask(!mask.mask);
+      break;
+    case 'showMasked':
+      mask.setShowMasked(!mask.showMasked);
       break;
   }
 }
@@ -99,11 +108,15 @@ export function startBoardMenu(): () => void {
   const unsubscribe = boardStore.subscribe((s, prev) => {
     if (menuChanged(s, prev)) requestSync();
   });
+  const unsubscribeMask = maskStore.subscribe((s, prev) => {
+    if (s.mask !== prev.mask || s.showMasked !== prev.showMasked) requestSync();
+  });
   requestSync();
 
   return () => {
     offBoard();
     offView();
     unsubscribe();
+    unsubscribeMask();
   };
 }

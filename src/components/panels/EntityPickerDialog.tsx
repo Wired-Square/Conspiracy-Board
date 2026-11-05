@@ -3,10 +3,11 @@ import { Dialog, DialogActions, SearchInput, TabPanel, Tabs } from '@wired-squar
 import { plus } from '@wired-square/icons/solid';
 import type { CardKind } from '../../types/board';
 import { CARD_KINDS, KIND_META, entitiesOfKind } from '../../lib/kinds';
-import { boardStore } from '../../store/boardStore';
+import { seenStore } from '../../store/maskStore';
 import { autofocus } from '../ui/autofocus';
 import { fromStore } from '@wired-square/store/solid';
 import { KindIcon } from '../ui/KindIcon';
+import { pickableCards } from '../../lib/mask';
 
 /** A "New …" row, offered on the tab it belongs to. Its value is a sentinel the
  *  caller recognises (e.g. NEW_PERSON), handed back through onPick like a card id. */
@@ -31,7 +32,7 @@ type Props = {
  * the value handed back is a card id, or one of the caller's create sentinels.
  */
 export function EntityPickerDialog(props: Props) {
-  const cards = fromStore(boardStore, (s) => s.cards);
+  const cards = fromStore(seenStore, (s) => pickableCards(s.cards));
 
   const counts = createMemo(() => {
     const m = new Map<CardKind, number>();
