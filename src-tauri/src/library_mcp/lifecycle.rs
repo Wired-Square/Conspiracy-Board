@@ -194,9 +194,14 @@ fn announce(app: &AppHandle, status: Reply) -> Reply {
 }
 
 /// A dev build is re-signed on every rebuild, so the Keychain would prompt each launch.
+/// `CONSPIRACY_LIBRARY_MCP_TOKEN` keeps a client's token across relaunches.
 #[cfg(feature = "mcp")]
 fn token_store() -> impl SecretStore + 'static {
-  wslib_secret::MemoryStore::default()
+  let store = wslib_secret::MemoryStore::default();
+  if let Ok(Some(token)) = Secret::from_env("CONSPIRACY_LIBRARY_MCP_TOKEN") {
+    let _ = store.save(TOKEN_SERVICE, TOKEN_ACCOUNT, &token);
+  }
+  store
 }
 
 #[cfg(not(feature = "mcp"))]
